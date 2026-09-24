@@ -19,8 +19,13 @@ if (!crudo) {
 
 let config;
 try {
-  // Acepta JSON estricto o el literal de JavaScript que muestra la consola.
-  config = new Function(`return (${crudo});`)();
+  // Acepta JSON estricto, el literal de JavaScript que muestra la consola o el
+  // fragmento completo ("const firebaseConfig = { ... };"): se toma lo que hay
+  // entre la primera llave y la última.
+  const inicio = crudo.indexOf('{');
+  const fin = crudo.lastIndexOf('}');
+  if (inicio === -1 || fin === -1 || fin < inicio) throw new Error('no contiene un objeto entre llaves');
+  config = new Function(`return (${crudo.slice(inicio, fin + 1)});`)();
 } catch (error) {
   console.error('FIREBASE_WEB_CONFIG no se pudo interpretar como objeto:', error.message);
   process.exit(1);

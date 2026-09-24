@@ -12,6 +12,11 @@
   NODE_VERSION = "22"
   # package.json solo trae herramientas de prueba; que Netlify no instale nada.
   NPM_FLAGS = "--version"
+  # La configuración web de Firebase no es secreta (la seguridad la dan las
+  # reglas), pero el escáner de secretos de Netlify marca las claves "AIza…"
+  # y haría fallar el despliegue.
+  SECRETS_SCAN_OMIT_PATHS = "js/config.js"
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_WEB_CONFIG"
 
 # Sin redirecciones SPA: cada pantalla es su propio .html (no hay rutas
 # del lado del cliente). Añadir aquí si algún día hicieran falta.
