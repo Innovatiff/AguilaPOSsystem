@@ -49,6 +49,25 @@
       </div>
       <p class="nota no-imprimir">En el diálogo: impresora de etiquetas, papel 62mm, horizontal, márgenes ninguno, escala 100 %.
         Cada etiqueta sale en su propia etiqueta física; en una hoja carta salen varias por hoja.</p>
+      <details class="ayuda no-imprimir">
+        <summary>Imprimir directo, sin el cuadro de diálogo de Chrome</summary>
+        <p>Es un ajuste de Chrome en cada laptop, no de la app. Con él, «Imprimir» manda las etiquetas a la
+          impresora al instante y esta pantalla pasa directo a la confirmación.</p>
+        <ol>
+          <li>Imprime una vez desde el cuadro de diálogo con los ajustes correctos (impresora Brother, papel 62mm,
+            márgenes ninguno, sin encabezados ni pies de página) y deja la Brother como impresora predeterminada de
+            Windows. Chrome recuerda la última impresora y sus ajustes, y son los que usará sin preguntar.</li>
+          <li>Cierra Chrome por completo. En <code>chrome://settings/system</code> desactiva «Seguir ejecutando
+            aplicaciones en segundo plano al cerrar Google Chrome»; si no, el ajuste no se aplica.</li>
+          <li>Clic derecho en el acceso directo de Chrome, Propiedades, y en «Destino» agrega al final, después de
+            las comillas: <code>&nbsp;--kiosk-printing</code>. Haz lo mismo en el icono anclado a la barra de tareas.</li>
+          <li>Abre Chrome con ese acceso directo y entra a <code>chrome://version</code>: la «Línea de comandos»
+            debe incluir <code>--kiosk-printing</code>.</li>
+        </ol>
+        <p>Con ese ajuste cualquier página que mande imprimir sale al instante en la impresora predeterminada;
+          úsalo solo en las laptops de los carritos. Para cambiar de impresora o de ajustes, abre Chrome una vez
+          sin el ajuste, imprime desde el diálogo y vuelve a abrirlo con el ajuste.</p>
+      </details>
       <div id="confirmacion" class="mensaje mensaje--ok confirmacion no-imprimir" hidden>
         <span id="confirmacion-texto"></span>
         <button id="btn-confirmar" class="boton" type="button">Sí, marcar como impresas <kbd>Enter</kbd></button>

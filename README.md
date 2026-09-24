@@ -183,3 +183,33 @@ deleted once nothing references it.
 Brother QL-820NWB on 62 mm continuous tape, driver length 32 mm. The tag is
 designed for the printable area (59 × 29 mm). In Chrome: paper `62mm`, layout
 Landscape (set by the page), margins None, scale 100 %.
+
+### Direct printing, no dialog
+
+Page code cannot skip Chrome's print dialog; Chrome's `--kiosk-printing`
+launch flag does. With it, `window.print()` sends the job straight to the last
+used printer with the last used settings, `afterprint` still fires, and the
+print screen goes directly to the "did they come out well?" confirmation. The
+app's print path is unchanged (still the browser's `@media print` pipeline).
+Per laptop:
+
+1. Print once from the dialog with the right settings (Brother, `62mm`,
+   margins None, headers and footers off) and make the Brother the Windows
+   default printer. Chrome remembers the last destination and settings and
+   reuses them silently.
+2. Close Chrome completely. In `chrome://settings/system` turn off "Continue
+   running background apps when Google Chrome is closed", otherwise the flag
+   never takes effect.
+3. Edit every Chrome shortcut staff use (desktop, taskbar): Properties →
+   Target → append ` --kiosk-printing` after the closing quote:
+   `"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing`
+4. Relaunch and check `chrome://version`: "Command Line" must include the flag.
+
+Caveats: with the flag, any website that calls print goes straight to the
+default printer, so use it only on the cart laptops. To change printer or
+settings later, launch Chrome once without the flag, print from the dialog,
+then relaunch with it. To leave normal browsing untouched, a separate user
+data directory runs as its own Chrome process with its own flags:
+`chrome.exe --user-data-dir="C:\AguilaChrome" --kiosk-printing --app=https://<site>/`
+(that profile needs its own login and builds its own offline cache).
+The same steps are shown on the print screen under "Imprimir directo".

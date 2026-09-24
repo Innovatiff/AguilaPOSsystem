@@ -894,6 +894,42 @@ fieldset.campo label {
   margin: 14px 0;
 }
 
+/* Ayuda plegable (instrucciones de configuración) */
+.ayuda {
+  max-width: 900px;
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--color-texto-suave);
+}
+
+.ayuda summary {
+  cursor: pointer;
+  color: var(--color-marca-oscuro);
+  font-weight: 600;
+}
+
+.ayuda p {
+  margin: 8px 0;
+}
+
+.ayuda ol {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.ayuda li {
+  margin-bottom: 6px;
+}
+
+.ayuda code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--color-fondo-suave);
+  color: var(--color-texto);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 /* =====================================================================
    Captura rápida (paso 5)
    ===================================================================== */
