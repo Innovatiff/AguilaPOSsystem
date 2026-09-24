@@ -6,6 +6,7 @@ import { cerrarSesion } from './auth.js';
 const SECCIONES = [
   { href: 'index.html', texto: 'Inicio' },
   { href: 'productos.html', texto: 'Productos' },
+  { href: 'captura.html', texto: 'Captura rápida' },
   { href: 'imprimir.html', texto: 'Imprimir etiquetas' },
   { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas' },
   { href: 'administracion.html', texto: 'Administración', soloAdmin: true },

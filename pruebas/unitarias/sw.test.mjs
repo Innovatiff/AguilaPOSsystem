@@ -16,7 +16,7 @@ describe('service worker', () => {
     assert.match(codigo, /NUNCA_CACHEAR = \/\\\/js\\\/config\\\.js\$\//);
   });
   it('incluye todos los módulos de js/ salvo config', () => {
-    const modulos = ['administracion', 'auth', 'avisos', 'esquema', 'etiquetas', 'firebase', 'inicio', 'login', 'nav', 'pantalla-imprimir', 'pantalla-productos', 'precios', 'productos', 'prueba-etiquetas', 'pwa', 'upca'];
+    const modulos = ['administracion', 'auth', 'avisos', 'esquema', 'etiquetas', 'firebase', 'inicio', 'login', 'nav', 'pantalla-captura', 'pantalla-imprimir', 'pantalla-productos', 'precios', 'productos', 'prueba-etiquetas', 'pwa', 'upca'];
     for (const m of modulos) assert.ok(archivos.includes(`js/${m}.js`), `falta js/${m}.js`);
   });
   it('lleva la marca de versión que sella el despliegue', () => {

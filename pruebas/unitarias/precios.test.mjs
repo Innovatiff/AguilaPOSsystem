@@ -39,3 +39,21 @@ describe('centavosDesdeTexto', () => {
     assert.equal(textoDesdeCentavos(5), '0.05');
   });
 });
+
+import { interpretarPrecio } from '../../js/precios.js';
+
+describe('interpretarPrecio (captura rápida)', () => {
+  it('lee el sufijo de clase fiscal pegado al precio', () => {
+    assert.deepEqual(interpretarPrecio('4.99+'), { centavos: 499, claseFiscal: 'gravado' });
+    assert.deepEqual(interpretarPrecio('4.99+tx'), { centavos: 499, claseFiscal: 'gravado' });
+    assert.deepEqual(interpretarPrecio('4.99g'), { centavos: 499, claseFiscal: 'gravado' });
+    assert.deepEqual(interpretarPrecio('5.00c'), { centavos: 500, claseFiscal: 'tasaCero' });
+    assert.deepEqual(interpretarPrecio('5c'), { centavos: 500, claseFiscal: 'tasaCero' });
+  });
+  it('sin sufijo deja la clase en null; sin número falla', () => {
+    assert.deepEqual(interpretarPrecio('1.89'), { centavos: 189, claseFiscal: null });
+    assert.throws(() => interpretarPrecio('c'));
+    assert.throws(() => interpretarPrecio('+'));
+    assert.throws(() => interpretarPrecio('abc'));
+  });
+});

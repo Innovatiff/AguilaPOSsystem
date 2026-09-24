@@ -18,6 +18,7 @@ prices in CAD cents.
 | `js/firebase.js`, `js/auth.js`, `js/nav.js` | SDK init with offline cache, login guard, nav bar |
 | `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
 | `imprimir.html`, `js/pantalla-imprimir.js` | pending tags by store, preview, one print, mark as printed |
+| `captura.html`, `js/pantalla-captura.js` | scan-and-add loop for loading the catalog shelf by shelf |
 | `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
 | `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
@@ -89,6 +90,25 @@ example a price changed first on another station) shows up as an alert.
 Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
 search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
 `Enter` inside the UPC field just moves on, so a scan there does not save.
+
+## Scan-and-add (step 5)
+
+`captura.html` is the shelf-walking loop, keyboard only. The UPC field is
+focused: scan, Enter. A new code moves the cursor to nombre, then marca,
+presentación and precio, Enter between fields (marca and presentación
+autocomplete from the catalog). In precio, `4.99+` means gravado and `5.00c`
+tasa cero, and Enter saves at once; without a suffix Enter lands on the class
+radio, which keeps the last value, so Enter again saves (`G`/`C` switch it).
+The save does not wait for the server: the item enters the session log with
+a pending mark that turns into a check when Firestore confirms, or red with
+an alert if the server rejects it.
+
+"Tienda donde estás" is remembered per laptop; new products get that store
+(or all active stores with the checkbox). Scanning a product that already
+exists offers, with one Enter, to add it to the current store, to reactivate
+it, or simply to move on. Enter on an empty UPC starts a product without
+barcode. `F4` reloads the last product touched for correction (a price change
+goes to the history), `Esc` clears the form.
 
 ## Batch printing (step 4)
 

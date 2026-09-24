@@ -34,6 +34,22 @@ export function centavosDesdeTexto(texto) {
   return enteros * 100 + decimales;
 }
 
+/**
+ * Precio tecleado con la clase fiscal pegada al final, como en la etiqueta:
+ * "4.99+" o "4.99+tx" o "4.99g" → gravado; "5.00c" → tasaCero; sin sufijo →
+ * claseFiscal null. Pensado para capturar sin soltar el teclado.
+ * @returns {{ centavos: number, claseFiscal: 'gravado'|'tasaCero'|null }}
+ */
+export function interpretarPrecio(texto) {
+  const limpio = String(texto ?? '').trim();
+  const coincidencia = /^(.*?)(\+tx|\+|g|c)$/i.exec(limpio);
+  if (coincidencia && coincidencia[1].trim() !== '') {
+    const sufijo = coincidencia[2].toLowerCase();
+    return { centavos: centavosDesdeTexto(coincidencia[1]), claseFiscal: sufijo === 'c' ? 'tasaCero' : 'gravado' };
+  }
+  return { centavos: centavosDesdeTexto(limpio), claseFiscal: null };
+}
+
 /** Centavos → texto para un campo de captura: 499 → "4.99" (sin signo). */
 export function textoDesdeCentavos(centavos) {
   if (!Number.isInteger(centavos) || centavos < 0) return '';

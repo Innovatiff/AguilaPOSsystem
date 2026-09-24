@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captura rápida · Catálogo Águila</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/etiquetas.css">
+  <script type="module" src="js/pantalla-captura.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="captura__cabecera">
+      <div>
+        <h1>Captura rápida</h1>
+        <p class="pista">Escanea · <kbd>Enter</kbd> pasa al siguiente campo · en Precio escribe <kbd>4.99+</kbd> (gravado) o
+          <kbd>5.00c</kbd> (tasa cero) y <kbd>Enter</kbd> guarda · <kbd>Esc</kbd> limpia · <kbd>F4</kbd> corrige el último</p>
+      </div>
+      <div class="captura__tienda">
+        <label for="tienda">Tienda donde estás</label>
+        <select id="tienda"></select>
+        <label class="casilla"><input type="checkbox" id="otras-tiendas"> También en las demás tiendas activas</label>
+      </div>
+    </div>
+    <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
+
+    <div class="captura__cuerpo">
+      <form id="form-captura" class="captura__form" novalidate>
+        <p id="banner" class="mensaje banner" role="status" aria-live="polite" hidden></p>
+        <div class="campo campo--grande">
+          <label for="c-upc">UPC · escanea aquí</label>
+          <input id="c-upc" inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="13"
+            placeholder="Enter sin código = producto sin UPC">
+        </div>
+        <div class="campo campo--grande">
+          <label for="c-nombre">Nombre · barra negra *</label>
+          <input id="c-nombre" maxlength="80" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="rejilla">
+          <div class="campo">
+            <label for="c-marca">Marca · línea 1</label>
+            <input id="c-marca" maxlength="60" autocomplete="off" spellcheck="false" list="marcas">
+          </div>
+          <div class="campo">
+            <label for="c-presentacion">Presentación</label>
+            <input id="c-presentacion" maxlength="30" autocomplete="off" spellcheck="false" list="presentaciones" placeholder="142g">
+          </div>
+          <div class="campo">
+            <label for="c-precio">Precio ($) *</label>
+            <input id="c-precio" inputmode="decimal" autocomplete="off" placeholder="4.99+  ·  5.00c">
+          </div>
+          <fieldset class="campo">
+            <legend>Clase fiscal · teclas <kbd>G</kbd> <kbd>C</kbd></legend>
+            <label><input type="radio" name="clase" value="gravado"> Gravado <kbd>+Tx</kbd></label>
+            <label><input type="radio" name="clase" value="tasaCero"> Tasa cero <kbd>c</kbd></label>
+          </fieldset>
+        </div>
+        <div class="acciones">
+          <button id="btn-guardar" class="boton" type="submit">Guardar <kbd>Enter</kbd></button>
+          <button id="btn-corregir" class="boton boton--secundario" type="button" disabled>Corregir último <kbd>F4</kbd></button>
+          <button id="btn-limpiar" class="boton boton--enlace" type="button">Limpiar <kbd>Esc</kbd></button>
+        </div>
+        <datalist id="marcas"></datalist>
+        <datalist id="presentaciones"></datalist>
+      </form>
+
+      <aside class="captura__lateral">
+        <h3 class="editor__lateral-titulo">Etiqueta</h3>
+        <div id="vista-etiqueta" class="vista-etiqueta"></div>
+        <h3>Esta sesión · <span id="contador">0</span></h3>
+        <ol id="bitacora" class="bitacora"></ol>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
