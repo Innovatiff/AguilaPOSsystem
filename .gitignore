@@ -1,0 +1,13 @@
+# Configuración de Firebase con claves reales: nunca se sube.
+# La plantilla es js/config.example.js.
+js/config.js
+
+# Dependencias y herramientas locales (emulador, pruebas)
+node_modules/
+.netlify/
+.firebase/
+*-debug.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

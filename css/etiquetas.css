@@ -1,0 +1,199 @@
+/* =====================================================================
+   Catálogo Águila · Etiquetas de anaquel
+   ---------------------------------------------------------------------
+   MEDIDAS FÍSICAS. Todas en milímetros, todas aquí arriba.
+   Ajustar contra una etiqueta impresa y recargar la página.
+
+   Punto de partida: etiqueta de 62 mm × 32 mm, módulo UPC-A de 0,33 mm
+   (100 % de magnificación GS1). Si el lector no lee bien, probar un
+   módulo que sea múltiplo del punto de la impresora:
+     impresora de 300 dpi (punto 0,0847 mm): 0,339 mm (4 puntos)
+     impresora de 203 dpi (punto 0,125 mm):  0,375 mm (3 puntos)
+                                             o 0,25 mm (2 puntos)
+   ===================================================================== */
+:root {
+  /* --- Etiqueta --------------------------------------------------- */
+  --tag-ancho: 62mm;
+  --tag-alto: 32mm;
+  --margen: 1.5mm;            /* margen blanco interior, los cuatro lados */
+  --espacio: 0.5mm;           /* separación vertical entre filas */
+
+  /* --- Texto ------------------------------------------------------ */
+  --marca-tamano: 3.4mm;      /* línea 1: marca */
+  --barra-alto: 4.6mm;        /* línea 2: alto de la barra invertida */
+  --nombre-tamano: 3.2mm;     /* línea 2: nombre dentro de la barra */
+  --descriptor-tamano: 2.2mm; /* línea 3 (opcional) */
+  --presentacion-tamano: 3mm; /* "142g", "240mL" */
+  --precio-tamano: 8mm;       /* precio, plantilla A (se reduce solo si no cabe) */
+  --nombre-tamano-sin-codigo: 5mm;   /* nombre, plantilla B */
+  --precio-tamano-sin-codigo: 12mm;  /* precio, plantilla B */
+  --fiscal-proporcion: 0.5;   /* tamaño del "+Tx" / "c" respecto al precio */
+  --subrayado-grosor: 0.3mm;
+  --subrayado-separacion: 0.6mm;
+  --regla-grosor: 0.6mm;      /* regla negra bajo el precio */
+
+  /* --- Código de barras UPC-A ------------------------------------- */
+  --barcode-modulo: 0.33mm;   /* ancho del módulo X. 95 módulos = 31,35 mm */
+  --quiet-zone: 3mm;          /* zona silenciosa a cada lado; mínimo 9 módulos */
+  --barcode-alto: 12mm;       /* alto de las barras (las guardas bajan 5 módulos más) */
+  --barcode-digitos: 2.3mm;   /* tamaño de los dígitos bajo las barras */
+
+  /* --- Tipografías ------------------------------------------------ */
+  --fuente-texto: Arial, Helvetica, "Liberation Sans", sans-serif;
+  --fuente-precio: "Oswald", "Arial Narrow", "Bahnschrift SemiCondensed", Impact, sans-serif;
+}
+
+/* Fuente del precio: pesada y condensada. Local, sin CDN (SIL OFL, ver fonts/). */
+@font-face {
+  font-family: "Oswald";
+  src: url("../fonts/Oswald-Variable.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: block;
+}
+
+/* =====================================================================
+   Etiqueta (común a las dos plantillas)
+   ===================================================================== */
+.etiqueta {
+  box-sizing: border-box;
+  width: var(--tag-ancho);
+  height: var(--tag-alto);
+  padding: var(--margen);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #000;
+  font-family: var(--fuente-texto);
+  font-weight: 700;
+  line-height: 1.1;
+  /* Imprimir siempre los fondos negros aunque "Gráficos de fondo" esté apagado. */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Regla negra bajo el precio: borde, no fondo, para que siempre se imprima. */
+.etiqueta__regla {
+  flex: 0 0 auto;
+  margin-top: var(--espacio);
+  border-top: var(--regla-grosor) solid #000;
+}
+
+/* Precio: muy grande, pesado, condensado; indicador fiscal pegado sin espacio. */
+.etiqueta__precio {
+  font-family: var(--fuente-precio);
+  font-weight: 700;
+  font-stretch: condensed;
+  font-size: var(--precio-tamano);
+  line-height: 1;
+  padding-bottom: 0.08em;  /* el rabo del "$" baja de la línea base; que no toque la regla */
+  white-space: nowrap;
+}
+
+.etiqueta__fiscal {
+  font-size: calc(1em * var(--fiscal-proporcion));
+}
+
+/* =====================================================================
+   Plantilla A · conCodigo  (pieza con UPC)
+   ===================================================================== */
+.etiqueta__marca {
+  text-align: center;
+  text-transform: uppercase;
+  font-size: var(--marca-tamano);
+  white-space: nowrap;
+}
+
+.etiqueta__barra {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: var(--barra-alto);
+  margin-top: var(--espacio);
+  padding: 0 var(--espacio);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  color: #fff;
+  text-transform: uppercase;
+  font-size: var(--nombre-tamano);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.etiqueta__nombre {
+  white-space: nowrap;
+  text-decoration: underline;
+  text-decoration-thickness: var(--subrayado-grosor);
+  text-underline-offset: var(--subrayado-separacion);
+}
+
+.etiqueta__descriptor {
+  margin-top: var(--espacio);
+  font-size: var(--descriptor-tamano);
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.etiqueta__cuerpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: var(--espacio);
+  display: flex;
+  align-items: flex-end;   /* código y precio alineados por abajo */
+}
+
+.etiqueta__codigo {
+  flex: 0 0 auto;
+}
+
+.etiqueta__codigo svg {
+  display: block;
+}
+
+.etiqueta__derecha {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
+
+.etiqueta__presentacion {
+  font-size: var(--presentacion-tamano);
+  white-space: nowrap;
+}
+
+/* =====================================================================
+   Plantilla B · sinCodigo  (peso, o sin UPC)
+   ===================================================================== */
+.etiqueta--sin-codigo {
+  justify-content: center;
+  text-align: center;
+}
+
+.etiqueta__nombre-grande {
+  font-size: var(--nombre-tamano-sin-codigo);
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: var(--subrayado-grosor);
+  text-underline-offset: var(--subrayado-separacion);
+  text-wrap: balance;
+}
+
+.etiqueta--sin-codigo .etiqueta__precio {
+  margin-top: var(--espacio);
+  font-size: var(--precio-tamano-sin-codigo);
+  text-align: center;
+}
+
+/* =====================================================================
+   Impresión
+   ---------------------------------------------------------------------
+   Sin "size" en @page a propósito: si el papel elegido no coincidiera,
+   Chrome escalaría la etiqueta para ajustarla. El tamaño de papel se
+   elige en el diálogo de impresión y debe medir --tag-ancho × --tag-alto.
+   ===================================================================== */
+@page {
+  margin: 0;
+}

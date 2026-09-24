@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prueba de etiquetas · Catálogo Águila</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/etiquetas.css">
+  <script type="module" src="js/prueba-etiquetas.js"></script>
+</head>
+<body>
+  <header class="encabezado no-imprimir">
+    <h1><strong>Catálogo Águila</strong> · Prueba de etiquetas</h1>
+    <button id="btn-imprimir" class="boton" type="button" autofocus>Imprimir</button>
+  </header>
+
+  <main>
+    <section class="aviso no-imprimir" aria-label="Instrucciones de impresión">
+      <p><b>Paso 1.</b> Dos etiquetas de muestra a tamaño real (62 × 32 mm). Imprímelas en la
+        impresora de etiquetas y lee el código con el escáner. Cada etiqueta sale en su propia hoja.</p>
+      <ul>
+        <li>Destino: la impresora de etiquetas. Tamaño de papel: el de la etiqueta cargada (62 × 32 mm).</li>
+        <li>Márgenes: <b>Ninguno</b>. Escala: <b>100 %</b> (predeterminada). Sin encabezados ni pies de página.</li>
+        <li>Si el fondo negro no sale, activa <b>Gráficos de fondo</b> en «Más opciones».</li>
+        <li>Para afinar tamaños: edita las variables al inicio de <code>css/etiquetas.css</code> y recarga.</li>
+      </ul>
+    </section>
+
+    <p id="medidas" class="medidas no-imprimir"></p>
+
+    <section id="muestras" class="muestras" aria-label="Etiquetas de muestra"></section>
+  </main>
+</body>
+</html>

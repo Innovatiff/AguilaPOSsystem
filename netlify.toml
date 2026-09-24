@@ -1,0 +1,58 @@
+# Catálogo Águila · Netlify
+# Sitio estático servido desde la raíz del repositorio. Sin paso de build.
+
+[build]
+  publish = "."
+  command = ""
+
+# Sin redirecciones SPA: cada pantalla es su propio .html (no hay rutas
+# del lado del cliente). Añadir aquí si algún día hicieran falta.
+
+# ---------------------------------------------------------------------
+# Caché
+# - Las páginas HTML, el service worker y la configuración nunca se
+#   guardan: el navegador revalida en cada carga (ETag → 304).
+# - css/ y js/ tampoco se guardan sin revalidar (no llevan versión en el
+#   nombre); la caché larga y el modo sin conexión los da el service worker,
+#   cuya caché se versiona en cada despliegue.
+# - fonts/ y vendor/ son inmutables: si un archivo cambia, cambia de nombre.
+# ---------------------------------------------------------------------
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/js/config.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

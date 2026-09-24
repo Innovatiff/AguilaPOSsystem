@@ -1,0 +1,161 @@
+/* Catálogo Águila · estilos de página (pantalla) */
+:root {
+  --color-marca: #e8791d;      /* naranja de la marca */
+  --color-marca-oscuro: #c4620f;
+  --color-nav: #2b2b2b;        /* gris oscuro de la navegación */
+  --color-texto: #222;
+  --color-texto-suave: #555;
+  --color-fondo: #fff;
+  --color-fondo-suave: #f3f3f3;
+}
+
+html {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--color-texto);
+  background: var(--color-fondo);
+}
+
+body {
+  margin: 0;
+}
+
+.encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--color-nav);
+  color: #fff;
+}
+
+.encabezado h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.encabezado h1 strong {
+  color: var(--color-marca);
+  font-weight: 800;
+}
+
+.boton {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--color-marca);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--color-marca-oscuro);
+}
+
+.boton:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+main {
+  max-width: 960px;
+  padding: 20px 24px 40px;
+}
+
+.aviso {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  border-left: 4px solid var(--color-marca);
+  background: var(--color-fondo-suave);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.aviso p {
+  margin: 0 0 8px;
+}
+
+.aviso ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.medidas {
+  margin: 0 0 16px;
+  color: var(--color-texto-suave);
+  font-size: 13px;
+}
+
+.muestras {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 32px 40px;
+}
+
+.muestra {
+  margin: 0;
+}
+
+.muestra figcaption {
+  margin-bottom: 8px;
+  color: var(--color-texto-suave);
+  font-size: 13px;
+}
+
+.error {
+  max-width: 320px;
+  padding: 10px 12px;
+  border: 1px solid #c0392b;
+  border-radius: 4px;
+  color: #c0392b;
+  background: #fdf0ee;
+  font-size: 14px;
+}
+
+/* En pantalla se marca el borde físico de la etiqueta; no se imprime. */
+@media screen {
+  .etiqueta {
+    outline: 1px dashed #b5b5b5;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Impresión: solo las etiquetas, una por hoja. */
+@media print {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  .no-imprimir {
+    display: none !important;
+  }
+
+  .muestras {
+    display: block;
+  }
+
+  .muestra {
+    margin: 0;
+    padding: 0;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .muestra:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+}
