@@ -182,6 +182,12 @@ main {
     break-after: auto;
     page-break-after: auto;
   }
+
+  /* Los avisos flotantes son position: fixed y se repetirían en cada hoja. */
+  .avisos,
+  dialog {
+    display: none !important;
+  }
 }
 
 /* =====================================================================
@@ -763,4 +769,122 @@ fieldset.campo label {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+}
+
+/* =====================================================================
+   Imprimir etiquetas (paso 4)
+   ===================================================================== */
+.barra-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+  background: var(--color-fondo-suave);
+}
+
+.barra-acciones .separador {
+  flex: 1 1 auto;
+}
+
+.agregar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 320px;
+}
+
+.agregar input {
+  padding: 8px 10px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 15px;
+}
+
+.agregar input:focus-visible {
+  outline: 2px solid var(--color-marca);
+  outline-offset: 1px;
+}
+
+.sugerencias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.grupo {
+  margin-bottom: 26px;
+}
+
+.grupo__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.grupo__titulo .contador {
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--color-texto-suave);
+}
+
+.grupo__titulo .casilla {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.tabla--seleccion tbody tr {
+  cursor: pointer;
+}
+
+.tabla--seleccion tbody tr:hover {
+  background: #fff6ee;
+}
+
+.tabla--seleccion td:first-child,
+.tabla--seleccion th:first-child {
+  width: 34px;
+  text-align: center;
+}
+
+.tabla--seleccion input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+
+.hoja-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 6px;
+  background: var(--color-fondo-suave);
+}
+
+.vista__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.vista__barra h2 {
+  margin: 0 auto 0 0;
+}
+
+.confirmacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
 }

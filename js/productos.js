@@ -14,7 +14,7 @@ import {
   db, doc, collection, query, where, orderBy, limit,
   getDoc, getDocs, onSnapshot, writeBatch, setDoc, Timestamp,
 } from './firebase.js';
-import { armarProducto, tokensBusqueda, idHistorialPrecio, prepararConsulta } from './esquema.js';
+import { armarProducto, tokensBusqueda, idHistorialPrecio, prepararConsulta, fechaISOLocal } from './esquema.js';
 import { normalizarUPC } from './upca.js';
 
 export const ahora = () => Timestamp.fromMillis(Date.now());
@@ -140,6 +140,44 @@ export function actualizarProducto(actual, cambios, correo) {
     });
   }
   return { promesa: lote.commit(), parche, cambioPrecio };
+}
+
+const OPERACIONES_POR_LOTE = 400; // Firestore admite 500 por lote
+
+/**
+ * Registra qué precio quedó impreso en la etiqueta de cada producto (solo los
+ * que salieron de la impresora). `items` trae el precio tal como se imprimió,
+ * no el actual: si otra estación lo cambió mientras tanto, el producto sigue
+ * pendiente.
+ * @param {Array<{id: string, precioCentavos: number}>} items
+ * @returns {{ promesa: Promise<void[]>, cantidad: number, fecha: string }}
+ */
+export function marcarImpresos(items, correo) {
+  const fecha = fechaISOLocal();
+  const marca = ahora();
+  const usuario = String(correo).toLowerCase();
+  const unicos = new Map();
+  for (const item of items) unicos.set(item.id, item.precioCentavos);
+
+  const confirmaciones = [];
+  let lote = writeBatch(db);
+  let operaciones = 0;
+  for (const [id, precioCentavos] of unicos) {
+    lote.update(doc(productos(), id), {
+      ultimoPrecioImpresoCentavos: precioCentavos,
+      fechaUltimaImpresion: fecha,
+      actualizadoEn: marca,
+      actualizadoPor: usuario,
+    });
+    operaciones += 1;
+    if (operaciones === OPERACIONES_POR_LOTE) {
+      confirmaciones.push(lote.commit());
+      lote = writeBatch(db);
+      operaciones = 0;
+    }
+  }
+  if (operaciones > 0) confirmaciones.push(lote.commit());
+  return { promesa: Promise.all(confirmaciones), cantidad: unicos.size, fecha };
 }
 
 /**

@@ -210,10 +210,28 @@
 @media print {
   /* La hoja que entrega el driver es el área imprimible de la etiqueta.
      La etiqueta nunca debe rebasarla: si lo hiciera, el navegador la
-     partiría en dos etiquetas. Se limita al tamaño de la hoja y el
-     contenedor (.muestra) la centra por si la hoja fuera más grande. */
+     partiría en dos etiquetas. Se limita al tamaño de la hoja (100vw/100vh
+     = la hoja en impresión) y nunca se parte. */
   .etiqueta {
-    width: min(var(--ancho-util), 100%);
-    height: min(var(--alto-util), 100%);
+    width: min(var(--ancho-util), 100vw);
+    height: min(var(--alto-util), 100vh);
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Lote: las etiquetas fluyen una tras otra. En la impresora de etiquetas
+     cabe una por hoja (una por etiqueta física); en una hoja carta caben
+     muchas. Sin márgenes ni espacios: cualquier separación podría dejar
+     una etiqueta fuera de la hoja de 62 × 32. */
+  .hoja-etiquetas {
+    margin: 0;
+    padding: 0;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .hoja-etiquetas .etiqueta {
+    display: inline-flex;
+    vertical-align: top;
   }
 }

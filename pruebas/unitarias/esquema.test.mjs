@@ -122,3 +122,36 @@ describe('diferenciasProducto', () => {
     assert.deepEqual(diferenciasProducto({ ...actual, tiendas: ['a', 'b'] }, { ...actual, tiendas: ['b', 'a'], tokensBusqueda: [] }), {});
   });
 });
+
+import { pendienteImpresion, agruparPorTienda } from '../../js/esquema.js';
+
+describe('pendienteImpresion', () => {
+  const base = { activo: true, precioCentavos: 549, ultimoPrecioImpresoCentavos: 549 };
+  it('pendiente si nunca se imprimió o el precio cambió; nunca si está inactivo', () => {
+    assert.equal(pendienteImpresion(base), false);
+    assert.equal(pendienteImpresion({ ...base, ultimoPrecioImpresoCentavos: null }), true);
+    assert.equal(pendienteImpresion({ ...base, ultimoPrecioImpresoCentavos: 499 }), true);
+    assert.equal(pendienteImpresion({ ...base, ultimoPrecioImpresoCentavos: null, activo: false }), false);
+  });
+});
+
+describe('agruparPorTienda', () => {
+  const tiendas = [{ id: 'erie', nombre: 'Águila Erie' }, { id: 'talbot', nombre: 'Águila Talbot' }];
+  const productos = [
+    { id: 'b', nombre: 'JUMEX', tiendas: ['erie'] },
+    { id: 'a', nombre: 'CLASICO', tiendas: ['talbot', 'erie'] },
+    { id: 'c', nombre: 'SUELTO', tiendas: [] },
+    { id: 'd', nombre: 'FANTASMA', tiendas: ['cerrada'] },
+  ];
+  it('un producto en dos tiendas sale en las dos, ordenado por nombre; sin tienda al final', () => {
+    const grupos = agruparPorTienda(productos, tiendas);
+    assert.deepEqual(grupos.map((g) => [g.tienda?.id ?? null, g.productos.map((p) => p.id)]), [
+      ['erie', ['a', 'b']],
+      ['talbot', ['a']],
+      [null, ['d', 'c']],
+    ]);
+  });
+  it('omite tiendas sin pendientes', () => {
+    assert.deepEqual(agruparPorTienda([productos[0]], tiendas).map((g) => g.tienda.id), ['erie']);
+  });
+});

@@ -17,6 +17,7 @@ prices in CAD cents.
 | `js/esquema.js` | schema constants, `tokensBusqueda`, validation (pure, shared with tests) |
 | `js/firebase.js`, `js/auth.js`, `js/nav.js` | SDK init with offline cache, login guard, nav bar |
 | `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
+| `imprimir.html`, `js/pantalla-imprimir.js` | pending tags by store, preview, one print, mark as printed |
 | `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
 | `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
@@ -88,6 +89,24 @@ example a price changed first on another station) shows up as an alert.
 Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
 search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
 `Enter` inside the UPC field just moves on, so a scan there does not save.
+
+## Batch printing (step 4)
+
+`imprimir.html` lists every active product whose `precioCentavos` differs from
+`ultimoPrecioImpresoCentavos` (or that was never printed), grouped by store,
+with a "Todas" box per store and "Seleccionar todo" (`Alt+A`). A product in two
+stores appears under both and prints one tag per store. "Añadir otro producto"
+accepts a scan or a name to reprint a tag that is not pending. "Vista previa e
+imprimir" (`Alt+P`, also `Ctrl+P`) renders the selected tags in a flow: on the
+Brother each tag is one label; on a sheet printer many tags fill each page.
+`Imprimir` opens the browser dialog once. Because the browser cannot tell
+Print from Cancel, the page then asks whether the tags came out; only on "Sí"
+does it write `ultimoPrecioImpresoCentavos` (the price that was actually
+printed, taken from the preview snapshot) and `fechaUltimaImpresion` (local
+date) for exactly those products, in batches of 400. A price changed on
+another station during printing leaves that product pending, as it should.
+The print marker is per product, not per store, which is what the schema
+allows.
 
 ## Offline and the service worker
 

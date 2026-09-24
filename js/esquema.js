@@ -114,6 +114,29 @@ export function diferenciasProducto(actual, nuevo) {
   return cambios;
 }
 
+/** Producto activo cuya etiqueta no refleja el precio actual (o nunca se imprimió). */
+export function pendienteImpresion(producto) {
+  return producto.activo === true
+    && (producto.ultimoPrecioImpresoCentavos == null || producto.ultimoPrecioImpresoCentavos !== producto.precioCentavos);
+}
+
+/**
+ * Agrupa productos por tienda, en el orden de `tiendas`; los que no tienen
+ * tienda van al final en un grupo con tienda null. Un producto en dos
+ * tiendas aparece en las dos: se imprime una etiqueta por tienda.
+ * @returns {Array<{ tienda: object | null, productos: object[] }>}
+ */
+export function agruparPorTienda(productos, tiendas) {
+  const ordenados = [...productos].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const grupos = tiendas
+    .map((tienda) => ({ tienda, productos: ordenados.filter((p) => p.tiendas.includes(tienda.id)) }))
+    .filter((grupo) => grupo.productos.length > 0);
+  const conocidas = new Set(tiendas.map((t) => t.id));
+  const sinTienda = ordenados.filter((p) => !p.tiendas.some((id) => conocidas.has(id)));
+  if (sinTienda.length > 0) grupos.push({ tienda: null, productos: sinTienda });
+  return grupos;
+}
+
 /** ¿El texto parece un código de barras tecleado por el escáner? */
 export function pareceUPC(texto) {
   return /^\d{11,13}$/.test(String(texto ?? '').trim());

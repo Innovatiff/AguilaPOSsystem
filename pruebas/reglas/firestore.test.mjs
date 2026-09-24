@@ -138,6 +138,18 @@ describe('products · esquema', () => {
       nombre: 'CLASICO GRANDE', tokensBusqueda: ['cla', 'clas'], actualizadoEn: Timestamp.now(), actualizadoPor: EMPLEADA,
     }));
   });
+  it('marcar la etiqueta como impresa: último precio y fecha ISO, sin tocar el precio', async () => {
+    const db = contexto(EMPLEADA);
+    await assertSucceeds(updateDoc(doc(db, 'products/p1'), {
+      ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: EMPLEADA,
+    }));
+    await assertFails(updateDoc(doc(db, 'products/p1'), {
+      ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '24/09/2026', actualizadoEn: Timestamp.now(), actualizadoPor: EMPLEADA,
+    }));
+    await assertFails(updateDoc(doc(db, 'products/p1'), {
+      ultimoPrecioImpresoCentavos: 4.99, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: EMPLEADA,
+    }));
+  });
   it('nadie borra productos, ni el admin', async () => {
     await assertFails(deleteDoc(doc(contexto(ADMIN), 'products/p1')));
   });
