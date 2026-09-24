@@ -14,7 +14,6 @@ import {
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
-  createUserWithEmailAndPassword,
 } from '../vendor/firebase/12.19.0/firebase-auth.js';
 import {
   initializeFirestore,
@@ -50,26 +49,11 @@ if (hostEmuladores) {
   connectFirestoreEmulator(db, hostEmuladores, emuladores.firestore ?? 8080);
 }
 
-/**
- * App secundaria para crear cuentas de acceso sin cerrar la sesión del
- * administrador (createUserWithEmailAndPassword inicia sesión con la cuenta nueva).
- */
-export function authSecundaria() {
-  const existente = getApps().find((a) => a.name === 'secundaria');
-  const secundaria = existente ?? initializeApp(firebaseConfig, 'secundaria');
-  const authSec = getAuth(secundaria);
-  if (!existente && hostEmuladores) {
-    connectAuthEmulator(authSec, `http://${hostEmuladores}:${emuladores.auth ?? 9099}`, { disableWarnings: true });
-  }
-  return authSec;
-}
-
 export {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
-  createUserWithEmailAndPassword,
   doc,
   getDoc,
   getDocs,

@@ -1,16 +1,18 @@
 /**
- * Acceso del personal: inicio y cierre de sesión, comprobación de la ficha
- * en staff/{email} y guardia para las páginas de la app.
+ * Acceso del personal: inicio y cierre de sesión, ficha en staff/{email} y
+ * guardia para las páginas de la app.
+ *
+ * Toda cuenta de Firebase Authentication entra como empleado. La ficha en
+ * staff/{email} es opcional: aporta nombre, el rol admin, o corta el acceso
+ * con activo == false. Las cuentas se crean en la consola de Firebase.
  */
 import {
   auth,
   db,
-  authSecundaria,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
-  createUserWithEmailAndPassword,
   doc,
   getDoc,
 } from './firebase.js';
@@ -27,7 +29,7 @@ const MENSAJES = {
   'auth/network-request-failed': 'Sin conexión. Revisa la red e inténtalo de nuevo.',
   'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
   'auth/weak-password': 'La contraseña debe tener al menos 8 caracteres.',
-  'catalogo/sin-acceso': 'Tu cuenta no está dada de alta como personal activo. Avisa al administrador.',
+  'catalogo/desactivado': 'Tu acceso está desactivado. Avisa al administrador.',
   'permission-denied': 'No tienes permiso para hacer esto.',
   'unavailable': 'Sin conexión con la base de datos. Inténtalo de nuevo.',
 };
@@ -50,22 +52,43 @@ export function usuarioActual() {
 
 /** Ficha de staff/{email} o null si no existe. Con caché persistente funciona sin conexión. */
 export async function fichaPersonal(email) {
-  const instantanea = await getDoc(doc(db, 'staff', String(email).toLowerCase()));
-  return instantanea.exists() ? { email: instantanea.id, ...instantanea.data() } : null;
+  const correo = String(email).toLowerCase();
+  const instantanea = await getDoc(doc(db, 'staff', correo));
+  return instantanea.exists() ? { email: correo, ...instantanea.data(), sinFicha: false } : null;
+}
+
+/** Ficha implícita de una cuenta sin documento en staff: empleado. */
+function fichaPorDefecto(usuario) {
+  const correo = String(usuario.email).toLowerCase();
+  return { email: correo, nombre: usuario.displayName || correo, rol: 'empleado', activo: true, sinFicha: true };
 }
 
 /**
- * Inicia sesión y comprueba que el correo esté dado de alta y activo en staff.
+ * Resuelve la ficha efectiva de una cuenta. Lanza catalogo/desactivado si
+ * su ficha existe con activo == false.
+ */
+async function fichaEfectiva(usuario) {
+  const ficha = await fichaPersonal(usuario.email);
+  if (ficha && ficha.activo !== true) {
+    throw Object.assign(new Error('Acceso desactivado'), { code: 'catalogo/desactivado' });
+  }
+  return ficha ?? fichaPorDefecto(usuario);
+}
+
+/**
+ * Inicia sesión. Cualquier cuenta de Authentication entra, salvo que su
+ * ficha de personal esté desactivada.
  * @returns {Promise<{usuario: import('firebase/auth').User, personal: object}>}
  */
 export async function iniciarSesion(email, contrasena) {
   const credencial = await signInWithEmailAndPassword(auth, String(email).trim(), contrasena);
-  const personal = await fichaPersonal(credencial.user.email);
-  if (!personal || personal.activo !== true) {
-    await signOut(auth);
-    throw Object.assign(new Error('Sin acceso'), { code: 'catalogo/sin-acceso' });
+  try {
+    const personal = await fichaEfectiva(credencial.user);
+    return { usuario: credencial.user, personal };
+  } catch (error) {
+    if (error?.code === 'catalogo/desactivado') await signOut(auth);
+    throw error;
   }
-  return { usuario: credencial.user, personal };
 }
 
 export async function cerrarSesion() {
@@ -75,24 +98,6 @@ export async function cerrarSesion() {
 
 export function enviarRestablecimiento(email) {
   return sendPasswordResetEmail(auth, String(email).trim());
-}
-
-/**
- * Crea la cuenta de acceso (Firebase Auth) de un empleado sin cerrar la
- * sesión del administrador. Si la cuenta ya existe, no falla.
- * @returns {Promise<'creada'|'existente'>}
- */
-export async function crearCuentaAcceso(email, contrasena) {
-  const authSec = authSecundaria();
-  try {
-    await createUserWithEmailAndPassword(authSec, String(email).trim().toLowerCase(), contrasena);
-    return 'creada';
-  } catch (error) {
-    if (error?.code === 'auth/email-already-in-use') return 'existente';
-    throw error;
-  } finally {
-    await signOut(authSec).catch(() => {});
-  }
 }
 
 /** Solo se permite volver a páginas de esta misma app. */
@@ -118,13 +123,13 @@ export async function requerirPersonal({ soloAdmin = false } = {}) {
 
   let personal;
   try {
-    personal = await fichaPersonal(usuario.email);
-  } catch {
+    personal = await fichaEfectiva(usuario);
+  } catch (error) {
+    if (error?.code === 'catalogo/desactivado') {
+      await signOut(auth);
+      return irALogin('desactivado');
+    }
     return irALogin('sin-conexion');
-  }
-  if (!personal || personal.activo !== true) {
-    await signOut(auth);
-    return irALogin('sin-acceso');
   }
   if (soloAdmin && personal.rol !== 'admin') {
     window.location.replace('index.html?aviso=solo-admin');

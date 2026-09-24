@@ -18,7 +18,10 @@ field is rejected. Money is always **integer cents** (`499` = $4.99), never a fl
 Written by admins only. Never deleted.
 
 ### `staff/{email}`
-Document ID is the login email, lowercase.
+Document ID is the login email, lowercase. **Optional**: every account in
+Firebase Authentication has access as `empleado` without a record. The record
+adds a name, grants `admin`, or revokes access. Client sign-up must therefore be
+disabled in Authentication settings; accounts are created from the console.
 
 | field | type | notes |
 |---|---|---|

@@ -1,5 +1,6 @@
 import { iniciarSesion, usuarioActual, fichaPersonal, enviarRestablecimiento, mensajeError, destinoSeguro } from './auth.js';
 
+
 const parametros = new URLSearchParams(window.location.search);
 const destino = destinoSeguro(parametros.get('volver'));
 const formulario = document.getElementById('form-login');
@@ -11,7 +12,7 @@ const mensaje = document.getElementById('mensaje');
 
 const MOTIVOS = {
   'sesion-cerrada': ['ok', 'Sesión cerrada.'],
-  'sin-acceso': ['error', 'Tu cuenta no está dada de alta como personal activo. Avisa al administrador.'],
+  'desactivado': ['error', 'Tu acceso está desactivado. Avisa al administrador.'],
   'sin-conexion': ['error', 'No se pudo comprobar tu acceso. Revisa la conexión e inténtalo de nuevo.'],
 };
 
@@ -30,12 +31,12 @@ function ocupado(si) {
 const motivo = MOTIVOS[parametros.get('motivo')];
 if (motivo) mostrar(...motivo);
 
-// Si ya hay sesión de personal activo, no hace falta volver a entrar.
+// Si ya hay sesión y el acceso no está desactivado, no hace falta volver a entrar.
 usuarioActual().then(async (usuario) => {
-  if (!usuario || parametros.get('motivo') === 'sin-acceso') return;
+  if (!usuario || parametros.get('motivo') === 'desactivado') return;
   try {
-    const personal = await fichaPersonal(usuario.email);
-    if (personal?.activo === true) window.location.replace(destino);
+    const ficha = await fichaPersonal(usuario.email);
+    if (!ficha || ficha.activo === true) window.location.replace(destino);
   } catch {
     // sin conexión y sin caché: que inicie sesión normalmente
   }

@@ -3,7 +3,7 @@
  * Escrituras con setDoc de documentos completos: las reglas exigen los
  * campos exactos del esquema.
  */
-import { requerirPersonal, crearCuentaAcceso, enviarRestablecimiento, mensajeError } from './auth.js';
+import { requerirPersonal, enviarRestablecimiento, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { db, doc, setDoc, collection, query, orderBy, onSnapshot } from './firebase.js';
 import { normalizarTexto, ROLES } from './esquema.js';
@@ -41,7 +41,6 @@ const formPersonal = $('form-personal');
 const pCorreo = $('p-correo');
 const pNombre = $('p-nombre');
 const pRol = $('p-rol');
-const pContrasena = $('p-contrasena');
 const pActivo = $('p-activo');
 const pGuardar = $('p-guardar');
 const pCancelar = $('p-cancelar');
@@ -52,7 +51,6 @@ function modoPersonal(correoEnEdicion) {
   editandoPersonal = correoEnEdicion;
   const editando = correoEnEdicion !== null;
   pCorreo.readOnly = editando;
-  $('campo-contrasena').hidden = editando;
   pGuardar.textContent = editando ? 'Guardar cambios' : 'Agregar';
   pCancelar.hidden = !editando;
   if (!editando) {
@@ -73,19 +71,8 @@ formPersonal.addEventListener('submit', async (evento) => {
   pGuardar.disabled = true;
   mostrar(pMensaje, '', '');
   try {
-    let notaCuenta = '';
-    if (editandoPersonal === null) {
-      const contrasena = pContrasena.value;
-      if (contrasena.length < 8) {
-        mostrar(pMensaje, 'error', 'La contraseña inicial debe tener al menos 8 caracteres.');
-        pContrasena.focus();
-        return;
-      }
-      const resultado = await crearCuentaAcceso(correo, contrasena);
-      notaCuenta = resultado === 'existente' ? ' La cuenta de acceso ya existía; se conserva su contraseña.' : ' Cuenta de acceso creada.';
-    }
     await setDoc(doc(db, 'staff', correo), ficha);
-    mostrar(pMensaje, 'ok', `${ficha.nombre} guardado.${notaCuenta}`);
+    mostrar(pMensaje, 'ok', `${ficha.nombre} guardado. Recuerda que la cuenta ${correo} debe existir en Firebase → Authentication.`);
     modoPersonal(null);
     pCorreo.focus();
   } catch (error) {

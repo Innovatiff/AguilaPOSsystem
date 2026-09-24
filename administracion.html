@@ -15,8 +15,9 @@
 
     <section class="seccion" aria-labelledby="titulo-personal">
       <h2 id="titulo-personal">Personal</h2>
-      <p class="nota">Cada persona entra con su correo. El rol <b>administrador</b> gestiona personal y tiendas;
-        el rol <b>empleado</b> trabaja con el catálogo. Nadie se borra: se desactiva.</p>
+      <p class="nota">Las cuentas se crean en la consola de Firebase (Authentication → Users). Toda cuenta entra
+        como <b>empleado</b> aunque no aparezca aquí. Esta lista sirve para poner nombre, dar el rol de
+        <b>administrador</b> (gestiona personal y tiendas) o <b>desactivar</b> un acceso. Nadie se borra.</p>
 
       <form id="form-personal" class="formulario formulario--fila" novalidate>
         <div class="campo">
@@ -33,11 +34,6 @@
             <option value="empleado">Empleado</option>
             <option value="admin">Administrador</option>
           </select>
-        </div>
-        <div class="campo" id="campo-contrasena">
-          <label for="p-contrasena">Contraseña inicial</label>
-          <input id="p-contrasena" type="text" minlength="8" maxlength="64" autocomplete="off"
-            placeholder="mínimo 8 caracteres">
         </div>
         <div class="campo campo--casilla">
           <label><input id="p-activo" type="checkbox" checked> Activo</label>

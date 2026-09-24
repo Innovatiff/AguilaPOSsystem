@@ -38,17 +38,27 @@ Against the emulators instead of the real project: `npm run emuladores`, and in
   (Java 21 required for the emulator).
 - `npm run test:unitarias` runs only the pure unit tests.
 
-## First admin (one-time bootstrap)
+## Access model and bootstrap
 
-Rules only let admins write `staff`, so the first admin is created by hand:
+**Every account in Firebase Authentication can sign in**, with the `empleado`
+role. The `staff/{email}` record is optional: it gives a display name, grants
+the `admin` role, or cuts access with `activo = false`. Because an account is
+all it takes, accounts must be created only from the console:
 
 1. Firebase console → Authentication → Sign-in method → enable **Email/Password**.
-2. Authentication → Users → **Add user** with your email and a password.
-3. Firestore → collection `staff` → document ID = that email in lowercase, fields
+2. Authentication → Settings → **User actions** → untick **Enable create (sign-up)**.
+   This is mandatory: with sign-up on, anyone could create an account and get in.
+3. Authentication → Users → **Add user** for yourself and each employee.
+4. Firestore → collection `staff` → document ID = your email in lowercase, fields
    `nombre` (string), `rol` = `admin` (string), `activo` = `true` (boolean).
-4. Deploy rules and indexes: `npx firebase login`, then `npm run reglas:desplegar`.
-5. Sign in at `login.html`. Add the rest of the staff and the two stores in
-   **Administración**; it creates their login accounts too.
+   Employees need no record unless you want to name them, promote them or
+   deactivate them, which you can do from **Administración** once signed in.
+5. Deploy rules and indexes: `npx firebase login`, then `npm run reglas:desplegar`,
+   or paste `firestore.rules` into the console's Rules tab.
+6. Sign in at `login.html` and add the two stores in **Administración**.
+
+To remove someone's access: disable the account in Authentication, or set
+`activo = false` in Administración. Both work; the rules check the second.
 
 ## Deploy (Netlify)
 

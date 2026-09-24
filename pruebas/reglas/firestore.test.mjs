@@ -66,10 +66,15 @@ describe('acceso', () => {
     await assertFails(getDoc(doc(db, 'stores/talbot')));
     await assertFails(getDoc(doc(db, `staff/${ADMIN}`)));
   });
-  it('un usuario autenticado que no está en staff no lee ni escribe', async () => {
+  it('una cuenta autenticada sin ficha entra como empleado: lee y escribe productos', async () => {
     const db = contexto(EXTRANO);
-    await assertFails(getDoc(doc(db, 'products/p1')));
-    await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EXTRANO)));
+    await assertSucceeds(getDoc(doc(db, 'products/p1')));
+    await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EXTRANO)));
+  });
+  it('una cuenta sin ficha no es admin: no escribe personal ni tiendas', async () => {
+    const db = contexto(EXTRANO);
+    await assertFails(setDoc(doc(db, `staff/${EXTRANO}`), { nombre: 'Yo', rol: 'admin', activo: true }));
+    await assertFails(setDoc(doc(db, 'stores/otra'), { nombre: 'Otra', direccion: '', activo: true }));
   });
   it('el personal inactivo no lee productos pero sí su propia ficha', async () => {
     const db = contexto(INACTIVO);

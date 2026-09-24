@@ -3,7 +3,11 @@ rules_version = '2';
 // Catálogo Águila · Reglas de Firestore
 // ---------------------------------------------------------------------
 // Principios:
-//  - Solo el personal activo (staff/{email} con activo == true) lee o escribe.
+//  - Toda cuenta de Firebase Authentication tiene acceso como empleado.
+//    La ficha staff/{email} es opcional: da nombre, el rol admin, o corta
+//    el acceso con activo == false. Por eso el registro de cuentas desde la
+//    app debe estar DESHABILITADO en Authentication → Settings → User actions:
+//    las cuentas se crean solo desde la consola.
 //  - Las reglas hacen cumplir el esquema: nombres de campo exactos, tipos,
 //    enumeraciones y rangos. Un campo de más rechaza la escritura.
 //  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
@@ -24,13 +28,17 @@ service cloud.firestore {
     function rutaPersonal() {
       return /databases/$(database)/documents/staff/$(emailActual());
     }
+    // Cualquier cuenta autenticada, salvo que su ficha la desactive.
     function esPersonal() {
       return autenticado()
-        && exists(rutaPersonal())
-        && get(rutaPersonal()).data.activo == true;
+        && (!exists(rutaPersonal()) || get(rutaPersonal()).data.activo == true);
     }
+    // El rol admin sí exige ficha activa con rol == 'admin'.
     function esAdmin() {
-      return esPersonal() && get(rutaPersonal()).data.rol == 'admin';
+      return autenticado()
+        && exists(rutaPersonal())
+        && get(rutaPersonal()).data.activo == true
+        && get(rutaPersonal()).data.rol == 'admin';
     }
 
     // ----- Validadores genéricos ----------------------------------------
