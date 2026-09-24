@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inicio · Catálogo Águila</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <script type="module" src="js/pwa.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <script type="module" src="js/inicio.js"></script>
 </head>
@@ -14,6 +18,10 @@
     <p id="aviso" class="mensaje" role="status" hidden></p>
     <h1 id="saludo"></h1>
     <section class="tarjetas" aria-label="Secciones disponibles">
+      <a class="tarjeta" href="productos.html">
+        <strong>Productos</strong>
+        <span>Buscar por nombre o UPC, crear, editar y desactivar. El escáner abre el producto.</span>
+      </a>
       <a class="tarjeta" href="prueba-etiquetas.html">
         <strong>Prueba de etiquetas</strong>
         <span>Las dos plantillas a tamaño real, para imprimir y escanear.</span>
@@ -23,7 +31,7 @@
         <span>Personal con acceso y tiendas.</span>
       </a>
     </section>
-    <p class="nota">Las pantallas de productos (búsqueda, alta, edición) llegan en el paso 3.</p>
+    <p class="nota">La impresión por lotes de etiquetas llega en el paso 4.</p>
   </main>
 </body>
 </html>

@@ -3,10 +3,10 @@
 
 [build]
   publish = "."
-  # Único paso del despliegue: escribir js/config.js a partir de la variable
-  # de entorno FIREBASE_WEB_CONFIG (Site configuration → Environment variables),
-  # para no subir claves al repositorio. No hay compilación ni bundler.
-  command = "node herramientas/escribir-config.mjs"
+  # Dos pasos, sin compilación ni bundler: escribir js/config.js a partir de
+  # la variable FIREBASE_WEB_CONFIG (para no subir claves) y sellar sw.js con
+  # el commit para que la caché del service worker se renueve en cada publicación.
+  command = "node herramientas/escribir-config.mjs && node herramientas/sellar-sw.mjs"
 
 [build.environment]
   NODE_VERSION = "22"

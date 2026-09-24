@@ -30,6 +30,13 @@ export const LIMITES = Object.freeze({
 
 export const LONGITUD_MINIMA_TOKEN = 3;
 
+/** Campos que el personal edita desde la pantalla de productos. */
+export const CAMPOS_EDITABLES = Object.freeze([
+  'upc', 'plu', 'nombre', 'marca', 'descriptor', 'presentacion',
+  'precioCentavos', 'unidadVenta', 'precioPorKgCentavos', 'claseFiscal',
+  'tiendas', 'proveedor', 'activo',
+]);
+
 const REGEX_UPC = /^[0-9]{12}$/;
 const REGEX_PLU = /^[0-9]{4,5}$/;
 const REGEX_FECHA_ISO = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
@@ -76,6 +83,35 @@ export function prepararConsulta(consulta) {
   if (lista.length === 0) return { termino: null, resto: [] };
   const [termino, ...resto] = [...lista].sort((a, b) => b.length - a.length);
   return { termino, resto };
+}
+
+/**
+ * Búsqueda en memoria sobre el catálogo sincronizado: cada término debe ser
+ * prefijo de alguna palabra del nombre o la marca (sin acentos ni mayúsculas),
+ * o prefijo del UPC o del PLU. Sin límite de 3 letras: aquí no hay Firestore.
+ */
+export function coincideBusqueda(producto, consulta) {
+  const terminos = palabras(consulta);
+  if (terminos.length === 0) return true;
+  const palabrasProducto = [...palabras(producto.nombre), ...palabras(producto.marca)];
+  const codigos = [producto.upc, producto.plu].filter((c) => typeof c === 'string' && c !== '');
+  return terminos.every(
+    (termino) => palabrasProducto.some((p) => p.startsWith(termino)) || codigos.some((c) => c.startsWith(termino)),
+  );
+}
+
+const iguales = (a, b) => JSON.stringify(Array.isArray(a) ? [...a].sort() : a) === JSON.stringify(Array.isArray(b) ? [...b].sort() : b);
+
+/**
+ * Campos editables cuyo valor cambió entre el producto guardado y el capturado.
+ * Solo esos se envían: dos estaciones que editan campos distintos no se pisan.
+ */
+export function diferenciasProducto(actual, nuevo) {
+  const cambios = {};
+  for (const campo of CAMPOS_EDITABLES) {
+    if (!iguales(actual[campo] ?? null, nuevo[campo] ?? null)) cambios[campo] = nuevo[campo] ?? null;
+  }
+  return cambios;
 }
 
 /** ¿El texto parece un código de barras tecleado por el escáner? */

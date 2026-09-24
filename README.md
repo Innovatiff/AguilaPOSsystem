@@ -10,12 +10,14 @@ prices in CAD cents.
 
 | path | what |
 |---|---|
-| `index.html`, `login.html`, `administracion.html` | app pages (staff login required) |
+| `index.html`, `login.html`, `productos.html`, `administracion.html` | app pages (staff login required) |
 | `prueba-etiquetas.html` | step 1: both tag templates at physical size, print test |
 | `css/etiquetas.css` | the tag: every physical size is a `:root` variable in mm |
 | `js/upca.js`, `js/precios.js`, `js/etiquetas.js` | UPC-A → SVG, cents formatting, tag rendering |
 | `js/esquema.js` | schema constants, `tokensBusqueda`, validation (pure, shared with tests) |
 | `js/firebase.js`, `js/auth.js`, `js/nav.js` | SDK init with offline cache, login guard, nav bar |
+| `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
+| `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
 | `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
 | `pruebas/` | rules tests (emulator) and unit tests |
@@ -70,11 +72,43 @@ it, e.g. `{ apiKey: "…", authDomain: "…", projectId: "aguilapos", … }`.
 `NPM_FLAGS = "--version"` in `netlify.toml` stops Netlify from installing the
 dev dependencies on every deploy.
 
+## Product screen (step 3)
+
+`productos.html` keeps the search box focused: the USB scanner types the UPC
+and sends Enter. A known UPC opens the product; an unknown one offers to
+create it with the UPC prefilled; a bad check digit is reported. Text search
+matches prefixes of any word of nombre or marca (accents ignored) and UPC or
+PLU prefixes. The whole catalog is synced once into Firestore's persistent
+cache and kept live, so search is instant, works without signal, and reflects
+other stations' edits. Saves send only the fields that changed; a price change
+is written in one batch with its `priceHistory` entry. Without signal the write
+is queued locally and the screen says so; a later server rejection (for
+example a price changed first on another station) shows up as an alert.
+
+Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
+search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
+`Enter` inside the UPC field just moves on, so a scan there does not save.
+
+## Offline and the service worker
+
+`sw.js` precaches the app shell (pages, CSS, JS, vendored SDK, font, icons)
+with a cache name stamped from the commit on every Netlify deploy
+(`herramientas/sellar-sw.mjs`), so old caches are dropped on activation.
+Pages, CSS and JS are network-first with cache fallback; `vendor/` and
+`fonts/` are cache-first. `js/config.js` is never cached and cross-origin
+traffic (Firestore, Auth) is never intercepted. Consequence: an open tab keeps
+working when the signal drops, and Firestore queues writes; a *cold* start
+with no network fails on the uncached `config.js`, by design.
+
+When you add a file to the app, add it to `CASCARA` in `sw.js`; the unit test
+`pruebas/unitarias/sw.test.mjs` checks the list against the repo.
+
 ## Updating the vendored Firebase SDK
 
 Bump `firebase` in `package.json`, run `npm install && npm run vendorizar`, then
-point the three imports in `js/firebase.js` at the new `vendor/firebase/<version>/`.
-The old version directory can be deleted once nothing references it.
+point the three imports in `js/firebase.js` at the new `vendor/firebase/<version>/`,
+and update the four vendor entries in `sw.js`. The old version directory can be
+deleted once nothing references it.
 
 ## Printing
 

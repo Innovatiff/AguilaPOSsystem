@@ -17,3 +17,25 @@ describe('precios', () => {
     assert.throws(() => indicadorFiscal('exento'));
   });
 });
+
+import { centavosDesdeTexto, textoDesdeCentavos } from '../../js/precios.js';
+
+describe('centavosDesdeTexto', () => {
+  it('convierte lo tecleado a centavos enteros', () => {
+    assert.equal(centavosDesdeTexto('4.99'), 499);
+    assert.equal(centavosDesdeTexto('4,99'), 499);
+    assert.equal(centavosDesdeTexto('$5'), 500);
+    assert.equal(centavosDesdeTexto('5.'), 500);
+    assert.equal(centavosDesdeTexto('0.5'), 50);
+    assert.equal(centavosDesdeTexto(' 12.30 '), 1230);
+    assert.equal(centavosDesdeTexto('1,234.56'), 123456);
+  });
+  it('rechaza lo que no es un precio', () => {
+    for (const malo of ['abc', '4.999', '-1', '', '4.9.9']) assert.throws(() => centavosDesdeTexto(malo), `debería rechazar "${malo}"`);
+  });
+  it('textoDesdeCentavos es la inversa para el campo de captura', () => {
+    assert.equal(textoDesdeCentavos(499), '4.99');
+    assert.equal(textoDesdeCentavos(500), '5.00');
+    assert.equal(textoDesdeCentavos(5), '0.05');
+  });
+});

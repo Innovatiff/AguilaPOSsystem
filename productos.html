@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Productos · Catálogo Águila</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/etiquetas.css">
+  <script type="module" src="js/pantalla-productos.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <h1>Productos</h1>
+
+    <div class="barra-busqueda">
+      <label for="busqueda" class="visualmente-oculto">Buscar por nombre, marca o UPC</label>
+      <input id="busqueda" type="search" autocomplete="off" spellcheck="false" autofocus
+        placeholder="Nombre, marca o UPC · el escáner escribe aquí">
+      <label class="casilla"><input id="ver-inactivos" type="checkbox"> Ver inactivos</label>
+      <button id="btn-nuevo" class="boton" type="button">Nuevo producto <kbd>Alt+N</kbd></button>
+    </div>
+    <p class="pista"><kbd>Enter</kbd> abre · <kbd>↓</kbd> <kbd>↑</kbd> recorre la lista · <kbd>/</kbd> vuelve al buscador · <kbd>Esc</kbd> cierra</p>
+    <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
+
+    <div id="oferta-crear" class="mensaje mensaje--ok oferta" hidden>
+      <span>No hay ningún producto con el UPC <b id="oferta-upc"></b>.</span>
+      <button id="oferta-crear-btn" class="boton" type="button">Crear producto con este UPC <kbd>Enter</kbd></button>
+      <button id="oferta-cancelar-btn" class="boton boton--enlace" type="button">Cancelar <kbd>Esc</kbd></button>
+    </div>
+    <p id="aviso-busqueda" class="mensaje mensaje--error" role="alert" hidden></p>
+
+    <table class="tabla tabla--resultados" aria-label="Resultados">
+      <thead>
+        <tr><th>Producto</th><th>Código</th><th>Precio</th><th>Tiendas</th><th>Estado</th></tr>
+      </thead>
+      <tbody id="resultados"></tbody>
+    </table>
+    <p id="sin-resultados" class="nota" hidden></p>
+    <p id="recorte" class="nota" hidden></p>
+  </main>
+
+  <dialog id="editor" class="editor" aria-labelledby="editor-titulo">
+    <form id="form-producto" class="editor__form" novalidate>
+      <header class="editor__cabecera">
+        <h2 id="editor-titulo">Nuevo producto</h2>
+        <button id="btn-cerrar" class="boton boton--secundario" type="button">Cerrar <kbd>Esc</kbd></button>
+      </header>
+      <p id="editor-aviso" class="mensaje editor__aviso" role="alert" hidden></p>
+
+      <div class="editor__cuerpo">
+        <div class="editor__campos">
+          <div class="rejilla">
+            <div class="campo">
+              <label for="f-upc">UPC (12 dígitos)</label>
+              <input id="f-upc" inputmode="numeric" autocomplete="off" maxlength="13" placeholder="escanea o teclea">
+            </div>
+            <div class="campo">
+              <label for="f-plu">PLU</label>
+              <input id="f-plu" inputmode="numeric" autocomplete="off" maxlength="5">
+            </div>
+            <div class="campo">
+              <label for="f-marca">Marca · línea 1 de la etiqueta</label>
+              <input id="f-marca" maxlength="60" autocomplete="off">
+            </div>
+            <div class="campo">
+              <label for="f-nombre">Nombre · barra negra *</label>
+              <input id="f-nombre" maxlength="80" required autocomplete="off">
+            </div>
+            <div class="campo campo--ancho">
+              <label for="f-descriptor">Descriptor · línea pequeña, opcional</label>
+              <input id="f-descriptor" maxlength="80" autocomplete="off">
+            </div>
+            <div class="campo">
+              <label for="f-presentacion">Presentación</label>
+              <input id="f-presentacion" maxlength="30" autocomplete="off" placeholder="142g, 240mL">
+            </div>
+            <fieldset class="campo">
+              <legend>Unidad de venta</legend>
+              <label><input type="radio" name="unidad" value="pieza" checked> Pieza</label>
+              <label><input type="radio" name="unidad" value="peso"> Peso</label>
+            </fieldset>
+            <div class="campo">
+              <label for="f-precio">Precio ($) *</label>
+              <input id="f-precio" inputmode="decimal" required autocomplete="off" placeholder="4.99">
+            </div>
+            <div class="campo" id="campo-kilo" hidden>
+              <label for="f-precio-kg">Precio por kilo ($/kg) *</label>
+              <input id="f-precio-kg" inputmode="decimal" autocomplete="off" placeholder="15.99">
+            </div>
+            <fieldset class="campo">
+              <legend>Clase fiscal</legend>
+              <label><input type="radio" name="fiscal" value="gravado" checked> Gravado <kbd>+Tx</kbd></label>
+              <label><input type="radio" name="fiscal" value="tasaCero"> Tasa cero <kbd>c</kbd></label>
+            </fieldset>
+            <fieldset class="campo campo--ancho">
+              <legend>Tiendas</legend>
+              <div id="f-tiendas" class="casillas"><span class="nota">Sin tiendas registradas.</span></div>
+            </fieldset>
+            <div class="campo">
+              <label for="f-proveedor">Proveedor</label>
+              <input id="f-proveedor" maxlength="80" autocomplete="off">
+            </div>
+          </div>
+        </div>
+
+        <aside class="editor__lateral">
+          <h3>Etiqueta</h3>
+          <div id="vista-etiqueta" class="vista-etiqueta"></div>
+          <p id="vista-aviso" class="nota" hidden></p>
+          <div id="meta" class="meta"></div>
+          <h3>Historial de precios</h3>
+          <ul id="historial" class="historial"></ul>
+        </aside>
+      </div>
+
+      <footer class="editor__pie">
+        <button id="btn-guardar" class="boton" type="submit">Guardar <kbd>Enter</kbd></button>
+        <button id="btn-desactivar" class="boton boton--secundario" type="button" hidden>Desactivar producto</button>
+        <span class="nota">Los cambios de precio quedan en el historial.</span>
+      </footer>
+    </form>
+  </dialog>
+</body>
+</html>

@@ -93,3 +93,32 @@ describe('fechas e ids', () => {
     assert.throws(() => idHistorialPrecio('abc', 1.5));
   });
 });
+
+import { coincideBusqueda, diferenciasProducto } from '../../js/esquema.js';
+
+describe('coincideBusqueda (catálogo en memoria)', () => {
+  const p = { nombre: 'Salsa Verde', marca: 'La Costeña', upc: '750100000000', plu: null };
+  it('cada término es prefijo de alguna palabra, sin acentos, en cualquier orden', () => {
+    assert.equal(coincideBusqueda(p, 'ver sal'), true);
+    assert.equal(coincideBusqueda(p, 'costena'), true);
+    assert.equal(coincideBusqueda(p, 'Costeña v'), true);
+    assert.equal(coincideBusqueda(p, 'roja'), false);
+    assert.equal(coincideBusqueda(p, 'alsa'), false);
+  });
+  it('también busca por prefijo de UPC', () => {
+    assert.equal(coincideBusqueda(p, '7501'), true);
+    assert.equal(coincideBusqueda(p, '633'), false);
+  });
+});
+
+describe('diferenciasProducto', () => {
+  const actual = productoValido();
+  it('devuelve solo los campos editables que cambiaron', () => {
+    assert.deepEqual(diferenciasProducto(actual, { ...actual }), {});
+    assert.deepEqual(diferenciasProducto(actual, { ...actual, precioCentavos: 549, tiendas: ['talbot'] }), { precioCentavos: 549 });
+    assert.deepEqual(diferenciasProducto(actual, { ...actual, tiendas: ['erie', 'talbot'] }), { tiendas: ['erie', 'talbot'] });
+  });
+  it('ignora el orden de las tiendas y no toca campos que no se editan', () => {
+    assert.deepEqual(diferenciasProducto({ ...actual, tiendas: ['a', 'b'] }, { ...actual, tiendas: ['b', 'a'], tokensBusqueda: [] }), {});
+  });
+});
