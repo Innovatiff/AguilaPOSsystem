@@ -3,7 +3,15 @@
 
 [build]
   publish = "."
-  command = ""
+  # Único paso del despliegue: escribir js/config.js a partir de la variable
+  # de entorno FIREBASE_WEB_CONFIG (Site configuration → Environment variables),
+  # para no subir claves al repositorio. No hay compilación ni bundler.
+  command = "node herramientas/escribir-config.mjs"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # package.json solo trae herramientas de prueba; que Netlify no instale nada.
+  NPM_FLAGS = "--version"
 
 # Sin redirecciones SPA: cada pantalla es su propio .html (no hay rutas
 # del lado del cliente). Añadir aquí si algún día hicieran falta.

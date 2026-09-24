@@ -1,0 +1,2 @@
+firebase 12.19.0
+Generado con herramientas/vendorizar-firebase.mjs (esbuild). Apache-2.0, ver ../LICENSE.

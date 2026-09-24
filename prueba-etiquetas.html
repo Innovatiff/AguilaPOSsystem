@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prueba de etiquetas · Catálogo Águila</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/etiquetas.css">
+  <script type="module" src="js/prueba-etiquetas.js"></script>
+</head>
+<body>
+  <header class="encabezado no-imprimir">
+    <h1><a class="marca" href="index.html">Catálogo Águila</a> · Prueba de etiquetas</h1>
+    <button id="btn-imprimir" class="boton" type="button" autofocus>Imprimir</button>
+  </header>
+
+  <main>
+    <section class="aviso no-imprimir" aria-label="Instrucciones de impresión">
+      <p><b>Paso 1.</b> Dos etiquetas de muestra a tamaño real (etiqueta de 62 × 32 mm; la impresora
+        no imprime 1,5 mm en cada borde). Imprímelas y lee el código con el escáner. Cada etiqueta
+        sale en su propia hoja.</p>
+      <ul>
+        <li>Destino: la impresora de etiquetas. Tamaño de papel: cinta continua de 62 mm con largo de
+          32 mm (en el driver Brother: papel «62mm», largo 32,0 mm, o un tamaño personalizado 62 × 32).</li>
+        <li>Orientación: <b>Horizontal</b> (se selecciona sola). Márgenes: <b>Ninguno</b>.
+          Escala: <b>100 %</b>. Sin encabezados ni pies de página.</li>
+        <li>La vista previa debe mostrar cada etiqueta completa y una sola por hoja. Si sale partida en
+          dos hojas, el largo del papel es menor que la etiqueta.</li>
+        <li>Para afinar tamaños: edita las variables al inicio de <code>css/etiquetas.css</code> y recarga.</li>
+      </ul>
+    </section>
+
+    <p id="medidas" class="medidas no-imprimir"></p>
+
+    <section id="muestras" class="muestras" aria-label="Etiquetas de muestra"></section>
+  </main>
+</body>
+</html>

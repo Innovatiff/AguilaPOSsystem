@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administración · Catálogo Águila</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/base.css">
+  <script type="module" src="js/administracion.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <h1>Administración</h1>
+
+    <section class="seccion" aria-labelledby="titulo-personal">
+      <h2 id="titulo-personal">Personal</h2>
+      <p class="nota">Cada persona entra con su correo. El rol <b>administrador</b> gestiona personal y tiendas;
+        el rol <b>empleado</b> trabaja con el catálogo. Nadie se borra: se desactiva.</p>
+
+      <form id="form-personal" class="formulario formulario--fila" novalidate>
+        <div class="campo">
+          <label for="p-correo">Correo</label>
+          <input id="p-correo" type="email" required autocomplete="off">
+        </div>
+        <div class="campo">
+          <label for="p-nombre">Nombre</label>
+          <input id="p-nombre" type="text" required maxlength="80" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label for="p-rol">Rol</label>
+          <select id="p-rol">
+            <option value="empleado">Empleado</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <div class="campo" id="campo-contrasena">
+          <label for="p-contrasena">Contraseña inicial</label>
+          <input id="p-contrasena" type="text" minlength="8" maxlength="64" autocomplete="off"
+            placeholder="mínimo 8 caracteres">
+        </div>
+        <div class="campo campo--casilla">
+          <label><input id="p-activo" type="checkbox" checked> Activo</label>
+        </div>
+        <div class="acciones">
+          <button id="p-guardar" class="boton" type="submit">Agregar</button>
+          <button id="p-cancelar" class="boton boton--enlace" type="button" hidden>Cancelar</button>
+        </div>
+      </form>
+      <p id="p-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+      <table class="tabla" id="tabla-personal">
+        <thead>
+          <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="seccion" aria-labelledby="titulo-tiendas">
+      <h2 id="titulo-tiendas">Tiendas</h2>
+      <p class="nota">El identificador se usa en los productos (campo <code>tiendas</code>) y no cambia después.</p>
+
+      <form id="form-tienda" class="formulario formulario--fila" novalidate>
+        <div class="campo">
+          <label for="t-nombre">Nombre</label>
+          <input id="t-nombre" type="text" required maxlength="80" autocomplete="off">
+        </div>
+        <div class="campo">
+          <label for="t-id">Identificador</label>
+          <input id="t-id" type="text" required pattern="[a-z0-9\-]{2,40}" maxlength="40" autocomplete="off"
+            placeholder="p. ej. talbot">
+        </div>
+        <div class="campo campo--ancho">
+          <label for="t-direccion">Dirección</label>
+          <input id="t-direccion" type="text" maxlength="160" autocomplete="off">
+        </div>
+        <div class="campo campo--casilla">
+          <label><input id="t-activo" type="checkbox" checked> Activa</label>
+        </div>
+        <div class="acciones">
+          <button id="t-guardar" class="boton" type="submit">Agregar</button>
+          <button id="t-cancelar" class="boton boton--enlace" type="button" hidden>Cancelar</button>
+        </div>
+      </form>
+      <p id="t-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+      <table class="tabla" id="tabla-tiendas">
+        <thead>
+          <tr><th>Identificador</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>

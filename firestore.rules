@@ -1,0 +1,201 @@
+rules_version = '2';
+
+// Catálogo Águila · Reglas de Firestore
+// ---------------------------------------------------------------------
+// Principios:
+//  - Solo el personal activo (staff/{email} con activo == true) lee o escribe.
+//  - Las reglas hacen cumplir el esquema: nombres de campo exactos, tipos,
+//    enumeraciones y rangos. Un campo de más rechaza la escritura.
+//  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
+//    del mismo lote (batch), con el precio anterior real y el nuevo.
+//  - Nada se borra: productos se desactivan, el historial es inmutable.
+// ---------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----- Identidad ---------------------------------------------------
+    function autenticado() {
+      return request.auth != null && request.auth.token.email is string;
+    }
+    function emailActual() {
+      return request.auth.token.email.lower();
+    }
+    function rutaPersonal() {
+      return /databases/$(database)/documents/staff/$(emailActual());
+    }
+    function esPersonal() {
+      return autenticado()
+        && exists(rutaPersonal())
+        && get(rutaPersonal()).data.activo == true;
+    }
+    function esAdmin() {
+      return esPersonal() && get(rutaPersonal()).data.rol == 'admin';
+    }
+
+    // ----- Validadores genéricos ----------------------------------------
+    function esTexto(v, maximo) {
+      return v is string && v.size() <= maximo;
+    }
+    function esTextoNoVacio(v, maximo) {
+      return v is string && v.size() > 0 && v.size() <= maximo;
+    }
+    function esTextoONulo(v, maximo) {
+      return v == null || esTexto(v, maximo);
+    }
+    function esEnteroONulo(v) {
+      return v == null || v is int;
+    }
+    function esFechaISO(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // ----- products ------------------------------------------------------
+    function camposProducto() {
+      return [
+        'upc', 'plu', 'nombre', 'marca', 'descriptor', 'presentacion',
+        'precioCentavos', 'unidadVenta', 'precioPorKgCentavos', 'claseFiscal',
+        'tiendas', 'existencias', 'costoCentavos', 'proveedor', 'activo',
+        'ultimoPrecioImpresoCentavos', 'fechaUltimaImpresion', 'tokensBusqueda',
+        'creadoEn', 'actualizadoEn', 'actualizadoPor'
+      ];
+    }
+
+    function productoValido(d) {
+      return d.keys().hasAll(camposProducto())
+        && d.keys().hasOnly(camposProducto())
+        && (d.upc == null || (d.upc is string && d.upc.matches('^[0-9]{12}$')))
+        && (d.plu == null || (d.plu is string && d.plu.matches('^[0-9]{4,5}$')))
+        && esTextoNoVacio(d.nombre, 80)
+        && esTextoONulo(d.marca, 60)
+        && esTextoONulo(d.descriptor, 80)
+        && esTexto(d.presentacion, 30)
+        && d.precioCentavos is int
+        && d.precioCentavos >= 0
+        && d.precioCentavos <= 9999999
+        && d.unidadVenta in ['pieza', 'peso']
+        && (d.unidadVenta == 'pieza'
+              ? (d.precioCentavos > 0 && d.precioPorKgCentavos == null)
+              : (d.precioPorKgCentavos is int && d.precioPorKgCentavos > 0))
+        && d.claseFiscal in ['gravado', 'tasaCero']
+        && d.tiendas is list
+        && d.tiendas.size() <= 20
+        && esEnteroONulo(d.existencias)
+        && esEnteroONulo(d.costoCentavos)
+        && esTextoONulo(d.proveedor, 80)
+        && d.activo is bool
+        && (d.ultimoPrecioImpresoCentavos == null
+              || (d.ultimoPrecioImpresoCentavos is int && d.ultimoPrecioImpresoCentavos >= 0))
+        && (d.fechaUltimaImpresion == null || esFechaISO(d.fechaUltimaImpresion))
+        && d.tokensBusqueda is list
+        && d.tokensBusqueda.size() <= 400
+        && d.creadoEn is timestamp
+        && d.actualizadoEn is timestamp
+        && d.actualizadoPor == emailActual();
+    }
+
+    // Id de la entrada de historial que debe acompañar a un cambio de precio:
+    // "<productId>_<actualizadoEn en milisegundos>".
+    function idHistorial(productId, d) {
+      return productId + '_' + string(d.actualizadoEn.toMillis());
+    }
+
+    match /products/{productId} {
+      allow read: if esPersonal();
+
+      allow create: if esPersonal()
+        && productoValido(request.resource.data)
+        && request.resource.data.creadoEn == request.resource.data.actualizadoEn
+        // existencias y costo los administra el POS: el catálogo los deja en null
+        && request.resource.data.existencias == null
+        && request.resource.data.costoCentavos == null;
+
+      allow update: if esPersonal()
+        && productoValido(request.resource.data)
+        && request.resource.data.creadoEn == resource.data.creadoEn
+        && request.resource.data.existencias == resource.data.existencias
+        && request.resource.data.costoCentavos == resource.data.costoCentavos
+        && (request.resource.data.precioCentavos == resource.data.precioCentavos
+            || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, request.resource.data))));
+
+      // Los productos se desactivan (activo = false); nunca se borran.
+      allow delete: if false;
+    }
+
+    // ----- priceHistory --------------------------------------------------
+    function camposHistorial() {
+      return ['productId', 'precioAnteriorCentavos', 'precioNuevoCentavos', 'fecha', 'usuario'];
+    }
+    function rutaProducto(productId) {
+      return /databases/$(database)/documents/products/$(productId);
+    }
+    function entradaHistorialValida(d, entradaId) {
+      return d.keys().hasAll(camposHistorial())
+        && d.keys().hasOnly(camposHistorial())
+        && d.productId is string
+        && d.productId.size() > 0
+        && d.fecha is timestamp
+        && entradaId == d.productId + '_' + string(d.fecha.toMillis())
+        && d.usuario == emailActual()
+        && d.precioAnteriorCentavos is int
+        && d.precioNuevoCentavos is int
+        && d.precioAnteriorCentavos != d.precioNuevoCentavos
+        // El precio anterior es el que está guardado antes de este lote,
+        // y el nuevo el que queda después: el producto cambia en el mismo lote.
+        && d.precioAnteriorCentavos == get(rutaProducto(d.productId)).data.precioCentavos
+        && d.precioNuevoCentavos == getAfter(rutaProducto(d.productId)).data.precioCentavos
+        && getAfter(rutaProducto(d.productId)).data.actualizadoEn == d.fecha;
+    }
+
+    match /priceHistory/{entradaId} {
+      allow read: if esPersonal();
+      allow create: if esPersonal() && entradaHistorialValida(request.resource.data, entradaId);
+      allow update, delete: if false;
+    }
+
+    // ----- staff ---------------------------------------------------------
+    function personalValido(d) {
+      return d.keys().hasAll(['nombre', 'rol', 'activo'])
+        && d.keys().hasOnly(['nombre', 'rol', 'activo'])
+        && esTextoNoVacio(d.nombre, 80)
+        && d.rol in ['admin', 'empleado']
+        && d.activo is bool;
+    }
+
+    match /staff/{email} {
+      // Cada quien puede leer su propia ficha (para saber si sigue activo);
+      // el personal activo puede leer todas.
+      allow read: if esPersonal() || (autenticado() && emailActual() == email);
+
+      allow create: if esAdmin()
+        && personalValido(request.resource.data)
+        && email == email.lower()
+        && email.matches('^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$');
+
+      // Un admin no puede desactivarse ni quitarse el rol a sí mismo.
+      allow update: if esAdmin()
+        && personalValido(request.resource.data)
+        && (email != emailActual()
+            || (request.resource.data.activo == true && request.resource.data.rol == 'admin'));
+
+      allow delete: if false;
+    }
+
+    // ----- stores --------------------------------------------------------
+    function tiendaValida(d) {
+      return d.keys().hasAll(['nombre', 'direccion', 'activo'])
+        && d.keys().hasOnly(['nombre', 'direccion', 'activo'])
+        && esTextoNoVacio(d.nombre, 80)
+        && esTexto(d.direccion, 160)
+        && d.activo is bool;
+    }
+
+    match /stores/{storeId} {
+      allow read: if esPersonal();
+      allow create, update: if esAdmin()
+        && tiendaValida(request.resource.data)
+        && storeId.matches('^[a-z0-9-]{2,40}$');
+      allow delete: if false;
+    }
+  }
+}
