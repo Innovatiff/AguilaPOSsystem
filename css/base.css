@@ -26,10 +26,11 @@ body {
 
 .encabezado {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 24px;
+  gap: 8px 16px;
+  padding: 10px 24px;
   background: var(--color-nav);
   color: #fff;
 }
@@ -204,6 +205,7 @@ main {
 
 .encabezado nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   flex: 1 1 auto;
 }
@@ -234,6 +236,7 @@ main {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
   font-size: 13px;
   color: #ddd;
   white-space: nowrap;
