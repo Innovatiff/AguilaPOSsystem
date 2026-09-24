@@ -574,7 +574,7 @@ kbd {
   background: #fff1e3;
 }
 
-.tabla--resultados td .secundario {
+.tabla td .secundario {
   display: block;
   font-size: 12px;
   color: var(--color-texto-suave);
