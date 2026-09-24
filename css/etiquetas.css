@@ -13,9 +13,12 @@
    ===================================================================== */
 :root {
   /* --- Etiqueta --------------------------------------------------- */
-  --tag-ancho: 62mm;
-  --tag-alto: 32mm;
-  --margen: 1.5mm;            /* margen blanco interior, los cuatro lados */
+  --tag-ancho: 62mm;          /* etiqueta física: ancho de la cinta */
+  --tag-alto: 32mm;           /* etiqueta física: largo de corte */
+  --borde-impresora: 1.5mm;   /* franja que la impresora NO imprime en cada
+                                 borde (Brother QL: 1,5 mm). El diseño ocupa
+                                 tag menos dos bordes: 59 × 29 mm */
+  --margen: 1mm;              /* margen blanco adicional dentro del área imprimible */
   --espacio: 0.5mm;           /* separación vertical entre filas */
 
   /* --- Texto ------------------------------------------------------ */
@@ -56,9 +59,12 @@
    Etiqueta (común a las dos plantillas)
    ===================================================================== */
 .etiqueta {
+  /* Área imprimible = etiqueta física menos el borde de la impresora. */
+  --ancho-util: calc(var(--tag-ancho) - 2 * var(--borde-impresora));
+  --alto-util: calc(var(--tag-alto) - 2 * var(--borde-impresora));
   box-sizing: border-box;
-  width: var(--tag-ancho);
-  height: var(--tag-alto);
+  width: var(--ancho-util);
+  height: var(--alto-util);
   padding: var(--margen);
   overflow: hidden;
   display: flex;
@@ -199,4 +205,15 @@
 @page {
   size: landscape;
   margin: 0;
+}
+
+@media print {
+  /* La hoja que entrega el driver es el área imprimible de la etiqueta.
+     La etiqueta nunca debe rebasarla: si lo hiciera, el navegador la
+     partiría en dos etiquetas. Se limita al tamaño de la hoja y el
+     contenedor (.muestra) la centra por si la hoja fuera más grande. */
+  .etiqueta {
+    width: min(var(--ancho-util), 100%);
+    height: min(var(--alto-util), 100%);
+  }
 }

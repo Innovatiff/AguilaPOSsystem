@@ -76,8 +76,13 @@ function ajustarTodas() {
 
 function mostrarMedidas() {
   const mm = (propiedad) => leerMedidaMM(propiedad).toLocaleString('es-MX', { maximumFractionDigits: 3 });
+  const util = (propiedad) =>
+    (leerMedidaMM(propiedad) - 2 * leerMedidaMM('--borde-impresora')).toLocaleString('es-MX', {
+      maximumFractionDigits: 3,
+    });
   document.getElementById('medidas').textContent =
-    `Medidas actuales: ${mm('--tag-ancho')} × ${mm('--tag-alto')} mm · ` +
+    `Etiqueta ${mm('--tag-ancho')} × ${mm('--tag-alto')} mm · ` +
+    `área imprimible ${util('--tag-ancho')} × ${util('--tag-alto')} mm · ` +
     `módulo ${mm('--barcode-modulo')} mm · zona silenciosa ${mm('--quiet-zone')} mm · ` +
     `barras ${mm('--barcode-alto')} mm de alto`;
 }

@@ -117,11 +117,19 @@ main {
   font-size: 14px;
 }
 
-/* En pantalla se marca el borde físico de la etiqueta; no se imprime. */
+/* En pantalla: línea punteada = área imprimible; línea gris = borde físico
+   de la etiqueta (--borde-impresora más afuera). Nada de esto se imprime. */
 @media screen {
+  .muestra {
+    padding: calc(var(--borde-impresora) + 2px);
+  }
+
   .etiqueta {
-    outline: 1px dashed #b5b5b5;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    outline: 1px dotted #c8c8c8;
+    box-shadow:
+      0 0 0 var(--borde-impresora) #fff,
+      0 0 0 calc(var(--borde-impresora) + 1px) #8a8a8a,
+      0 2px 6px calc(var(--borde-impresora) + 1px) rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -147,11 +155,22 @@ main {
     display: block;
   }
 
+  /* Una etiqueta por hoja: el contenedor ocupa exactamente la hoja y
+     centra la etiqueta; así nunca se parte en dos ni sobra una en blanco. */
   .muestra {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
     margin: 0;
     padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
     break-after: page;
+    break-inside: avoid;
     page-break-after: always;
+    page-break-inside: avoid;
   }
 
   .muestra:last-child {
