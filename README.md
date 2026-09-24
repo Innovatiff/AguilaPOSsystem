@@ -19,6 +19,7 @@ prices in CAD cents.
 | `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
 | `imprimir.html`, `js/pantalla-imprimir.js` | pending tags by store, preview, one print, mark as printed |
 | `captura.html`, `js/pantalla-captura.js` | scan-and-add loop for loading the catalog shelf by shelf |
+| `datos.html`, `js/pantalla-datos.js`, `js/csv.js` | CSV export and validated import of the full catalog |
 | `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
 | `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
@@ -90,6 +91,34 @@ example a price changed first on another station) shows up as an alert.
 Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
 search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
 `Enter` inside the UPC field just moves on, so a scan there does not save.
+
+## CSV import and export (step 6)
+
+`datos.html` (admins) exports the whole catalog and imports a CSV back.
+
+**Export**: UTF-8 with BOM, comma separated, CRLF, one row per product, the
+columns in this order: `id, upc, plu, nombre, marca, descriptor, presentacion,
+precioCentavos, unidadVenta, precioPorKgCentavos, claseFiscal, tiendas,
+existencias, costoCentavos, proveedor, activo, ultimoPrecioImpresoCentavos,
+fechaUltimaImpresion, creadoEn, actualizadoEn, actualizadoPor`. Money is
+integer cents, `tiendas` are joined with `|`, timestamps are ISO 8601,
+`tokensBusqueda` is derived and not exported. Excel turns UPCs into numbers
+and drops leading zeros: import the file there as text, or accept that the
+importer pads 11-digit UPCs back to 12 and refuses scientific notation.
+
+**Import**: delimiter auto-detected (`,` `;` tab). With an `id` column the
+row updates that product; without it, a row whose `upc` exists updates that
+product and any other row creates one (columns `nombre`, `precioCentavos`
+and `claseFiscal` required for creating). A column that is absent leaves the
+field untouched; an empty cell means null (`presentacion`: empty string),
+except `activo` and `upc`, which are left as they are: a UPC is never
+cleared from a CSV. `existencias`, `costoCentavos`,
+`tokensBusqueda` and the timestamps are never imported. Every row is
+validated with the same rules as the app; the page shows what would be
+created, updated, left unchanged or rejected, and nothing is written until
+you confirm. Writes go in batches of 12 products (a price change costs one
+rule read and Firestore allows 20 per batch, see
+`pruebas/reglas/limites.test.mjs`); price changes carry their history entry.
 
 ## Scan-and-add (step 5)
 

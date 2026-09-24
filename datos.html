@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importar / exportar · Catálogo Águila</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <script type="module" src="js/pantalla-datos.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <h1>Importar / exportar</h1>
+    <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
+
+    <section class="seccion" aria-labelledby="titulo-exportar">
+      <h2 id="titulo-exportar">Exportar</h2>
+      <p class="nota">Todo el catálogo (activos e inactivos) en CSV UTF-8, una fila por producto y una columna por campo del
+        esquema, con el <code>id</code> del documento al inicio. Dinero en centavos enteros; <code>tiendas</code> separadas con
+        <code>|</code>. En Excel, importa el archivo como texto para que no convierta los UPC en números.</p>
+      <div class="acciones">
+        <button id="btn-exportar" class="boton" type="button">Descargar catálogo (CSV)</button>
+        <button id="btn-plantilla" class="boton boton--secundario" type="button">Descargar plantilla vacía</button>
+      </div>
+    </section>
+
+    <section class="seccion" aria-labelledby="titulo-importar">
+      <h2 id="titulo-importar">Importar</h2>
+      <p class="nota">Con columna <code>id</code> se actualiza ese producto; sin <code>id</code>, un <code>upc</code> que ya existe
+        actualiza ese producto y uno nuevo lo crea. Columna ausente = campo sin tocar. Los cambios de precio quedan en el
+        historial. <code>existencias</code> y <code>costoCentavos</code> no se importan (son del POS). Nada se escribe hasta que
+        confirmes.</p>
+      <div class="campo">
+        <label for="archivo">Archivo CSV</label>
+        <input id="archivo" type="file" accept=".csv,text/csv,text/plain">
+      </div>
+
+      <div id="plan" hidden>
+        <p id="plan-resumen" class="mensaje mensaje--info"></p>
+        <ul id="plan-avisos" class="nota"></ul>
+        <details id="plan-errores-detalle" hidden>
+          <summary id="plan-errores-titulo"></summary>
+          <ul id="plan-errores" class="nota"></ul>
+        </details>
+        <table class="tabla" id="plan-tabla" hidden>
+          <thead><tr><th>Línea</th><th>Acción</th><th>Producto</th><th>Cambios</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="plan-recorte" class="nota" hidden></p>
+        <div class="acciones">
+          <button id="btn-importar" class="boton" type="button" disabled>Importar</button>
+          <button id="btn-cancelar" class="boton boton--enlace" type="button">Descartar archivo</button>
+        </div>
+        <p id="progreso" class="mensaje mensaje--info" role="status" aria-live="polite" hidden></p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -106,9 +106,9 @@ const iguales = (a, b) => JSON.stringify(Array.isArray(a) ? [...a].sort() : a) =
  * Campos editables cuyo valor cambió entre el producto guardado y el capturado.
  * Solo esos se envían: dos estaciones que editan campos distintos no se pisan.
  */
-export function diferenciasProducto(actual, nuevo) {
+export function diferenciasProducto(actual, nuevo, campos = CAMPOS_EDITABLES) {
   const cambios = {};
-  for (const campo of CAMPOS_EDITABLES) {
+  for (const campo of campos) {
     if (!iguales(actual[campo] ?? null, nuevo[campo] ?? null)) cambios[campo] = nuevo[campo] ?? null;
   }
   return cambios;

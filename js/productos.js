@@ -119,27 +119,89 @@ export function crearProducto(datos, correo) {
  * escribe la entrada de priceHistory en el mismo lote.
  * @returns {{ promesa: Promise<void>, parche: object, cambioPrecio: boolean }}
  */
-export function actualizarProducto(actual, cambios, correo) {
-  const marca = ahora();
+/**
+ * Parche de actualización de un producto y, si cambia el precio, la entrada
+ * de historial que debe acompañarlo en el mismo lote.
+ */
+export function prepararParche(actual, cambios, correo, marca) {
   const usuario = String(correo).toLowerCase();
   const parche = { ...cambios, actualizadoEn: marca, actualizadoPor: usuario };
   if ('nombre' in cambios || 'marca' in cambios) {
     parche.tokensBusqueda = tokensBusqueda(cambios.nombre ?? actual.nombre, cambios.marca ?? actual.marca);
   }
   const cambioPrecio = 'precioCentavos' in cambios && cambios.precioCentavos !== actual.precioCentavos;
+  const historial = cambioPrecio
+    ? {
+      id: idHistorialPrecio(actual.id, marca.toMillis()),
+      datos: {
+        productId: actual.id,
+        precioAnteriorCentavos: actual.precioCentavos,
+        precioNuevoCentavos: cambios.precioCentavos,
+        fecha: marca,
+        usuario,
+      },
+    }
+    : null;
+  return { parche, historial, cambioPrecio };
+}
 
+export function actualizarProducto(actual, cambios, correo) {
+  const marca = ahora();
+  const { parche, historial, cambioPrecio } = prepararParche(actual, cambios, correo, marca);
   const lote = writeBatch(db);
   lote.update(doc(productos(), actual.id), parche);
-  if (cambioPrecio) {
-    lote.set(doc(db, 'priceHistory', idHistorialPrecio(actual.id, marca.toMillis())), {
-      productId: actual.id,
-      precioAnteriorCentavos: actual.precioCentavos,
-      precioNuevoCentavos: cambios.precioCentavos,
-      fecha: marca,
-      usuario,
-    });
-  }
+  if (historial) lote.set(doc(db, 'priceHistory', historial.id), historial.datos);
   return { promesa: lote.commit(), parche, cambioPrecio };
+}
+
+/**
+ * Las reglas hacen una lectura única por cambio de precio (get del producto)
+ * y Firestore admite 20 lecturas de reglas por lote; 12 productos por lote
+ * deja margen (verificado en pruebas/reglas/limites.test.mjs).
+ */
+export const PRODUCTOS_POR_LOTE_IMPORTACION = 12;
+
+/**
+ * Ejecuta un plan de importación (ver js/csv.js) por lotes. Cada lote se
+ * espera hasta 15 s; sin señal queda en cola y se informa como pendiente.
+ * @param {{crear: Array<{datos: object, linea: number}>, actualizar: Array<{actual: object, cambios: object, linea: number}>}} plan
+ * @param {(avance: object) => void} [alProgresar]
+ */
+export async function importarPlan(plan, correo, alProgresar = () => {}) {
+  const trabajos = [
+    ...plan.crear.map((t) => ({ tipo: 'crear', ...t })),
+    ...plan.actualizar.map((t) => ({ tipo: 'actualizar', ...t })),
+  ];
+  const resumen = { total: trabajos.length, hechos: 0, confirmados: 0, pendientes: 0, fallidos: 0, errores: [] };
+  for (let i = 0; i < trabajos.length; i += PRODUCTOS_POR_LOTE_IMPORTACION) {
+    const grupo = trabajos.slice(i, i + PRODUCTOS_POR_LOTE_IMPORTACION);
+    const marca = ahora();
+    const lote = writeBatch(db);
+    for (const trabajo of grupo) {
+      if (trabajo.tipo === 'crear') {
+        lote.set(doc(productos()), { ...trabajo.datos, creadoEn: marca, actualizadoEn: marca });
+      } else {
+        const { parche, historial } = prepararParche(trabajo.actual, trabajo.cambios, correo, marca);
+        lote.update(doc(productos(), trabajo.actual.id), parche);
+        if (historial) lote.set(doc(db, 'priceHistory', historial.id), historial.datos);
+      }
+    }
+    const promesa = lote.commit();
+    promesa.catch(() => {});
+    let resultado;
+    try {
+      resultado = await esperarConfirmacion(promesa, 15000);
+    } catch (error) {
+      resultado = 'fallido';
+      resumen.errores.push({ lineas: grupo.map((t) => t.linea), mensaje: error?.code ?? error?.message ?? 'error' });
+    }
+    if (resultado === 'confirmado') resumen.confirmados += grupo.length;
+    else if (resultado === 'pendiente') resumen.pendientes += grupo.length;
+    else resumen.fallidos += grupo.length;
+    resumen.hechos += grupo.length;
+    alProgresar({ ...resumen });
+  }
+  return resumen;
 }
 
 const OPERACIONES_POR_LOTE = 400; // Firestore admite 500 por lote

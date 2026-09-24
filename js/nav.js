@@ -9,6 +9,7 @@ const SECCIONES = [
   { href: 'captura.html', texto: 'Captura rápida' },
   { href: 'imprimir.html', texto: 'Imprimir etiquetas' },
   { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas' },
+  { href: 'datos.html', texto: 'Importar / exportar', soloAdmin: true },
   { href: 'administracion.html', texto: 'Administración', soloAdmin: true },
 ];
 
