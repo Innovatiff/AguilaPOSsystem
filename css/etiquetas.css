@@ -190,10 +190,13 @@
 /* =====================================================================
    Impresión
    ---------------------------------------------------------------------
-   Sin "size" en @page a propósito: si el papel elegido no coincidiera,
+   Sin dimensiones en @page a propósito: si el papel elegido no coincidiera,
    Chrome escalaría la etiqueta para ajustarla. El tamaño de papel se
    elige en el diálogo de impresión y debe medir --tag-ancho × --tag-alto.
+   Solo se fija la orientación: la etiqueta es más ancha que alta y, en
+   vertical, el navegador gira el papel y recorta el lado derecho.
    ===================================================================== */
 @page {
+  size: landscape;
   margin: 0;
 }
