@@ -6,17 +6,19 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import { doc, setDoc, writeBatch, Timestamp, setLogLevel } from 'firebase/firestore';
 import { armarProducto } from '../../js/esquema.js';
+import { armarFichaPersonal, correoDeAcceso } from '../../js/identidad.js';
 
 const PRODUCTOS_POR_LOTE_IMPORTACION = 12; // debe coincidir con js/productos.js
 
 setLogLevel('silent');
-const EMPLEADA = 'ana@aguila.test';
+const CODIGO = '1001'; // empleada por código; actualizadoPor lleva el código
+const EMPLEADA = correoDeAcceso(CODIGO);
 let entorno;
 const contexto = (email) => entorno.authenticatedContext(email.replace(/[^a-z0-9]/g, '-'), { email, email_verified: true }).firestore();
 
 function productoDemo(i) {
   const ahora = Timestamp.fromMillis(1_700_000_000_000);
-  return { ...armarProducto({ upc: null, nombre: `PRODUCTO ${i}`, marca: null, presentacion: '', precioCentavos: 100 + i, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: [] }, EMPLEADA), creadoEn: ahora, actualizadoEn: ahora };
+  return { ...armarProducto({ upc: null, nombre: `PRODUCTO ${i}`, marca: null, presentacion: '', precioCentavos: 100 + i, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: [] }, CODIGO), creadoEn: ahora, actualizadoEn: ahora };
 }
 
 describe('límites por lote', () => {
@@ -28,7 +30,8 @@ describe('límites por lote', () => {
     await entorno.clearFirestore();
     await entorno.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore();
-      await setDoc(doc(db, `staff/${EMPLEADA}`), { nombre: 'Ana', rol: 'empleado', activo: true });
+      const ahora = Timestamp.fromMillis(1_700_000_000_000);
+      await setDoc(doc(db, `staff/${CODIGO}`), { ...armarFichaPersonal({ usuario: CODIGO, nombre: 'Ana', rol: 'empleado' }, 'admin@aguila.test'), creadoEn: ahora, actualizadoEn: ahora });
       for (let i = 0; i < 60; i += 1) await setDoc(doc(db, `products/p${i}`), productoDemo(i));
     });
   });
@@ -37,7 +40,7 @@ describe('límites por lote', () => {
     const db = contexto(EMPLEADA);
     const lote = writeBatch(db);
     const marca = Timestamp.fromMillis(Date.now());
-    for (let i = 0; i < n; i += 1) lote.update(doc(db, `products/p${i}`), { ultimoPrecioImpresoCentavos: 100 + i, fechaUltimaImpresion: '2026-09-24', actualizadoEn: marca, actualizadoPor: EMPLEADA });
+    for (let i = 0; i < n; i += 1) lote.update(doc(db, `products/p${i}`), { ultimoPrecioImpresoCentavos: 100 + i, fechaUltimaImpresion: '2026-09-24', actualizadoEn: marca, actualizadoPor: CODIGO });
     return lote.commit();
   }
 
@@ -46,8 +49,8 @@ describe('límites por lote', () => {
     const lote = writeBatch(db);
     const marca = Timestamp.fromMillis(Date.now());
     for (let i = 0; i < n; i += 1) {
-      lote.update(doc(db, `products/p${i}`), { precioCentavos: 900 + i, actualizadoEn: marca, actualizadoPor: EMPLEADA });
-      lote.set(doc(db, 'priceHistory', `p${i}_${marca.toMillis()}`), { productId: `p${i}`, precioAnteriorCentavos: 100 + i, precioNuevoCentavos: 900 + i, fecha: marca, usuario: EMPLEADA });
+      lote.update(doc(db, `products/p${i}`), { precioCentavos: 900 + i, actualizadoEn: marca, actualizadoPor: CODIGO });
+      lote.set(doc(db, 'priceHistory', `p${i}_${marca.toMillis()}`), { productId: `p${i}`, precioAnteriorCentavos: 100 + i, precioNuevoCentavos: 900 + i, fecha: marca, usuario: CODIGO });
     }
     return lote.commit();
   }

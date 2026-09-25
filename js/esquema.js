@@ -201,7 +201,8 @@ export function validarProducto(p) {
   if (!(Array.isArray(p.tokensBusqueda) && p.tokensBusqueda.length <= LIMITES.tokensMaximo)) errores.push('tokensBusqueda debe ser una lista');
   if (!(p.creadoEn && typeof p.creadoEn === 'object')) errores.push('Falta creadoEn');
   if (!(p.actualizadoEn && typeof p.actualizadoEn === 'object')) errores.push('Falta actualizadoEn');
-  if (!(typeof p.actualizadoPor === 'string' && p.actualizadoPor.includes('@'))) errores.push('actualizadoPor debe ser el correo del usuario');
+  // Usuario estable de quien escribe: código de empleado (dígitos) o correo. Ver js/identidad.js.
+  if (!(typeof p.actualizadoPor === 'string' && (/^[0-9]{3,8}$/.test(p.actualizadoPor) || p.actualizadoPor.includes('@')))) errores.push('actualizadoPor debe ser el usuario de quien escribe (código o correo)');
   return errores;
 }
 
@@ -210,7 +211,7 @@ export function validarProducto(p) {
  * capturados. Los campos que administra el POS quedan en null. No incluye las
  * marcas de tiempo: las pone la capa de escritura (js/productos.js).
  */
-export function armarProducto(datos, correoUsuario) {
+export function armarProducto(datos, usuario) {
   const limpiar = (v) => {
     if (v === undefined || v === null) return null;
     const texto = String(v).trim();
@@ -238,6 +239,6 @@ export function armarProducto(datos, correoUsuario) {
     ultimoPrecioImpresoCentavos: datos.ultimoPrecioImpresoCentavos ?? null,
     fechaUltimaImpresion: datos.fechaUltimaImpresion ?? null,
     tokensBusqueda: tokensBusqueda(nombre, marca),
-    actualizadoPor: String(correoUsuario).toLowerCase(),
+    actualizadoPor: String(usuario).toLowerCase(),
   };
 }

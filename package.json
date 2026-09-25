@@ -1,6 +1,6 @@
 {
   "name": "catalogo-aguila",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Catálogo Águila: catálogo de productos y etiquetas de anaquel de Águila Marketplace. Sitio estático sin build; estas dependencias son solo para pruebas y herramientas.",
@@ -11,15 +11,20 @@
     "servir": "http-server -p 5500 -c-1 .",
     "vendorizar": "node herramientas/vendorizar-firebase.mjs",
     "reglas:desplegar": "firebase deploy --only firestore:rules,firestore:indexes",
-    "test:reglas": "firebase emulators:exec --only firestore --project demo-aguilapos \"mocha 'pruebas/reglas/*.test.mjs'\""
+    "test:reglas": "firebase emulators:exec --only firestore --project demo-aguilapos \"mocha 'pruebas/reglas/*.test.mjs'\"",
+    "test:e2e": "bash pruebas/e2e/ejecutar.sh",
+    "vendorizar:zxing": "node herramientas/vendorizar-zxing.mjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "esbuild": "^0.25.0",
     "firebase": "12.19.0",
     "firebase-tools": "^15.31.0",
     "http-server": "^14.1.1",
-    "mocha": "^11.0.0"
+    "mocha": "^11.0.0",
+    "playwright": "^1.56.1"
   },
   "mocha": {
     "timeout": 30000

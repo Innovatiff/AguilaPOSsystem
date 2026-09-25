@@ -1,5 +1,5 @@
 /**
- * Importar / exportar el catálogo en CSV (solo administradores).
+ * Gestión · Importar / exportar el catálogo en CSV (solo administradores).
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
@@ -9,7 +9,7 @@ import { exportarCatalogo, plantillaCSV, nombreArchivoExportacion, deCSV, planif
 import { formatearPrecio } from './precios.js';
 
 const { personal } = await requerirPersonal({ soloAdmin: true });
-pintarNavegacion({ personal, activa: 'datos.html' });
+pintarNavegacion({ personal, activa: 'gestion/datos.html', app: 'gestion' });
 
 const $ = (id) => document.getElementById(id);
 const archivo = $('archivo');
@@ -73,7 +73,7 @@ archivo.addEventListener('change', async () => {
   try {
     const texto = await seleccionado.text();
     const leido = deCSV(texto);
-    plan = planificarImportacion(leido, catalogo, personal.email);
+    plan = planificarImportacion(leido, catalogo, personal.usuario);
     pintarPlan(seleccionado.name, leido);
   } catch (error) {
     avisar(`No se pudo leer el archivo: ${error.message}`, 'error', 0);
@@ -141,7 +141,7 @@ btnImportar.addEventListener('click', async () => {
   progreso.className = 'mensaje mensaje--info';
   progreso.textContent = `Importando 0 de ${total}…`;
   try {
-    const resumen = await importarPlan(plan, personal.email, (avance) => {
+    const resumen = await importarPlan(plan, personal.usuario, (avance) => {
       progreso.textContent = `Importando ${avance.hechos} de ${avance.total}… (${avance.confirmados} confirmados${avance.pendientes ? `, ${avance.pendientes} pendientes de enviar` : ''}${avance.fallidos ? `, ${avance.fallidos} rechazados` : ''})`;
     });
     const partes = [`${resumen.confirmados} confirmado${resumen.confirmados === 1 ? '' : 's'}`];

@@ -1,7 +1,8 @@
 /**
  * Service worker de Catálogo Águila.
  *
- * - Guarda la cáscara de la app (páginas, CSS, JS, SDK vendido, fuente, iconos).
+ * - Guarda la cáscara de las dos apps, Catálogo y Gestión (páginas, CSS, JS,
+ *   SDK y decodificador vendidos, fuente, iconos).
  * - NUNCA guarda js/config.js ni nada que no sea de este mismo origen: las
  *   llamadas a Firestore y Auth (googleapis.com) pasan de largo, sin caché.
  * - La caché lleva versión: en cada despliegue Netlify sustituye __VERSION__
@@ -26,30 +27,42 @@ const CASCARA = [
   'productos.html',
   'captura.html',
   'imprimir.html',
-  'datos.html',
-  'administracion.html',
+  'cuenta.html',
   'prueba-etiquetas.html',
+  'gestion/index.html',
+  'gestion/empleados.html',
+  'gestion/tiendas.html',
+  'gestion/datos.html',
   'manifest.webmanifest',
+  'gestion/manifest.webmanifest',
   'css/base.css',
   'css/etiquetas.css',
   'fonts/Oswald-Variable.woff2',
+  'icons/icono-180.png',
   'icons/icono-192.png',
   'icons/icono-512.png',
   'icons/icono-maskable-512.png',
-  'js/administracion.js',
   'js/auth.js',
   'js/avisos.js',
   'js/csv.js',
+  'js/cuenta.js',
+  'js/cuentas.js',
+  'js/escaner.js',
   'js/esquema.js',
   'js/etiquetas.js',
   'js/firebase.js',
+  'js/gestion-datos.js',
+  'js/gestion-empleados.js',
+  'js/gestion-inicio.js',
+  'js/gestion-tiendas.js',
+  'js/identidad.js',
   'js/inicio.js',
   'js/login.js',
   'js/nav.js',
   'js/pantalla-captura.js',
-  'js/pantalla-datos.js',
   'js/pantalla-imprimir.js',
   'js/pantalla-productos.js',
+  'js/personal.js',
   'js/precios.js',
   'js/productos.js',
   'js/prueba-etiquetas.js',
@@ -59,6 +72,7 @@ const CASCARA = [
   'vendor/firebase/12.19.0/firebase-auth.js',
   'vendor/firebase/12.19.0/firebase-firestore.js',
   'vendor/firebase/12.19.0/compartido-7XAY5J2H.js',
+  'vendor/zxing/0.2.1/zxing-browser.js',
 ];
 
 self.addEventListener('install', (evento) => {

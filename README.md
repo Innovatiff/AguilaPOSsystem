@@ -6,11 +6,22 @@ native ES modules. No framework, no bundler, no build step: the repo root is the
 site. Firebase (Firestore + Auth) for data and staff login. UI in Spanish,
 prices in CAD cents.
 
+Two apps share the site, the data and the service worker:
+
+- **Catálogo** (root): what staff use on the cart laptops and on their phones.
+  Products, scan-and-add, tag printing. Staff sign in with their employee
+  **code + NIP**; managers can also sign in with email + password.
+- **Gestión** (`/gestion/`, admins only): employees and their codes, stores,
+  CSV import/export, and a summary.
+
 ## Layout
 
 | path | what |
 |---|---|
-| `index.html`, `login.html`, `productos.html`, `administracion.html` | app pages (staff login required) |
+| `index.html`, `login.html`, `productos.html`, `cuenta.html` | catalog pages (staff login required); `cuenta.html` lets each person change their own NIP |
+| `gestion/index.html`, `gestion/empleados.html`, `gestion/tiendas.html`, `gestion/datos.html` | Gestión: summary, employee registry, stores, CSV (admins) |
+| `js/identidad.js`, `js/cuentas.js`, `js/personal.js` | code ↔ account mapping and NIP rules (pure), account creation from the app, staff names for display |
+| `js/gestion-*.js` | scripts of the Gestión pages |
 | `prueba-etiquetas.html` | step 1: both tag templates at physical size, print test |
 | `css/etiquetas.css` | the tag: every physical size is a `:root` variable in mm |
 | `js/upca.js`, `js/precios.js`, `js/etiquetas.js` | UPC-A → SVG, cents formatting, tag rendering |
@@ -19,11 +30,12 @@ prices in CAD cents.
 | `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
 | `imprimir.html`, `js/pantalla-imprimir.js` | pending tags by store, preview, one print, mark as printed |
 | `captura.html`, `js/pantalla-captura.js` | scan-and-add loop for loading the catalog shelf by shelf |
-| `datos.html`, `js/pantalla-datos.js`, `js/csv.js` | CSV export and validated import of the full catalog |
+| `gestion/datos.html`, `js/gestion-datos.js`, `js/csv.js` | CSV export and validated import of the full catalog |
+| `js/escaner.js`, `vendor/zxing/<version>/` | camera barcode scanner for phones (native BarcodeDetector, ZXing fallback vendored) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
 | `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
-| `pruebas/` | rules tests (emulator) and unit tests |
+| `pruebas/` | unit tests, rules tests (emulator) and browser end-to-end tests (`pruebas/e2e/`) |
 | `docs/esquema.md` | data model and invariants |
 
 ## Local setup
@@ -39,31 +51,83 @@ Against the emulators instead of the real project: `npm run emuladores`, and in
 
 ## Tests
 
-- `npm test` starts the Firestore emulator and runs everything under `pruebas/`
+- `npm test` starts the Firestore emulator and runs the unit and rules tests
   (Java 21 required for the emulator).
 - `npm run test:unitarias` runs only the pure unit tests.
+- `npm run test:e2e` runs the browser scenarios in `pruebas/e2e/` (access,
+  Gestión, products, capture, printing, phone with camera) against the Auth and
+  Firestore emulators. It serves a temporary copy of the site with
+  `js/config.js` pointing at the emulators, so your real config is untouched.
+  Needs `npx playwright install chromium` once. `npm run test:e2e -- movil`
+  runs a single scenario. Screenshots land in `pruebas/e2e/salida/`.
 
 ## Access model and bootstrap
 
-**Every account in Firebase Authentication can sign in**, with the `empleado`
-role. The `staff/{email}` record is optional: it gives a display name, grants
-the `admin` role, or cuts access with `activo = false`. Because an account is
-all it takes, accounts must be created only from the console:
+**Only registered staff can sign in.** A Firebase Authentication account gets
+in only if `staff/{usuario}` exists, is `activo`, and points at that account.
+Managers register everyone from **Gestión → Empleados**, which creates the
+Authentication account and the record together. Nobody is deleted: people are
+deactivated, and access ends the moment that happens.
+
+Two kinds of access:
+
+- **Employee code + NIP** (the normal case). The code is 3–8 digits (Gestión
+  proposes the next free one, e.g. `1001`); the NIP is 6–10 digits chosen by
+  the manager and handed over in person. Behind it is an Authentication
+  account with the synthetic email `<code>@codigo.aguilapos.firebaseapp.com`
+  (the constant `DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in
+  `firestore.rules`). The person can change their NIP in **Mi cuenta**; if they
+  forget it, the manager uses **Restablecer NIP**, which creates a fresh account
+  for the same code (`<code>.2@…`) and cuts the old one off at once. The login
+  screen learns which version is current from the tiny public document
+  `accesos/<code>` (`{ version }`), written in the same batch as the record.
+- **Email + password** (managers, or anyone who prefers it). Gestión can create
+  the account with a temporary password or just register an account that
+  already exists in the console. Password recovery is by email.
+
+Whatever the kind, every write is signed with the person's stable **usuario**
+(the code, or the email): that is what `actualizadoPor` and the price history
+store, and the rules verify it.
+
+First-time setup (once per Firebase project):
 
 1. Firebase console → Authentication → Sign-in method → enable **Email/Password**.
-2. Authentication → Settings → **User actions** → untick **Enable create (sign-up)**.
-   This is mandatory: with sign-up on, anyone could create an account and get in.
-3. Authentication → Users → **Add user** for yourself and each employee.
-4. Firestore → collection `staff` → document ID = your email in lowercase, fields
-   `nombre` (string), `rol` = `admin` (string), `activo` = `true` (boolean).
-   Employees need no record unless you want to name them, promote them or
-   deactivate them, which you can do from **Administración** once signed in.
-5. Deploy rules and indexes: `npx firebase login`, then `npm run reglas:desplegar`,
-   or paste `firestore.rules` into the console's Rules tab.
-6. Sign in at `login.html` and add the two stores in **Administración**.
+2. Authentication → Settings → **User actions** → keep **Enable create (sign-up)**
+   ON. Gestión needs it to create accounts from the browser. It is safe: an
+   account without an active record cannot read or write anything.
+3. Create your own manager account: Authentication → Users → **Add user**
+   (email + password). Then Firestore → collection `staff` → document ID = your
+   email in lowercase with `nombre` (string), `rol` = `admin` (string),
+   `activo` = `true` (boolean). Gestión completes the rest of the record the
+   first time you open it.
+4. Publish the rules: paste `firestore.rules` into the console's Rules tab, or
+   `npx firebase login` and `npm run reglas:desplegar`.
+5. Sign in at `login.html`, open **Gestión**, add the stores, then the employees.
 
-To remove someone's access: disable the account in Authentication, or set
-`activo = false` in Administración. Both work; the rules check the second.
+Records created before Gestión (only `nombre`, `rol`, `activo`) keep working and
+are completed on their next edit. To remove someone's access, deactivate them
+in Gestión; disabling the account in Authentication also works.
+
+## Gestión (manager app)
+
+`/gestion/` is a separate installable app (its own manifest) for `admin`
+accounts, with the same look and the same login page.
+
+- **Resumen**: active products, products with a pending tag, people with
+  access, active stores.
+- **Empleados**: list with search and "Ver inactivos"; `Alt+N` registers a
+  person (code + NIP or email + password, name, role, store). Actions per row:
+  Editar (name, role, store), Restablecer NIP (code accounts), Enviar enlace de
+  contraseña (email accounts), Desactivar / Activar. An admin cannot deactivate,
+  demote or reset themselves; another admin must.
+- **Tiendas** and **Importar / exportar** moved here from the catalog.
+
+How an employee registration works, so failures are understandable: Gestión
+first creates the Authentication account through a throw-away secondary
+Firebase app (the web SDK can only create an account by signing in with it),
+then writes `staff/{code}` in a transaction that refuses to overwrite an
+existing code. If the first step succeeds and the second fails, retrying is
+safe: an orphan account for that code is skipped by using the next version.
 
 ## Deploy (Netlify)
 
@@ -94,7 +158,7 @@ search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
 
 ## CSV import and export (step 6)
 
-`datos.html` (admins) exports the whole catalog and imports a CSV back.
+`gestion/datos.html` (admins, inside Gestión) exports the whole catalog and imports a CSV back.
 
 **Export**: UTF-8 with BOM, comma separated, CRLF, one row per product, the
 columns in this order: `id, upc, plu, nombre, marca, descriptor, presentacion,
@@ -157,6 +221,25 @@ another station during printing leaves that product pending, as it should.
 The print marker is per product, not per store, which is what the schema
 allows.
 
+## Phones: installable app and camera scanning
+
+The catalog is responsive and installs on phones (Add to Home Screen on iOS,
+Install app in Chrome). On narrow or touch screens:
+
+- the navigation folds behind a menu button, results render as cards, dialogs
+  take the whole screen, and the search box does not grab the keyboard on load;
+- tapping a product opens a **ficha de consulta** (big price, tax indicator,
+  UPC, stores, the tag as it prints, pending-tag status, price history) with an
+  **Editar** button that opens the usual editor;
+- **Escanear** opens the camera. Detection uses the browser's native
+  `BarcodeDetector` when it supports UPC/EAN (Chrome on Android) and otherwise
+  the vendored ZXing decoder (`vendor/zxing/`), loaded only when the scanner
+  opens, which is the path iPhones use. A known UPC opens its ficha; an unknown
+  one offers to create the product with the UPC prefilled. The camera needs
+  HTTPS (Netlify) or localhost, and the person must allow it once.
+
+The USB scanners on the carts are untouched: they still type into the search box.
+
 ## Offline and the service worker
 
 `sw.js` precaches the app shell (pages, CSS, JS, vendored SDK, font, icons)
@@ -170,6 +253,12 @@ with no network fails on the uncached `config.js`, by design.
 
 When you add a file to the app, add it to `CASCARA` in `sw.js`; the unit test
 `pruebas/unitarias/sw.test.mjs` checks the list against the repo.
+
+## Updating the vendored barcode decoder
+
+`npm install -D @zxing/browser@<version> @zxing/library@<version>` then
+`npm run vendorizar:zxing`; commit `vendor/zxing/<version>/` and update the
+path in `js/escaner.js` and `sw.js`.
 
 ## Updating the vendored Firebase SDK
 

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Resumen · Águila Gestión</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Gestión">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/gestion-inicio.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <h1 id="saludo">Gestión</h1>
+    <p class="nota">Aquí se administra lo que el catálogo no toca: quién tiene acceso, las tiendas y la carga masiva.</p>
+
+    <section class="indicadores" aria-label="Indicadores">
+      <a class="indicador" href="../productos.html">
+        <strong id="ind-productos">—</strong>
+        <span>productos activos</span>
+      </a>
+      <a class="indicador" href="../imprimir.html">
+        <strong id="ind-pendientes">—</strong>
+        <span>con etiqueta pendiente</span>
+      </a>
+      <a class="indicador" href="empleados.html">
+        <strong id="ind-empleados">—</strong>
+        <span>personas con acceso</span>
+      </a>
+      <a class="indicador" href="tiendas.html">
+        <strong id="ind-tiendas">—</strong>
+        <span>tiendas activas</span>
+      </a>
+    </section>
+
+    <section class="tarjetas" aria-label="Secciones de gestión">
+      <a class="tarjeta" href="empleados.html">
+        <strong>Empleados</strong>
+        <span>Alta con código y NIP, roles, tienda, restablecer NIP y dar de baja. Quien no esté aquí, no entra.</span>
+      </a>
+      <a class="tarjeta" href="tiendas.html">
+        <strong>Tiendas</strong>
+        <span>Las tiendas en las que se venden los productos y se imprimen etiquetas.</span>
+      </a>
+      <a class="tarjeta" href="datos.html">
+        <strong>Importar / exportar</strong>
+        <span>El catálogo completo en CSV, con el esquema exacto, en los dos sentidos.</span>
+      </a>
+      <a class="tarjeta" href="../index.html">
+        <strong>Catálogo</strong>
+        <span>Volver a la app del personal: productos, captura rápida y etiquetas.</span>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

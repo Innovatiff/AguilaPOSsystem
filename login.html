@@ -2,12 +2,15 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Iniciar sesión · Catálogo Águila</title>
   <link rel="icon" href="icons/icono-192.png" type="image/png">
-  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#2b2b2b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo Águila">
   <script type="module" src="js/pwa.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <script type="module" src="js/login.js"></script>
@@ -21,17 +24,19 @@
 
     <form id="form-login" class="formulario" novalidate>
       <div class="campo">
-        <label for="correo">Correo</label>
-        <input id="correo" name="correo" type="email" autocomplete="username" required autofocus>
+        <label for="identificador">Código de empleado o correo</label>
+        <input id="identificador" name="identificador" type="text" inputmode="text" autocomplete="username"
+          autocapitalize="off" spellcheck="false" required autofocus placeholder="p. ej. 1023">
       </div>
       <div class="campo">
-        <label for="contrasena">Contraseña</label>
-        <input id="contrasena" name="contrasena" type="password" autocomplete="current-password" required minlength="6">
+        <label for="secreto" id="secreto-etiqueta">NIP o contraseña</label>
+        <input id="secreto" name="secreto" type="password" autocomplete="current-password" required minlength="6">
       </div>
       <div class="acciones">
         <button id="btn-entrar" class="boton" type="submit">Entrar</button>
-        <button id="btn-olvide" class="boton boton--enlace" type="button">Olvidé mi contraseña</button>
+        <button id="btn-olvide" class="boton boton--enlace" type="button" hidden>Olvidé mi contraseña</button>
       </div>
+      <p id="pista-nip" class="nota nota--login">Tu código y tu NIP te los da el gerente. Si olvidaste el NIP, pídele que lo restablezca.</p>
     </form>
   </main>
 </body>

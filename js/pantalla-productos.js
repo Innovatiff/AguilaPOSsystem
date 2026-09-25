@@ -13,6 +13,8 @@ import { coincideBusqueda, diferenciasProducto, validarProducto, armarProducto, 
 import { normalizarUPC } from './upca.js';
 import { formatearPrecio, indicadorFiscal, centavosDesdeTexto, textoDesdeCentavos } from './precios.js';
 import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
+import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
+import { cargarNombres, nombreDeUsuario } from './personal.js';
 
 const MAXIMO_RESULTADOS = 100;
 
@@ -39,6 +41,11 @@ const vistaEtiqueta = $('vista-etiqueta');
 const vistaAviso = $('vista-aviso');
 const meta = $('meta');
 const historial = $('historial');
+const detalle = $('detalle');
+const escaner = $('escaner');
+
+/** Pantalla táctil o angosta: se abre la ficha de consulta en lugar del editor, y no se roba el foco al teclado. */
+const esMovil = () => window.matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
 const VACIO = Object.freeze({
   upc: null, plu: null, nombre: '', marca: null, descriptor: null, presentacion: '',
@@ -95,7 +102,10 @@ observarTiendas(
 );
 
 document.getElementById('contenido').hidden = false;
-busqueda.focus();
+if (!esMovil()) busqueda.focus();
+cargarNombres().then(() => {
+  if (estado.actual && editor.open) pintarMeta(estado.actual);
+});
 
 function listaOrdenada() {
   if (!ordenados) ordenados = [...catalogo.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -139,7 +149,7 @@ function fila(producto) {
     ? `${formatearPrecio(producto.precioPorKgCentavos)}/kg`
     : precioConIndicador(producto);
   tr.append(nombre, crear('td', '', codigo), crear('td', '', precio), crear('td', '', producto.tiendas.join(', ') || '—'), crear('td', '', producto.activo ? 'Activo' : 'Inactivo'));
-  tr.addEventListener('click', () => abrirProducto(producto.id));
+  tr.addEventListener('click', () => abrirSegunDispositivo(producto.id));
   tr.addEventListener('keydown', teclasFila);
   return tr;
 }
@@ -155,7 +165,7 @@ function teclasFila(evento) {
     case 'Home': ir(filas[0]); break;
     case 'End': ir(filas[filas.length - 1]); break;
     case 'Enter':
-    case ' ': evento.preventDefault(); abrirProducto(tr.dataset.id); break;
+    case ' ': evento.preventDefault(); abrirSegunDispositivo(tr.dataset.id); break;
     case 'Escape': ir(busqueda); break;
     default:
   }
@@ -196,7 +206,7 @@ async function alEnterEnBusqueda() {
     return;
   }
   const filas = cuerpoResultados.querySelectorAll('tr');
-  if (filas.length === 1) abrirProducto(filas[0].dataset.id);
+  if (filas.length === 1) abrirSegunDispositivo(filas[0].dataset.id);
   else if (filas.length > 1) filas[0].focus();
 }
 
@@ -220,10 +230,16 @@ async function procesarCodigo(texto) {
     }
   }
   if (encontrado) {
-    abrirProducto(encontrado.id);
+    abrirSegunDispositivo(encontrado.id);
     return;
   }
   ofrecerCrear(codigo);
+}
+
+/** En estaciones abre el editor directamente; en teléfonos, la ficha de consulta. */
+function abrirSegunDispositivo(id) {
+  if (esMovil()) abrirDetalle(id);
+  else abrirProducto(id);
 }
 
 function ofrecerCrear(codigo) {
@@ -431,7 +447,7 @@ function abrirProducto(id) {
       historial.replaceChildren(
         ...(entradas.length === 0
           ? [crear('li', 'nota', 'Sin cambios de precio.')]
-          : entradas.slice(0, 10).map((e) => crear('li', '', `${fecha(e.fecha)} · ${formatearPrecio(e.precioAnteriorCentavos)} → ${formatearPrecio(e.precioNuevoCentavos)} · ${e.usuario}`))),
+          : entradas.slice(0, 10).map((e) => crear('li', '', `${fecha(e.fecha)} · ${formatearPrecio(e.precioAnteriorCentavos)} → ${formatearPrecio(e.precioNuevoCentavos)} · ${nombreDeUsuario(e.usuario)}`))),
       );
     },
     (error) => historial.replaceChildren(crear('li', 'nota', `No se pudo cargar el historial: ${mensajeError(error)}`)),
@@ -439,7 +455,7 @@ function abrirProducto(id) {
   estado.dejarDeObservar = observarProducto(id, (remoto, metadatos) => {
     if (!remoto || metadatos.hasPendingWrites || estado.guardando || !estado.actual) return;
     if (remoto.actualizadoEn?.toMillis?.() !== estado.actual.actualizadoEn?.toMillis?.()) {
-      mostrarAvisoEditor(`${remoto.actualizadoPor} acaba de cambiar este producto en otra estación. Ciérralo y ábrelo de nuevo antes de guardar.`, 'error');
+      mostrarAvisoEditor(`${nombreDeUsuario(remoto.actualizadoPor)} acaba de cambiar este producto en otra estación. Ciérralo y ábrelo de nuevo antes de guardar.`, 'error');
     }
   });
   mostrarEditor();
@@ -460,6 +476,7 @@ function cerrarEditor() {
 
 editor.addEventListener('close', () => {
   dejarDeObservarProducto();
+  if (esMovil()) return;
   busqueda.focus();
   busqueda.select();
 });
@@ -499,7 +516,7 @@ form.addEventListener('input', () => {
 function pintarMeta(p) {
   meta.replaceChildren();
   meta.append(crear('div', '', `Creado: ${fecha(p.creadoEn)}`));
-  meta.append(crear('div', '', `Actualizado: ${fecha(p.actualizadoEn)} por ${p.actualizadoPor}`));
+  meta.append(crear('div', '', `Actualizado: ${fecha(p.actualizadoEn)} por ${nombreDeUsuario(p.actualizadoPor)}`));
   if (p.ultimoPrecioImpresoCentavos == null) {
     meta.append(crear('div', '', 'Etiqueta: nunca impresa.'));
   } else {
@@ -538,7 +555,7 @@ function actualizarVista() {
     claseFiscal: form.fiscal.value,
   };
   try {
-    const etiqueta = renderEtiqueta(armarProducto(datos, personal.email));
+    const etiqueta = renderEtiqueta(armarProducto(datos, personal.usuario));
     vistaEtiqueta.replaceChildren(etiqueta);
     ajustarEtiqueta(etiqueta);
     mostrarMensaje(vistaAviso, notaUPC);
@@ -593,7 +610,7 @@ async function guardar() {
       ultimoPrecioImpresoCentavos: estado.actual?.ultimoPrecioImpresoCentavos ?? null,
       fechaUltimaImpresion: estado.actual?.fechaUltimaImpresion ?? null,
     },
-    personal.email,
+    personal.usuario,
   );
   const errores = validarProducto({ ...preparado, creadoEn: {}, actualizadoEn: {} });
   if (errores.length > 0) {
@@ -613,7 +630,7 @@ async function guardar() {
   btnGuardar.disabled = true;
   try {
     if (estado.modo === 'crear') {
-      const { producto, promesa } = crearProducto(preparado, personal.email);
+      const { producto, promesa } = crearProducto(preparado, personal.usuario);
       promesa.catch(() => {});
       const resultado = await esperarConfirmacion(promesa);
       if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
@@ -629,7 +646,7 @@ async function guardar() {
         cerrarEditor();
         return;
       }
-      const { promesa, cambioPrecio } = actualizarProducto(estado.actual, cambios, personal.email);
+      const { promesa, cambioPrecio } = actualizarProducto(estado.actual, cambios, personal.usuario);
       promesa.catch(() => {});
       const resultado = await esperarConfirmacion(promesa);
       if (resultado === 'pendiente') vigilarRechazo(promesa, estado.actual.nombre, cambioPrecio);
@@ -660,7 +677,7 @@ btnDesactivar.addEventListener('click', async () => {
   estado.guardando = true;
   btnDesactivar.disabled = true;
   try {
-    const { promesa } = actualizarProducto(producto, { activo: activar }, personal.email);
+    const { promesa } = actualizarProducto(producto, { activo: activar }, personal.usuario);
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa);
     if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
@@ -672,5 +689,219 @@ btnDesactivar.addEventListener('click', async () => {
   } finally {
     estado.guardando = false;
     btnDesactivar.disabled = false;
+  }
+});
+
+// ------------------------------------------------------------- ficha de consulta (teléfonos y escáner)
+const estadoDetalle = { id: null, dejarDeObservar: null, dejarDeObservarHistorial: null, desdeEscaner: false };
+
+function filaFicha(lista, termino, valor) {
+  const dt = crear('dt', '', termino);
+  const dd = crear('dd', '', valor);
+  lista.append(dt, dd);
+}
+
+function pintarDetalle(p) {
+  $('detalle-titulo').textContent = p.nombre;
+  $('detalle-sub').textContent = [p.marca, p.presentacion, p.descriptor].filter(Boolean).join(' · ') || ' ';
+  const porPeso = p.unidadVenta === 'peso' && p.precioPorKgCentavos;
+  $('detalle-precio').textContent = porPeso ? `${formatearPrecio(p.precioPorKgCentavos)}/kg` : formatearPrecio(p.precioCentavos);
+  $('detalle-fiscal').textContent = indicadorFiscal(p.claseFiscal);
+  $('detalle-kilo').hidden = !porPeso;
+  if (porPeso) $('detalle-kilo').textContent = `Precio de referencia en etiqueta: ${formatearPrecio(p.precioCentavos)}`;
+  $('detalle-inactivo').hidden = p.activo;
+  const pendiente = p.activo && p.ultimoPrecioImpresoCentavos !== p.precioCentavos;
+  $('detalle-pendiente').hidden = !pendiente;
+  if (pendiente) {
+    $('detalle-pendiente').textContent = p.ultimoPrecioImpresoCentavos == null
+      ? 'Etiqueta pendiente: nunca se ha impreso.'
+      : `Etiqueta pendiente: la última se imprimió con ${formatearPrecio(p.ultimoPrecioImpresoCentavos)} el ${p.fechaUltimaImpresion}.`;
+  }
+  const contenedor = $('detalle-etiqueta');
+  contenedor.replaceChildren();
+  try {
+    const etiqueta = renderEtiqueta(p);
+    contenedor.append(etiqueta);
+    if (detalle.open) ajustarEtiqueta(etiqueta);
+  } catch {
+    contenedor.append(crear('span', 'nota', 'Sin vista de etiqueta.'));
+  }
+  const datos = $('detalle-datos');
+  datos.replaceChildren();
+  filaFicha(datos, 'UPC', p.upc ?? 'Sin UPC');
+  if (p.plu) filaFicha(datos, 'PLU', p.plu);
+  filaFicha(datos, 'Clase fiscal', p.claseFiscal === 'gravado' ? 'Gravado (+Tx)' : 'Tasa cero');
+  filaFicha(datos, 'Unidad', p.unidadVenta === 'peso' ? 'Por peso' : 'Por pieza');
+  filaFicha(datos, 'Tiendas', p.tiendas.map((id) => tiendas.find((t) => t.id === id)?.nombre ?? id).join(', ') || 'Ninguna');
+  if (p.proveedor) filaFicha(datos, 'Proveedor', p.proveedor);
+  filaFicha(datos, 'Última etiqueta', p.ultimoPrecioImpresoCentavos == null ? 'Nunca impresa' : `${formatearPrecio(p.ultimoPrecioImpresoCentavos)} · ${p.fechaUltimaImpresion}`);
+  filaFicha(datos, 'Actualizado', `${fecha(p.actualizadoEn)} · ${nombreDeUsuario(p.actualizadoPor)}`);
+}
+
+function dejarDeObservarDetalle() {
+  estadoDetalle.dejarDeObservar?.();
+  estadoDetalle.dejarDeObservarHistorial?.();
+  estadoDetalle.dejarDeObservar = null;
+  estadoDetalle.dejarDeObservarHistorial = null;
+}
+
+function abrirDetalle(id, { desdeEscaner = false } = {}) {
+  const producto = catalogo.get(id);
+  if (!producto) return;
+  dejarDeObservarDetalle();
+  estadoDetalle.id = id;
+  estadoDetalle.desdeEscaner = desdeEscaner;
+  $('detalle-escanear').hidden = !desdeEscaner;
+  pintarDetalle(producto);
+  const lista = $('detalle-historial');
+  lista.replaceChildren(crear('li', 'nota', 'Cargando…'));
+  estadoDetalle.dejarDeObservarHistorial = observarHistorial(
+    id,
+    (entradas) => {
+      lista.replaceChildren(
+        ...(entradas.length === 0
+          ? [crear('li', 'nota', 'Sin cambios de precio.')]
+          : entradas.slice(0, 8).map((e) => crear('li', '', `${fecha(e.fecha)} · ${formatearPrecio(e.precioAnteriorCentavos)} → ${formatearPrecio(e.precioNuevoCentavos)} · ${nombreDeUsuario(e.usuario)}`))),
+      );
+    },
+    (error) => lista.replaceChildren(crear('li', 'nota', `No se pudo cargar el historial: ${mensajeError(error)}`)),
+  );
+  // La ficha se refresca sola si otra estación cambia el producto.
+  estadoDetalle.dejarDeObservar = observarProducto(id, (remoto) => {
+    if (remoto && estadoDetalle.id === id) pintarDetalle({ id, ...remoto });
+  });
+  if (!detalle.open) detalle.showModal();
+  const etiqueta = $('detalle-etiqueta').querySelector('.etiqueta');
+  if (etiqueta) ajustarEtiqueta(etiqueta);
+  $('detalle-cuerpo')?.scrollTo?.(0, 0);
+  setTimeout(() => $('detalle-editar').focus(), 0);
+}
+
+function cerrarDetalle() {
+  if (detalle.open) detalle.close();
+}
+
+detalle.addEventListener('close', () => {
+  dejarDeObservarDetalle();
+  estadoDetalle.id = null;
+});
+$('detalle-cerrar').addEventListener('click', cerrarDetalle);
+$('detalle-editar').addEventListener('click', () => {
+  const id = estadoDetalle.id;
+  cerrarDetalle();
+  if (id) abrirProducto(id);
+});
+$('detalle-escanear').addEventListener('click', () => {
+  cerrarDetalle();
+  abrirEscanerUI();
+});
+
+// ------------------------------------------------------------- escáner con cámara
+const estadoEscaner = { controles: null, abriendo: false, linterna: false };
+const btnEscanear = $('btn-escanear');
+const video = $('escaner-video');
+const escanerEstado = $('escaner-estado');
+const escanerOferta = $('escaner-oferta');
+
+if (camaraDisponible()) btnEscanear.hidden = false;
+
+function estadoDelEscaner(texto, tipo = '') {
+  escanerEstado.textContent = texto;
+  escanerEstado.className = `escaner__estado${tipo ? ` escaner__estado--${tipo}` : ''}`;
+}
+
+async function abrirEscanerUI() {
+  if (estadoEscaner.abriendo) return;
+  estadoEscaner.abriendo = true;
+  escanerOferta.hidden = true;
+  $('escaner-linterna').hidden = true;
+  estadoDelEscaner('Iniciando cámara…');
+  if (!escaner.open) escaner.showModal();
+  try {
+    estadoEscaner.controles = await abrirEscaner(video, {
+      alDetectar: alLeerCodigo,
+      alError: (error) => estadoDelEscaner(mensajeCamara(error), 'error'),
+    });
+    estadoDelEscaner('Apunta al código de barras');
+    $('escaner-linterna').hidden = !estadoEscaner.controles.tieneLinterna;
+  } catch (error) {
+    estadoDelEscaner(mensajeCamara(error), 'error');
+  } finally {
+    estadoEscaner.abriendo = false;
+  }
+}
+
+function cerrarEscaner() {
+  if (escaner.open) escaner.close();
+}
+
+escaner.addEventListener('close', () => {
+  estadoEscaner.controles?.detener();
+  estadoEscaner.controles = null;
+  estadoEscaner.linterna = false;
+  $('escaner-linterna').setAttribute('aria-pressed', 'false');
+});
+
+async function alLeerCodigo({ texto }) {
+  const controles = estadoEscaner.controles;
+  controles?.pausar();
+  confirmarLectura();
+  let codigo;
+  try {
+    codigo = normalizarUPC(texto);
+  } catch (error) {
+    estadoDelEscaner(`${texto}: ${error.message}`, 'error');
+    setTimeout(() => {
+      if (escaner.open && escanerOferta.hidden) {
+        estadoDelEscaner('Apunta al código de barras');
+        controles?.reanudar();
+      }
+    }, 2200);
+    return;
+  }
+  let encontrado = [...catalogo.values()].find((p) => p.upc === codigo) ?? null;
+  if (!encontrado && !catalogoConfiable) {
+    try {
+      encontrado = (await buscarPorUPC(codigo))[0] ?? null;
+    } catch {
+      encontrado = null;
+    }
+  }
+  if (encontrado) {
+    cerrarEscaner();
+    abrirDetalle(encontrado.id, { desdeEscaner: true });
+    return;
+  }
+  estadoDelEscaner(`UPC ${codigo}`);
+  $('escaner-oferta-texto').textContent = `No hay ningún producto con el UPC ${codigo}.`;
+  escanerOferta.hidden = false;
+  escanerOferta.dataset.upc = codigo;
+  $('escaner-crear').focus();
+}
+
+btnEscanear.addEventListener('click', abrirEscanerUI);
+$('escaner-cerrar').addEventListener('click', cerrarEscaner);
+$('escaner-teclear').addEventListener('click', () => {
+  cerrarEscaner();
+  busqueda.focus();
+});
+$('escaner-seguir').addEventListener('click', () => {
+  escanerOferta.hidden = true;
+  delete escanerOferta.dataset.upc;
+  estadoDelEscaner('Apunta al código de barras');
+  estadoEscaner.controles?.reanudar();
+});
+$('escaner-crear').addEventListener('click', () => {
+  const upc = escanerOferta.dataset.upc;
+  cerrarEscaner();
+  abrirNuevo({ upc });
+});
+$('escaner-linterna').addEventListener('click', async () => {
+  const controles = estadoEscaner.controles;
+  if (!controles) return;
+  const encender = !estadoEscaner.linterna;
+  if (await controles.linterna(encender)) {
+    estadoEscaner.linterna = encender;
+    $('escaner-linterna').setAttribute('aria-pressed', String(encender));
   }
 });

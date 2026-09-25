@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 
 describe('service worker', () => {
   const codigo = readFileSync('sw.js', 'utf8');
@@ -15,9 +15,11 @@ describe('service worker', () => {
     assert.ok(!archivos.includes('sw.js'));
     assert.match(codigo, /NUNCA_CACHEAR = \/\\\/js\\\/config\\\.js\$\//);
   });
-  it('incluye todos los módulos de js/ salvo config', () => {
-    const modulos = ['administracion', 'auth', 'avisos', 'csv', 'esquema', 'etiquetas', 'firebase', 'inicio', 'login', 'nav', 'pantalla-captura', 'pantalla-datos', 'pantalla-imprimir', 'pantalla-productos', 'precios', 'productos', 'prueba-etiquetas', 'pwa', 'upca'];
-    for (const m of modulos) assert.ok(archivos.includes(`js/${m}.js`), `falta js/${m}.js`);
+  it('incluye todos los módulos de js/ salvo config, y todas las páginas', () => {
+    const modulos = readdirSync('js').filter((n) => n.endsWith('.js') && !n.startsWith('config'));
+    for (const m of modulos) assert.ok(archivos.includes(`js/${m}`), `falta js/${m}`);
+    const paginas = [...readdirSync('.').filter((n) => n.endsWith('.html')), ...readdirSync('gestion').filter((n) => n.endsWith('.html')).map((n) => `gestion/${n}`)];
+    for (const p of paginas) assert.ok(archivos.includes(p), `falta ${p}`);
   });
   it('lleva la marca de versión que sella el despliegue', () => {
     assert.match(codigo, /const VERSION = '__VERSION__'/);

@@ -224,7 +224,7 @@ function ejecutarAccionPendiente() {
     limpiar();
     return;
   }
-  const { promesa } = actualizarProducto(producto, cambios, personal.email);
+  const { promesa } = actualizarProducto(producto, cambios, personal.usuario);
   const detalle = accion === 'reactivar' ? `Reactivado${cambios.tiendas ? ` y agregado a ${nombreTienda(tienda)}` : ''}` : `Agregado a ${nombreTienda(tienda)}`;
   registrar(promesa, detalle, { ...producto, ...cambios });
   ultimo = { id: producto.id };
@@ -335,7 +335,7 @@ function guardar() {
 
   if (modo === 'corregir' && corrigiendo) {
     const base = catalogo.get(corrigiendo.id) ?? corrigiendo;
-    const preparado = armarProducto({ ...datos, tiendas: base.tiendas, activo: base.activo, ultimoPrecioImpresoCentavos: base.ultimoPrecioImpresoCentavos, fechaUltimaImpresion: base.fechaUltimaImpresion, descriptor: base.descriptor, proveedor: base.proveedor, plu: base.plu, unidadVenta: base.unidadVenta, precioPorKgCentavos: base.precioPorKgCentavos }, personal.email);
+    const preparado = armarProducto({ ...datos, tiendas: base.tiendas, activo: base.activo, ultimoPrecioImpresoCentavos: base.ultimoPrecioImpresoCentavos, fechaUltimaImpresion: base.fechaUltimaImpresion, descriptor: base.descriptor, proveedor: base.proveedor, plu: base.plu, unidadVenta: base.unidadVenta, precioPorKgCentavos: base.precioPorKgCentavos }, personal.usuario);
     const errores = validarProducto({ ...preparado, creadoEn: {}, actualizadoEn: {} });
     if (errores.length > 0) {
       mostrarBanner('error', errores.join(' '));
@@ -347,7 +347,7 @@ function guardar() {
       limpiar();
       return;
     }
-    const { promesa, cambioPrecio } = actualizarProducto(base, cambios, personal.email);
+    const { promesa, cambioPrecio } = actualizarProducto(base, cambios, personal.usuario);
     registrar(promesa, cambioPrecio ? 'Corregido (precio con historial)' : 'Corregido', { ...base, ...preparado }, cambioPrecio);
     ultimo = { id: base.id };
     limpiar();
@@ -361,13 +361,13 @@ function guardar() {
     campos.upc.select();
     return;
   }
-  const preparado = armarProducto({ ...datos, tiendas: tiendasParaNuevo(), activo: true }, personal.email);
+  const preparado = armarProducto({ ...datos, tiendas: tiendasParaNuevo(), activo: true }, personal.usuario);
   const errores = validarProducto({ ...preparado, creadoEn: {}, actualizadoEn: {} });
   if (errores.length > 0) {
     mostrarBanner('error', errores.join(' '));
     return;
   }
-  const { id, producto, promesa } = crearProducto(preparado, personal.email);
+  const { id, producto, promesa } = crearProducto(preparado, personal.usuario);
   const conId = { id, ...producto };
   catalogo.set(id, conId);
   if (producto.upc) porUPC.set(producto.upc, conId); // evita duplicar si se vuelve a escanear antes de que llegue la confirmación
@@ -471,7 +471,7 @@ function actualizarVista() {
       precioCentavos,
       unidadVenta: 'pieza',
       claseFiscal,
-    }, personal.email));
+    }, personal.usuario));
     vistaEtiqueta.replaceChildren(etiqueta);
     ajustarEtiqueta(etiqueta);
   } catch {

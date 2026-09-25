@@ -19,7 +19,8 @@
   SECRETS_SCAN_OMIT_KEYS = "FIREBASE_WEB_CONFIG"
 
 # Sin redirecciones SPA: cada pantalla es su propio .html (no hay rutas
-# del lado del cliente). Añadir aquí si algún día hicieran falta.
+# del lado del cliente). La app de gestión vive en /gestion/ (misma raíz,
+# mismo service worker). Añadir aquí si algún día hicieran falta.
 
 # ---------------------------------------------------------------------
 # Caché
@@ -37,6 +38,21 @@
 
 [[headers]]
   for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/gestion/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/gestion/*.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*.webmanifest"
   [headers.values]
     Cache-Control = "no-cache"
 

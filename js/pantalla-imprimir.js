@@ -347,7 +347,7 @@ async function confirmarImpresion() {
   const items = impresion.filter((i) => hoja.querySelector(`.etiqueta[data-id="${i.producto.id}"]`)).map((i) => ({ id: i.producto.id, precioCentavos: i.producto.precioCentavos }));
   $('btn-confirmar').disabled = true;
   try {
-    const { promesa, cantidad, fecha } = marcarImpresos(items, personal.email);
+    const { promesa, cantidad, fecha } = marcarImpresos(items, personal.usuario);
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa, 4000);
     if (resultado === 'pendiente') promesa.catch((error) => avisar(`No se pudo registrar la impresión: ${mensajeError(error)}`, 'error', 0));

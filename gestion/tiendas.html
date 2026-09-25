@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tiendas · Águila Gestión</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Gestión">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/gestion-tiendas.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <h1>Tiendas</h1>
+    <p class="nota">El identificador se usa en los productos (campo <code>tiendas</code>) y no cambia después. Las tiendas se
+      desactivan, no se borran.</p>
+
+    <form id="form-tienda" class="formulario formulario--fila" novalidate>
+      <div class="campo">
+        <label for="t-nombre">Nombre</label>
+        <input id="t-nombre" type="text" required maxlength="80" autocomplete="off">
+      </div>
+      <div class="campo">
+        <label for="t-id">Identificador</label>
+        <input id="t-id" type="text" required pattern="[a-z0-9\-]{2,40}" maxlength="40" autocomplete="off"
+          placeholder="p. ej. talbot">
+      </div>
+      <div class="campo campo--ancho">
+        <label for="t-direccion">Dirección</label>
+        <input id="t-direccion" type="text" maxlength="160" autocomplete="off">
+      </div>
+      <div class="campo campo--casilla">
+        <label><input id="t-activo" type="checkbox" checked> Activa</label>
+      </div>
+      <div class="acciones">
+        <button id="t-guardar" class="boton" type="submit">Agregar</button>
+        <button id="t-cancelar" class="boton boton--enlace" type="button" hidden>Cancelar</button>
+      </div>
+    </form>
+    <p id="t-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <table class="tabla" id="tabla-tiendas">
+      <thead>
+        <tr><th>Identificador</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+</body>
+</html>

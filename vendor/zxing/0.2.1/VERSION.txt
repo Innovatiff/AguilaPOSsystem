@@ -1,0 +1,2 @@
+@zxing/browser 0.2.1 + @zxing/library 0.23.0
+Generado con herramientas/vendorizar-zxing.mjs (esbuild). MIT / Apache-2.0, ver ../LICENSE-*.txt.

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Empleados · Águila Gestión</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#2b2b2b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Gestión">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/gestion-empleados.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-seccion">
+      <h1>Empleados</h1>
+      <button id="btn-nuevo" class="boton" type="button">Nuevo empleado <kbd>Alt+N</kbd></button>
+    </div>
+    <p class="nota">Quien no aparezca aquí como activo no puede entrar. Los empleados entran con su <b>código</b> y un
+      <b>NIP</b>; los gerentes pueden entrar también con correo y contraseña. Nadie se borra: se desactiva.</p>
+
+    <div class="barra-busqueda barra-busqueda--compacta">
+      <label for="filtro" class="visualmente-oculto">Buscar personal</label>
+      <input id="filtro" type="search" autocomplete="off" placeholder="Buscar por nombre, código o correo">
+      <label class="casilla"><input id="ver-inactivos" type="checkbox"> Ver inactivos</label>
+    </div>
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <table class="tabla tabla--personal" id="tabla-personal" aria-label="Personal registrado">
+      <thead>
+        <tr><th>Código / correo</th><th>Nombre</th><th>Rol</th><th>Tienda</th><th>Acceso</th><th>Estado</th><th>Acciones</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="sin-resultados" class="nota" hidden></p>
+  </main>
+
+  <dialog id="editor" class="editor editor--angosto" aria-labelledby="editor-titulo">
+    <form id="form-empleado" class="editor__form" novalidate>
+      <header class="editor__cabecera">
+        <h2 id="editor-titulo">Nuevo empleado</h2>
+        <button id="btn-cerrar" class="boton boton--secundario" type="button">Cerrar <kbd>Esc</kbd></button>
+      </header>
+      <p id="editor-aviso" class="mensaje editor__aviso" role="alert" hidden></p>
+
+      <div class="editor__cuerpo editor__cuerpo--simple">
+        <fieldset class="campo" id="grupo-tipo">
+          <legend>Tipo de acceso</legend>
+          <label><input type="radio" name="tipo" value="codigo" checked> Código de empleado + NIP</label>
+          <label><input type="radio" name="tipo" value="correo"> Correo + contraseña</label>
+        </fieldset>
+
+        <div class="rejilla" id="grupo-datos">
+          <div class="campo" id="campo-codigo">
+            <label for="e-codigo">Código de empleado *</label>
+            <input id="e-codigo" inputmode="numeric" autocomplete="off" maxlength="8">
+            <span class="ayuda-campo">De 3 a 8 dígitos. Se propone el siguiente libre.</span>
+          </div>
+          <div class="campo" id="campo-correo" hidden>
+            <label for="e-correo">Correo *</label>
+            <input id="e-correo" type="email" autocomplete="off" autocapitalize="off" spellcheck="false">
+          </div>
+          <div class="campo">
+            <label for="e-nombre">Nombre *</label>
+            <input id="e-nombre" maxlength="80" autocomplete="off">
+          </div>
+          <div class="campo">
+            <label for="e-rol">Rol</label>
+            <select id="e-rol">
+              <option value="empleado">Empleado</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="e-tienda">Tienda</label>
+            <select id="e-tienda"><option value="">Sin asignar</option></select>
+          </div>
+        </div>
+
+        <fieldset class="campo" id="grupo-cuenta-correo" hidden>
+          <legend>Cuenta de Firebase</legend>
+          <label><input type="radio" name="cuenta" value="crear" checked> Crear la cuenta ahora, con una contraseña temporal</label>
+          <label><input type="radio" name="cuenta" value="existe"> La cuenta ya existe en Firebase: solo registrar el acceso</label>
+        </fieldset>
+
+        <div class="rejilla" id="grupo-secreto">
+          <div class="campo">
+            <label for="e-secreto" id="et-secreto">NIP *</label>
+            <input id="e-secreto" type="password" autocomplete="new-password" inputmode="numeric" maxlength="10" spellcheck="false">
+          </div>
+          <div class="campo">
+            <label for="e-secreto2" id="et-secreto2">Repite el NIP *</label>
+            <input id="e-secreto2" type="password" autocomplete="new-password" inputmode="numeric" maxlength="10" spellcheck="false">
+          </div>
+          <p class="nota campo--ancho" id="nota-secreto">De 6 a 10 dígitos. Anótalo y entrégaselo en persona: después no se puede consultar, solo restablecer.</p>
+        </div>
+      </div>
+
+      <footer class="editor__pie">
+        <button id="btn-guardar" class="boton" type="submit">Registrar <kbd>Enter</kbd></button>
+        <span id="pie-nota" class="nota"></span>
+      </footer>
+    </form>
+  </dialog>
+</body>
+</html>

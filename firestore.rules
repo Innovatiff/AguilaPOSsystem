@@ -3,42 +3,60 @@ rules_version = '2';
 // Catálogo Águila · Reglas de Firestore
 // ---------------------------------------------------------------------
 // Principios:
-//  - Toda cuenta de Firebase Authentication tiene acceso como empleado.
-//    La ficha staff/{email} es opcional: da nombre, el rol admin, o corta
-//    el acceso con activo == false. Por eso el registro de cuentas desde la
-//    app debe estar DESHABILITADO en Authentication → Settings → User actions:
-//    las cuentas se crean solo desde la consola.
+//  - Entra solo el personal REGISTRADO: una cuenta de Firebase Authentication
+//    necesita su ficha staff/{usuario} activa. Las fichas las crea el gerente
+//    desde Gestión (y con ellas la cuenta). Una cuenta sin ficha no lee nada,
+//    así que el registro de cuentas puede quedar habilitado en Authentication.
+//  - El "usuario" es el identificador estable de la persona: su código de
+//    empleado (la cuenta detrás es un correo sintético "<código>@<dominio>",
+//    con sufijo ".<versión>" si se restableció el NIP) o su correo real.
+//    Es lo que va en actualizadoPor y en el historial.
 //  - Las reglas hacen cumplir el esquema: nombres de campo exactos, tipos,
 //    enumeraciones y rangos. Un campo de más rechaza la escritura.
 //  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
 //    del mismo lote (batch), con el precio anterior real y el nuevo.
-//  - Nada se borra: productos se desactivan, el historial es inmutable.
+//  - Nada se borra: productos y personal se desactivan; el historial es inmutable.
+//  - accesos/{código} publica solo el número de versión de cuenta de un código
+//    (lo necesita la pantalla de entrada tras restablecer un NIP).
 // ---------------------------------------------------------------------
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ----- Identidad ---------------------------------------------------
+    // Debe coincidir con DOMINIO_CODIGOS en js/identidad.js.
+    function dominioCodigos() {
+      return 'codigo.aguilapos.firebaseapp.com';
+    }
     function autenticado() {
       return request.auth != null && request.auth.token.email is string;
     }
     function emailActual() {
       return request.auth.token.email.lower();
     }
-    function rutaPersonal() {
-      return /databases/$(database)/documents/staff/$(emailActual());
+    // Código de empleado (sin versión) si el correo es sintético; si no, el correo.
+    function usuarioActual() {
+      let partes = emailActual().split('@');
+      return partes.size() == 2 && partes[1] == dominioCodigos()
+        ? partes[0].split('[.]')[0]
+        : emailActual();
     }
-    // Cualquier cuenta autenticada, salvo que su ficha la desactive.
+    function rutaPersonal() {
+      return /databases/$(database)/documents/staff/$(usuarioActual());
+    }
+    function fichaActual() {
+      return get(rutaPersonal()).data;
+    }
+    // Personal registrado y activo, con la cuenta vigente (correoAuth). Las
+    // fichas anteriores a Gestión no tienen correoAuth: vale el correo mismo.
     function esPersonal() {
       return autenticado()
-        && (!exists(rutaPersonal()) || get(rutaPersonal()).data.activo == true);
-    }
-    // El rol admin sí exige ficha activa con rol == 'admin'.
-    function esAdmin() {
-      return autenticado()
         && exists(rutaPersonal())
-        && get(rutaPersonal()).data.activo == true
-        && get(rutaPersonal()).data.rol == 'admin';
+        && fichaActual().activo == true
+        && fichaActual().get('correoAuth', emailActual()) == emailActual();
+    }
+    function esAdmin() {
+      return esPersonal() && fichaActual().rol == 'admin';
     }
 
     // ----- Validadores genéricos ----------------------------------------
@@ -99,7 +117,7 @@ service cloud.firestore {
         && d.tokensBusqueda.size() <= 400
         && d.creadoEn is timestamp
         && d.actualizadoEn is timestamp
-        && d.actualizadoPor == emailActual();
+        && d.actualizadoPor == usuarioActual();
     }
 
     // Id de la entrada de historial que debe acompañar a un cambio de precio:
@@ -144,7 +162,7 @@ service cloud.firestore {
         && d.productId.size() > 0
         && d.fecha is timestamp
         && entradaId == d.productId + '_' + string(d.fecha.toMillis())
-        && d.usuario == emailActual()
+        && d.usuario == usuarioActual()
         && d.precioAnteriorCentavos is int
         && d.precioNuevoCentavos is int
         && d.precioAnteriorCentavos != d.precioNuevoCentavos
@@ -162,30 +180,82 @@ service cloud.firestore {
     }
 
     // ----- staff ---------------------------------------------------------
-    function personalValido(d) {
-      return d.keys().hasAll(['nombre', 'rol', 'activo'])
-        && d.keys().hasOnly(['nombre', 'rol', 'activo'])
+    // staff/{usuario}: usuario = código de empleado o correo real en minúsculas.
+    function camposPersonal() {
+      return ['usuario', 'tipo', 'correoAuth', 'nombre', 'rol', 'activo', 'tienda',
+              'creadoEn', 'actualizadoEn', 'actualizadoPor', 'cuentaVersion'];
+    }
+    function regexCorreo() {
+      return '^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$';
+    }
+    // Correo sintético que corresponde a un código y una versión de cuenta.
+    function correoDeCodigo(codigo, version) {
+      return codigo + (version == 1 ? '' : '.' + string(version)) + '@' + dominioCodigos();
+    }
+    function personalValido(d, usuario) {
+      return d.keys().hasAll(camposPersonal())
+        && d.keys().hasOnly(camposPersonal())
+        && d.usuario == usuario
+        && d.tipo in ['codigo', 'correo']
+        && d.correoAuth is string
+        && d.cuentaVersion is int
+        && d.cuentaVersion >= 1
+        && (d.tipo == 'codigo'
+              ? (usuario.matches('^[0-9]{3,8}$')
+                 && d.correoAuth == correoDeCodigo(usuario, d.cuentaVersion))
+              : (usuario == usuario.lower()
+                 && usuario.matches(regexCorreo())
+                 && usuario.split('@')[1] != dominioCodigos()
+                 && d.correoAuth == usuario
+                 && d.cuentaVersion == 1))
         && esTextoNoVacio(d.nombre, 80)
         && d.rol in ['admin', 'empleado']
-        && d.activo is bool;
+        && d.activo is bool
+        && (d.tienda == null || (d.tienda is string && d.tienda.matches('^[a-z0-9-]{2,40}$')))
+        && d.creadoEn is timestamp
+        && d.actualizadoEn is timestamp
+        && d.actualizadoPor == usuarioActual();
     }
 
-    match /staff/{email} {
-      // Cada quien puede leer su propia ficha (para saber si sigue activo);
-      // el personal activo puede leer todas.
-      allow read: if esPersonal() || (autenticado() && emailActual() == email);
+    match /staff/{usuario} {
+      // Cada quien puede leer su propia ficha (para saber por qué no entra);
+      // el personal activo puede leer todas (nombres en el historial).
+      allow read: if esPersonal() || (autenticado() && usuarioActual() == usuario);
 
       allow create: if esAdmin()
-        && personalValido(request.resource.data)
-        && email == email.lower()
-        && email.matches('^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$');
+        && personalValido(request.resource.data, usuario)
+        && request.resource.data.creadoEn == request.resource.data.actualizadoEn;
 
-      // Un admin no puede desactivarse ni quitarse el rol a sí mismo.
+      // Las fichas anteriores a Gestión (solo nombre, rol, activo) se completan
+      // al primer cambio: por eso los campos de referencia usan get() con defecto.
+      // Un admin no puede desactivarse, degradarse ni cambiar su propia cuenta.
       allow update: if esAdmin()
-        && personalValido(request.resource.data)
-        && (email != emailActual()
-            || (request.resource.data.activo == true && request.resource.data.rol == 'admin'));
+        && personalValido(request.resource.data, usuario)
+        && request.resource.data.creadoEn == resource.data.get('creadoEn', request.resource.data.creadoEn)
+        && request.resource.data.tipo == resource.data.get('tipo', request.resource.data.tipo)
+        && request.resource.data.cuentaVersion >= resource.data.get('cuentaVersion', 1)
+        && (usuario != usuarioActual()
+            || (request.resource.data.activo == true
+                && request.resource.data.rol == 'admin'
+                && request.resource.data.correoAuth == emailActual()));
 
+      allow delete: if false;
+    }
+
+    // ----- accesos -------------------------------------------------------
+    // accesos/{código} = { version }: qué versión de cuenta tiene hoy un código,
+    // para que la pantalla de entrada sepa a qué correo sintético entrar tras un
+    // restablecimiento de NIP. Lectura pública de UN documento (sin listar) y
+    // solo el número de versión; se escribe en el mismo lote que la ficha.
+    match /accesos/{codigo} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if esAdmin()
+        && codigo.matches('^[0-9]{3,8}$')
+        && request.resource.data.keys().hasOnly(['version'])
+        && request.resource.data.version is int
+        && request.resource.data.version >= 1
+        && request.resource.data.version == getAfter(/databases/$(database)/documents/staff/$(codigo)).data.cuentaVersion;
       allow delete: if false;
     }
 

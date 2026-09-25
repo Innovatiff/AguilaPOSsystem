@@ -5,8 +5,7 @@ const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'index.html' });
 
 document.getElementById('saludo').textContent = `Hola, ${personal.nombre}`;
-document.getElementById('tarjeta-admin').hidden = personal.rol !== 'admin';
-document.getElementById('tarjeta-datos').hidden = personal.rol !== 'admin';
+document.getElementById('tarjeta-gestion').hidden = personal.rol !== 'admin';
 
 const aviso = document.getElementById('aviso');
 if (new URLSearchParams(window.location.search).get('aviso') === 'solo-admin') {

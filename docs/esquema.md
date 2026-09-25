@@ -17,21 +17,48 @@ field is rejected. Money is always **integer cents** (`499` = $4.99), never a fl
 
 Written by admins only. Never deleted.
 
-### `staff/{email}`
-Document ID is the login email, lowercase. **Optional**: every account in
-Firebase Authentication has access as `empleado` without a record. The record
-adds a name, grants `admin`, or revokes access. Client sign-up must therefore be
-disabled in Authentication settings; accounts are created from the console.
+### `staff/{usuario}`
+Document ID is the person's stable **usuario**: their employee code (3–8 digits)
+or, for email accounts, the email in lowercase. **Required for access**: a
+Firebase Authentication account with no active record cannot read or write
+anything. Records are created from Gestión (the manager app), which also
+creates the Authentication account behind them.
+
+Code accounts are backed by a synthetic email `<code>@codigo.aguilapos.firebaseapp.com`
+(constant `DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in the rules) whose
+password is the employee's NIP. Resetting a NIP creates a new account
+`<code>.<n>@…` and points `correoAuth` at it; the old account loses access.
 
 | field | type | notes |
 |---|---|---|
+| usuario | string | equals the document ID |
+| tipo | `"codigo"` \| `"correo"` | |
+| correoAuth | string | the Authentication email currently allowed for this record; for `correo` it equals `usuario` |
 | nombre | string, 1–80 | |
-| rol | `"admin"` \| `"empleado"` | admin manages staff and stores; empleado works the catalog |
+| rol | `"admin"` \| `"empleado"` | admin uses Gestión (staff, stores, CSV); empleado works the catalog |
 | activo | boolean | access is denied the moment this is false |
+| tienda | storeId \| null | informational |
+| creadoEn | timestamp | immutable |
+| actualizadoEn | timestamp | |
+| actualizadoPor | string | usuario of the admin who wrote it |
+| cuentaVersion | integer ≥ 1 | 1 for `correo`; increments on each NIP reset for `codigo` |
 
-Written by admins only. An admin cannot deactivate or demote their own record.
-Each signed-in user may read their own record even when inactive (so the app can
-explain why access was refused).
+Written by admins only. An admin cannot deactivate or demote their own record,
+nor change their own `correoAuth`. Each signed-in account may read its own
+record even when inactive (so the app can explain why access was refused).
+Records created before Gestión (only `nombre`, `rol`, `activo`) keep working
+and are completed on their next update.
+
+**Identity in writes.** `products.actualizadoPor` and `priceHistory.usuario`
+must equal the writer's `usuario`, derived in the rules from the token email:
+the code for a synthetic email, the lowercase email otherwise.
+
+### `accesos/{codigo}`
+Tiny public lookup written together with `staff/{codigo}`: `{ version: <int> }`,
+the account version currently valid for that employee code. The login screen
+reads it (a single `get`, allowed without authentication; listing is not) to
+build the synthetic email before signing in. The rules require the value to
+equal `staff/{codigo}.cuentaVersion` after the same batch. Never deleted.
 
 ### `products/{productId}`
 `productId` is an auto ID, **never** the UPC.
@@ -58,7 +85,7 @@ explain why access was refused).
 | tokensBusqueda | array of string, ≤400 | see Search |
 | creadoEn | timestamp | equal to actualizadoEn on create, immutable afterwards |
 | actualizadoEn | timestamp | client `Timestamp.fromMillis(Date.now())` |
-| actualizadoPor | string | must equal the writer's email |
+| actualizadoPor | string | must equal the writer's usuario (employee code or email) |
 
 ### `priceHistory/{entradaId}`
 Immutable. `entradaId` = `${productId}_${fecha.toMillis()}`.
@@ -69,7 +96,7 @@ Immutable. `entradaId` = `${productId}_${fecha.toMillis()}`.
 | precioAnteriorCentavos | integer |
 | precioNuevoCentavos | integer |
 | fecha | timestamp |
-| usuario | string (email) |
+| usuario | string (employee code or email) |
 
 ## Invariants the rules enforce
 

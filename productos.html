@@ -2,12 +2,15 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Productos · Catálogo Águila</title>
   <link rel="icon" href="icons/icono-192.png" type="image/png">
-  <link rel="apple-touch-icon" href="icons/icono-192.png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#2b2b2b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo Águila">
   <script type="module" src="js/pwa.js"></script>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/etiquetas.css">
@@ -22,6 +25,10 @@
       <label for="busqueda" class="visualmente-oculto">Buscar por nombre, marca o UPC</label>
       <input id="busqueda" type="search" autocomplete="off" spellcheck="false" autofocus
         placeholder="Nombre, marca o UPC · el escáner escribe aquí">
+      <button id="btn-escanear" class="boton boton--secundario boton--escanear" type="button" hidden aria-label="Escanear con la cámara">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false"><path fill="currentColor" d="M3 5h2V3H3zm4 0h1V3H7zm3 0h2V3h-2zm4 0h1V3h-1zm3 0h2V3h-2zM3 21h2v-2H3zm4 0h1v-2H7zm3 0h2v-2h-2zm4 0h1v-2h-1zm3 0h2v-2h-2zM2 7v10h2V7zm4 0v10h1V7zm3 0v10h2V7zm4 0v10h1V7zm3 0v10h2V7zm4 0v10h2V7z"/></svg>
+        <span>Escanear</span>
+      </button>
       <label class="casilla"><input id="ver-inactivos" type="checkbox"> Ver inactivos</label>
       <button id="btn-nuevo" class="boton" type="button">Nuevo producto <kbd>Alt+N</kbd></button>
     </div>
@@ -125,6 +132,51 @@
         <span class="nota">Los cambios de precio quedan en el historial.</span>
       </footer>
     </form>
+  </dialog>
+
+  <dialog id="detalle" class="detalle" aria-labelledby="detalle-titulo">
+    <header class="detalle__cabecera">
+      <h2 id="detalle-titulo"></h2>
+      <button id="detalle-cerrar" class="boton boton--secundario" type="button">Cerrar</button>
+    </header>
+    <div class="detalle__cuerpo">
+      <p id="detalle-sub" class="detalle__sub"></p>
+      <p class="detalle__precio"><span id="detalle-precio"></span><span id="detalle-fiscal" class="detalle__fiscal"></span></p>
+      <p id="detalle-kilo" class="detalle__kilo" hidden></p>
+      <p id="detalle-inactivo" class="mensaje mensaje--aviso" hidden>Producto inactivo: no sale en búsquedas ni en etiquetas.</p>
+      <p id="detalle-pendiente" class="mensaje mensaje--info" hidden></p>
+      <div id="detalle-etiqueta" class="detalle__etiqueta"></div>
+      <dl id="detalle-datos" class="ficha ficha--compacta"></dl>
+      <h3>Historial de precios</h3>
+      <ul id="detalle-historial" class="historial"></ul>
+    </div>
+    <footer class="detalle__pie">
+      <button id="detalle-editar" class="boton" type="button">Editar</button>
+      <button id="detalle-escanear" class="boton boton--secundario" type="button" hidden>Escanear otro</button>
+    </footer>
+  </dialog>
+
+  <dialog id="escaner" class="escaner" aria-labelledby="escaner-titulo">
+    <header class="escaner__cabecera">
+      <h2 id="escaner-titulo">Escanear código</h2>
+      <button id="escaner-cerrar" class="boton boton--secundario" type="button">Cerrar</button>
+    </header>
+    <div class="escaner__visor">
+      <video id="escaner-video" playsinline muted autoplay></video>
+      <div class="escaner__marco" aria-hidden="true"></div>
+    </div>
+    <p id="escaner-estado" class="escaner__estado" role="status" aria-live="polite">Iniciando cámara…</p>
+    <div id="escaner-oferta" class="escaner__oferta" hidden>
+      <p id="escaner-oferta-texto"></p>
+      <div class="acciones">
+        <button id="escaner-crear" class="boton" type="button">Crear producto con este UPC</button>
+        <button id="escaner-seguir" class="boton boton--secundario" type="button">Seguir escaneando</button>
+      </div>
+    </div>
+    <div class="escaner__acciones">
+      <button id="escaner-linterna" class="boton boton--secundario" type="button" aria-pressed="false" hidden>Linterna</button>
+      <button id="escaner-teclear" class="boton boton--enlace" type="button">Teclear el código</button>
+    </div>
   </dialog>
 </body>
 </html>
