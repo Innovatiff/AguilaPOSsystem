@@ -10,7 +10,7 @@ const c = require('./comun.cjs');
   await c.sembrarAdmin();
   await c.sembrarTiendas();
   await c.sembrarEmpleadaCodigo();
-  await c.sembrarEmpleadaCodigo({ codigo: '1099', nip: '905531', nombre: 'Ex empleado', activo: false });
+  await c.sembrarEmpleadaCodigo({ codigo: '100199', nip: '905531', nombre: 'Ex empleado', activo: false });
   await c.crearCuentaAuth('legado@aguila.test', 'Legado1234');
   await c.rest('PATCH', 'staff/legado%40aguila.test', c.campos({ nombre: 'Gerente legado', rol: 'admin', activo: true }));
   await c.crearCuentaAuth('carlos@aguila.test', 'Carlos1234'); // cuenta sin ficha
@@ -55,7 +55,7 @@ const c = require('./comun.cjs');
   await page.goto(`${c.BASE}/cuenta.html`);
   await page.waitForSelector('#contenido:not([hidden])');
   const fichaCuenta = c.texto(await page.textContent('#datos-cuenta'));
-  v.ok('Mi cuenta muestra código, nombre, rol y tienda', /María López.*1023.*Empleado.*Águila Talbot/.test(fichaCuenta), fichaCuenta);
+  v.ok('Mi cuenta muestra código, nombre, rol y tienda', /María López.*100123.*Empleado.*Águila Talbot/.test(fichaCuenta), fichaCuenta);
   v.ok('Mi cuenta ofrece cambiar el NIP', /Cambiar NIP/.test(await page.textContent('#titulo-secreto')));
   await page.screenshot({ path: `${c.SALIDA}/acceso-mi-cuenta.png` });
   // cambio de NIP con NIP actual incorrecto y luego correcto
@@ -78,7 +78,7 @@ const c = require('./comun.cjs');
 
   // 4) código desactivado: no entra
   ({ ctx, page, errores } = await c.nuevaPagina(browser));
-  mensaje = await c.entrar(page, '1099', '905531', { esperarError: true });
+  mensaje = await c.entrar(page, '100199', '905531', { esperarError: true });
   v.ok('un código desactivado es rechazado', /desactivado/.test(mensaje), mensaje);
   erroresTotales.push(...errores);
   await ctx.close();

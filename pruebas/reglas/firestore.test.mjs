@@ -17,10 +17,10 @@ const PROYECTO = 'demo-aguilapos';
 const ADMIN = 'admin@aguila.test'; // ficha completa, tipo correo
 const LEGADO = 'legado@aguila.test'; // ficha anterior a Gestión (solo nombre, rol, activo), admin
 const ANA = 'ana@aguila.test'; // ficha anterior a Gestión, empleada
-const EMPLEADA = correoDeAcceso('1023'); // código 1023, cuenta versión 1
-const RENOVADA = correoDeAcceso('1030', 2); // código 1030 tras restablecer el NIP
-const CADUCA = correoDeAcceso('1030', 1); // la cuenta anterior del código 1030
-const INACTIVO = correoDeAcceso('1099');
+const EMPLEADA = correoDeAcceso('100123'); // código 100123, cuenta versión 1
+const RENOVADA = correoDeAcceso('100130', 2); // código 100130 tras restablecer el NIP
+const CADUCA = correoDeAcceso('100130', 1); // la cuenta anterior del código 100130
+const INACTIVO = correoDeAcceso('100199');
 const EXTRANO = 'nadie@ejemplo.test'; // autenticado, sin ficha
 
 let entorno;
@@ -69,9 +69,9 @@ describe('reglas de Firestore', () => {
       [`staff/${ADMIN}`]: fichaDemo({ usuario: ADMIN, nombre: 'Admin', rol: 'admin', tienda: null }),
       [`staff/${LEGADO}`]: { nombre: 'Legado', rol: 'admin', activo: true },
       [`staff/${ANA}`]: { nombre: 'Ana', rol: 'empleado', activo: true },
-      'staff/1023': fichaDemo({ usuario: '1023', nombre: 'María', rol: 'empleado', tienda: 'talbot' }),
-      'staff/1030': fichaDemo({ usuario: '1030', nombre: 'Luis', rol: 'empleado', cuentaVersion: 2 }),
-      'staff/1099': fichaDemo({ usuario: '1099', nombre: 'Baja', rol: 'empleado', activo: false }),
+      'staff/100123': fichaDemo({ usuario: '100123', nombre: 'María', rol: 'empleado', tienda: 'talbot' }),
+      'staff/100130': fichaDemo({ usuario: '100130', nombre: 'Luis', rol: 'empleado', cuentaVersion: 2 }),
+      'staff/100199': fichaDemo({ usuario: '100199', nombre: 'Baja', rol: 'empleado', activo: false }),
       'stores/talbot': { nombre: 'Águila Talbot', direccion: 'Talbot St, Leamington', activo: true },
       'products/p1': productoDemo(ADMIN),
     });
@@ -101,21 +101,21 @@ describe('reglas de Firestore', () => {
     it('el personal inactivo no lee productos pero sí su propia ficha', async () => {
       const db = contexto(INACTIVO);
       await assertFails(getDoc(doc(db, 'products/p1')));
-      await assertSucceeds(getDoc(doc(db, 'staff/1099')));
-      await assertFails(getDoc(doc(db, 'staff/1023')));
+      await assertSucceeds(getDoc(doc(db, 'staff/100199')));
+      await assertFails(getDoc(doc(db, 'staff/100123')));
     });
     it('tras restablecer el NIP, solo la cuenta nueva del código entra; la anterior solo ve su ficha', async () => {
       await assertSucceeds(getDoc(doc(contexto(RENOVADA), 'products/p1')));
       const caduca = contexto(CADUCA);
       await assertFails(getDoc(doc(caduca, 'products/p1')));
-      await assertSucceeds(getDoc(doc(caduca, 'staff/1030')));
+      await assertSucceeds(getDoc(doc(caduca, 'staff/100130')));
     });
     it('las fichas anteriores a Gestión (por correo, sin correoAuth) siguen entrando', async () => {
       await assertSucceeds(getDoc(doc(contexto(ANA), 'products/p1')));
       await assertSucceeds(setDoc(doc(contexto(LEGADO), 'stores/erie'), { nombre: 'Águila Erie', direccion: '', activo: true }));
     });
     it('el correo sintético de un código que no está registrado no entra', async () => {
-      await assertFails(getDoc(doc(contexto(correoDeAcceso('4444')), 'products/p1')));
+      await assertFails(getDoc(doc(contexto(correoDeAcceso('444444')), 'products/p1')));
     });
   });
 
@@ -124,7 +124,7 @@ describe('reglas de Firestore', () => {
       const db = contexto(EMPLEADA);
       await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA)));
       const guardado = await getDoc(doc(db, 'products/p2'));
-      assert.equal(guardado.data().actualizadoPor, '1023');
+      assert.equal(guardado.data().actualizadoPor, '100123');
     });
     it('rechaza un campo que no está en el esquema', async () => {
       await assertFails(setDoc(doc(contexto(EMPLEADA), 'products/p2'), { ...productoDemo(EMPLEADA), color: 'rojo' }));
@@ -160,7 +160,7 @@ describe('reglas de Firestore', () => {
       const db = contexto(EMPLEADA);
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { existencias: 5 })));
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { costoCentavos: 300 })));
-      await assertFails(updateDoc(doc(db, 'products/p1'), { existencias: 5, actualizadoEn: Timestamp.now(), actualizadoPor: '1023' }));
+      await assertFails(updateDoc(doc(db, 'products/p1'), { existencias: 5, actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
     });
     it('actualizadoPor debe ser el usuario de quien escribe: el código, no el correo sintético ni otro', async () => {
       const db = contexto(EMPLEADA);
@@ -172,26 +172,26 @@ describe('reglas de Firestore', () => {
     });
     it('permite editar campos que no son el precio, con actualizadoEn y actualizadoPor', async () => {
       await assertSucceeds(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), {
-        nombre: 'CLASICO GRANDE', tokensBusqueda: ['cla', 'clas'], actualizadoEn: Timestamp.now(), actualizadoPor: '1023',
+        nombre: 'CLASICO GRANDE', tokensBusqueda: ['cla', 'clas'], actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
       }));
     });
     it('marcar la etiqueta como impresa: último precio y fecha ISO, sin tocar el precio', async () => {
       const db = contexto(EMPLEADA);
       await assertSucceeds(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '1023',
+        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
       }));
       await assertFails(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '24/09/2026', actualizadoEn: Timestamp.now(), actualizadoPor: '1023',
+        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '24/09/2026', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
       }));
       await assertFails(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 4.99, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '1023',
+        ultimoPrecioImpresoCentavos: 4.99, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
       }));
     });
     it('nadie borra productos, ni el admin', async () => {
       await assertFails(deleteDoc(doc(contexto(ADMIN), 'products/p1')));
     });
     it('creadoEn no cambia al actualizar', async () => {
-      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { creadoEn: Timestamp.now(), actualizadoEn: Timestamp.now(), actualizadoPor: '1023' }));
+      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { creadoEn: Timestamp.now(), actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
     });
   });
 
@@ -208,7 +208,7 @@ describe('reglas de Firestore', () => {
     }
 
     it('cambiar el precio sin entrada de historial se rechaza', async () => {
-      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { precioCentavos: 549, actualizadoEn: Timestamp.now(), actualizadoPor: '1023' }));
+      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { precioCentavos: 549, actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
     });
     it('cambiar el precio con su entrada de historial en el mismo lote se acepta y queda firmado con el código', async () => {
       const db = contexto(EMPLEADA);
@@ -217,7 +217,7 @@ describe('reglas de Firestore', () => {
       assert.equal(producto.data().precioCentavos, 549);
       await entorno.withSecurityRulesDisabled(async (ctx) => {
         const entradas = await getDocs(collection(ctx.firestore(), 'priceHistory'));
-        assert.equal(entradas.docs[0].data().usuario, '1023');
+        assert.equal(entradas.docs[0].data().usuario, '100123');
       });
     });
     it('la entrada de historial debe llevar el usuario de quien escribe', async () => {
@@ -233,7 +233,7 @@ describe('reglas de Firestore', () => {
       const db = contexto(EMPLEADA);
       const ahora = Timestamp.fromMillis(Date.now());
       await assertFails(setDoc(doc(db, 'priceHistory', `p1_${ahora.toMillis()}`), {
-        productId: 'p1', precioAnteriorCentavos: 499, precioNuevoCentavos: 549, fecha: ahora, usuario: '1023',
+        productId: 'p1', precioAnteriorCentavos: 499, precioNuevoCentavos: 549, fecha: ahora, usuario: '100123',
       }));
     });
     it('el historial es inmutable, incluso para el admin', async () => {
@@ -251,63 +251,63 @@ describe('reglas de Firestore', () => {
   });
 
   describe('staff · registro del personal', () => {
-    const nueva = (extra = {}, por = ADMIN) => fichaDemo({ usuario: '1050', nombre: 'Nueva', rol: 'empleado', tienda: 'talbot', ...extra }, por);
+    const nueva = (extra = {}, por = ADMIN) => fichaDemo({ usuario: '100150', nombre: 'Nueva', rol: 'empleado', tienda: 'talbot', ...extra }, por);
 
     it('solo el admin da de alta personal; una empleada no', async () => {
-      await assertFails(setDoc(doc(contexto(EMPLEADA), 'staff/1050'), nueva({}, EMPLEADA)));
-      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'staff/1050'), nueva()));
+      await assertFails(setDoc(doc(contexto(EMPLEADA), 'staff/100150'), nueva({}, EMPLEADA)));
+      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'staff/100150'), nueva()));
       // y con eso la cuenta del código ya entra
-      await assertSucceeds(getDoc(doc(contexto(correoDeAcceso('1050')), 'products/p1')));
+      await assertSucceeds(getDoc(doc(contexto(correoDeAcceso('100150')), 'products/p1')));
     });
     it('la ficha lleva exactamente los campos del esquema', async () => {
       const db = contexto(ADMIN);
-      await assertFails(setDoc(doc(db, 'staff/1050'), { ...nueva(), telefono: '1' }));
+      await assertFails(setDoc(doc(db, 'staff/100150'), { ...nueva(), telefono: '1' }));
       const sinTienda = nueva();
       delete sinTienda.tienda;
-      await assertFails(setDoc(doc(db, 'staff/1050'), sinTienda));
-      await assertFails(setDoc(doc(db, 'staff/1050'), { nombre: 'Nueva', rol: 'empleado', activo: true }));
+      await assertFails(setDoc(doc(db, 'staff/100150'), sinTienda));
+      await assertFails(setDoc(doc(db, 'staff/100150'), { nombre: 'Nueva', rol: 'empleado', activo: true }));
     });
     it('el correo de la cuenta debe corresponder al código y a su versión', async () => {
       const db = contexto(ADMIN);
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ correoAuth: correoDeAcceso('1051') })));
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ correoAuth: `1050@otro.com` })));
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ correoAuth: correoDeAcceso('1050', 2) })));
-      await assertSucceeds(setDoc(doc(db, 'staff/1050'), nueva({ correoAuth: correoDeAcceso('1050', 2), cuentaVersion: 2 })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ correoAuth: correoDeAcceso('100151') })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ correoAuth: `100150@otro.com` })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ correoAuth: correoDeAcceso('100150', 2) })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100150'), nueva({ correoAuth: correoDeAcceso('100150', 2), cuentaVersion: 2 })));
     });
     it('el usuario de la ficha es el id del documento y tiene el formato de código o correo', async () => {
       const db = contexto(ADMIN);
-      await assertFails(setDoc(doc(db, 'staff/1051'), nueva()));
+      await assertFails(setDoc(doc(db, 'staff/100151'), nueva()));
       await assertFails(setDoc(doc(db, 'staff/12'), fichaDemo({ usuario: '12', nombre: 'Corto', rol: 'empleado' })));
       await assertFails(setDoc(doc(db, 'staff/Nuevo@aguila.test'), fichaDemo({ usuario: 'Nuevo@aguila.test', tipo: 'correo', correoAuth: 'Nuevo@aguila.test', nombre: 'N', rol: 'empleado' })));
       await assertSucceeds(setDoc(doc(db, 'staff/nuevo@aguila.test'), fichaDemo({ usuario: 'nuevo@aguila.test', nombre: 'N', rol: 'empleado' })));
     });
     it('una ficha por correo no puede usar el dominio sintético ni llevar versión', async () => {
       const db = contexto(ADMIN);
-      const sintetico = `1060@${DOMINIO_CODIGOS}`;
+      const sintetico = `100160@${DOMINIO_CODIGOS}`;
       await assertFails(setDoc(doc(db, `staff/${sintetico}`), fichaDemo({ usuario: sintetico, tipo: 'correo', correoAuth: sintetico, nombre: 'X', rol: 'empleado' })));
       await assertFails(setDoc(doc(db, 'staff/nuevo@aguila.test'), fichaDemo({ usuario: 'nuevo@aguila.test', nombre: 'N', rol: 'empleado', cuentaVersion: 2, correoAuth: 'nuevo@aguila.test' })));
     });
     it('valida rol, tienda, nombre y quién actualiza', async () => {
       const db = contexto(ADMIN);
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ rol: 'gerente' })));
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ tienda: 'Talbot St' })));
-      await assertFails(setDoc(doc(db, 'staff/1050'), nueva({ nombre: '' })));
-      await assertFails(setDoc(doc(db, 'staff/1050'), { ...nueva(), actualizadoPor: '1023' }));
-      await assertFails(setDoc(doc(db, 'staff/1050'), { ...nueva(), creadoEn: Timestamp.fromMillis(1) }));
-      await assertSucceeds(setDoc(doc(db, 'staff/1050'), nueva({ tienda: null })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ rol: 'gerente' })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ tienda: 'Talbot St' })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), nueva({ nombre: '' })));
+      await assertFails(setDoc(doc(db, 'staff/100150'), { ...nueva(), actualizadoPor: '100123' }));
+      await assertFails(setDoc(doc(db, 'staff/100150'), { ...nueva(), creadoEn: Timestamp.fromMillis(1) }));
+      await assertSucceeds(setDoc(doc(db, 'staff/100150'), nueva({ tienda: null })));
     });
     it('al actualizar no cambian creadoEn ni tipo, y la versión de cuenta no baja', async () => {
       const db = contexto(ADMIN);
-      const actual = fichaDemo({ usuario: '1030', nombre: 'Luis', rol: 'empleado', cuentaVersion: 2 });
+      const actual = fichaDemo({ usuario: '100130', nombre: 'Luis', rol: 'empleado', cuentaVersion: 2 });
       const cambio = (extra) => ({ ...actual, ...extra, actualizadoEn: Timestamp.now() });
-      await assertSucceeds(setDoc(doc(db, 'staff/1030'), cambio({ nombre: 'Luis Pérez' })));
-      await assertFails(setDoc(doc(db, 'staff/1030'), cambio({ creadoEn: Timestamp.now() })));
-      await assertFails(setDoc(doc(db, 'staff/1030'), cambio({ tipo: 'correo', correoAuth: '1030@aguila.test', cuentaVersion: 1 })));
-      await assertFails(setDoc(doc(db, 'staff/1030'), cambio({ correoAuth: correoDeAcceso('1030', 1), cuentaVersion: 1 })));
-      await assertSucceeds(setDoc(doc(db, 'staff/1030'), cambio({ activo: false })));
-      await assertSucceeds(setDoc(doc(db, 'staff/1030'), cambio({ correoAuth: correoDeAcceso('1030', 3), cuentaVersion: 3 })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100130'), cambio({ nombre: 'Luis Pérez' })));
+      await assertFails(setDoc(doc(db, 'staff/100130'), cambio({ creadoEn: Timestamp.now() })));
+      await assertFails(setDoc(doc(db, 'staff/100130'), cambio({ tipo: 'correo', correoAuth: '100130@aguila.test', cuentaVersion: 1 })));
+      await assertFails(setDoc(doc(db, 'staff/100130'), cambio({ correoAuth: correoDeAcceso('100130', 1), cuentaVersion: 1 })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100130'), cambio({ activo: false })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100130'), cambio({ correoAuth: correoDeAcceso('100130', 3), cuentaVersion: 3 })));
       // con la versión 3 guardada, una escritura con la 2 ya no pasa
-      await assertFails(setDoc(doc(db, 'staff/1030'), cambio({ activo: true })));
+      await assertFails(setDoc(doc(db, 'staff/100130'), cambio({ activo: true })));
     });
     it('un admin no puede desactivarse, degradarse ni cambiar su propia cuenta; a otros sí', async () => {
       const db = contexto(ADMIN);
@@ -315,8 +315,8 @@ describe('reglas de Firestore', () => {
       await assertFails(setDoc(doc(db, `staff/${ADMIN}`), { ...propia, activo: false }));
       await assertFails(setDoc(doc(db, `staff/${ADMIN}`), { ...propia, rol: 'empleado' }));
       await assertSucceeds(setDoc(doc(db, `staff/${ADMIN}`), { ...propia, nombre: 'Admin Renombrado' }));
-      await assertSucceeds(setDoc(doc(db, 'staff/1023'), fichaDemo({ usuario: '1023', nombre: 'María', rol: 'admin', tienda: 'talbot' })));
-      await assertSucceeds(setDoc(doc(db, 'staff/1023'), fichaDemo({ usuario: '1023', nombre: 'María', rol: 'empleado', tienda: 'talbot', activo: false })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100123'), fichaDemo({ usuario: '100123', nombre: 'María', rol: 'admin', tienda: 'talbot' })));
+      await assertSucceeds(setDoc(doc(db, 'staff/100123'), fichaDemo({ usuario: '100123', nombre: 'María', rol: 'empleado', tienda: 'talbot', activo: false })));
     });
     it('un admin con ficha anterior a Gestión la completa (también la suya) y sigue entrando', async () => {
       const db = contexto(LEGADO);
@@ -329,41 +329,41 @@ describe('reglas de Firestore', () => {
     });
     it('una empleada no puede tocar su propia ficha ni la de nadie', async () => {
       const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'staff/1023'), fichaDemo({ usuario: '1023', nombre: 'María', rol: 'admin' }, EMPLEADA)));
-      await assertFails(updateDoc(doc(db, 'staff/1099'), { activo: true }));
+      await assertFails(setDoc(doc(db, 'staff/100123'), fichaDemo({ usuario: '100123', nombre: 'María', rol: 'admin' }, EMPLEADA)));
+      await assertFails(updateDoc(doc(db, 'staff/100199'), { activo: true }));
     });
     it('el personal no se borra', async () => {
-      await assertFails(deleteDoc(doc(contexto(ADMIN), 'staff/1023')));
+      await assertFails(deleteDoc(doc(contexto(ADMIN), 'staff/100123')));
     });
   });
 
   describe('accesos · versión de cuenta de un código', () => {
     const marca = () => Timestamp.fromMillis(Date.now());
     it('cualquiera puede leer un acceso concreto, nadie puede listarlos', async () => {
-      await sembrar({ 'accesos/1030': { version: 2 } });
-      await assertSucceeds(getDoc(doc(anonimo(), 'accesos/1030')));
+      await sembrar({ 'accesos/100130': { version: 2 } });
+      await assertSucceeds(getDoc(doc(anonimo(), 'accesos/100130')));
       await assertFails(getDocs(collection(anonimo(), 'accesos')));
       await assertFails(getDocs(collection(contexto(ADMIN), 'accesos')));
     });
     it('el admin lo escribe junto con la ficha, con la misma versión', async () => {
       const db = contexto(ADMIN);
-      const nueva = fichaDemo({ usuario: '1050', nombre: 'Nueva', rol: 'empleado' });
+      const nueva = fichaDemo({ usuario: '100150', nombre: 'Nueva', rol: 'empleado' });
       const lote = writeBatch(db);
-      lote.set(doc(db, 'staff/1050'), nueva);
-      lote.set(doc(db, 'accesos/1050'), { version: 1 });
+      lote.set(doc(db, 'staff/100150'), nueva);
+      lote.set(doc(db, 'accesos/100150'), { version: 1 });
       await assertSucceeds(lote.commit());
-      const renovada = { ...nueva, correoAuth: correoDeAcceso('1050', 2), cuentaVersion: 2, actualizadoEn: marca() };
+      const renovada = { ...nueva, correoAuth: correoDeAcceso('100150', 2), cuentaVersion: 2, actualizadoEn: marca() };
       const lote2 = writeBatch(db);
-      lote2.set(doc(db, 'staff/1050'), renovada);
-      lote2.set(doc(db, 'accesos/1050'), { version: 2 });
+      lote2.set(doc(db, 'staff/100150'), renovada);
+      lote2.set(doc(db, 'accesos/100150'), { version: 2 });
       await assertSucceeds(lote2.commit());
     });
     it('se rechaza suelto, con otra versión que la ficha, con campos de más o por una empleada', async () => {
-      await assertFails(setDoc(doc(contexto(ADMIN), 'accesos/1023'), { version: 2 }));
-      await assertFails(setDoc(doc(contexto(ADMIN), 'accesos/1023'), { version: 1, correo: 'x' }));
-      await assertFails(setDoc(doc(contexto(EMPLEADA), 'accesos/1023'), { version: 1 }));
-      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'accesos/1023'), { version: 1 }));
-      await assertFails(deleteDoc(doc(contexto(ADMIN), 'accesos/1023')));
+      await assertFails(setDoc(doc(contexto(ADMIN), 'accesos/100123'), { version: 2 }));
+      await assertFails(setDoc(doc(contexto(ADMIN), 'accesos/100123'), { version: 1, correo: 'x' }));
+      await assertFails(setDoc(doc(contexto(EMPLEADA), 'accesos/100123'), { version: 1 }));
+      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'accesos/100123'), { version: 1 }));
+      await assertFails(deleteDoc(doc(contexto(ADMIN), 'accesos/100123')));
     });
   });
 

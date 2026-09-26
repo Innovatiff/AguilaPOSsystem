@@ -10,7 +10,7 @@
  *
  * El SDK web no puede cambiar la contraseña de OTRA cuenta. Restablecer el
  * NIP de un empleado crea una cuenta nueva para el mismo código (sube la
- * versión: "1023.2@…") y la ficha apunta a ella; la anterior queda sin acceso.
+ * versión: "100123.2@…") y la ficha apunta a ella; la anterior queda sin acceso.
  */
 import { auth, autenticacionSecundaria, createUserWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from './firebase.js';
 import { correoDeAcceso } from './identidad.js';

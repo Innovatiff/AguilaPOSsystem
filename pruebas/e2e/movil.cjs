@@ -96,7 +96,7 @@ const { generarVideoUPC, argumentosCamaraFalsa } = require('./camara-falsa.cjs')
   await page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
   let creado = null;
   for (let i = 0; i < 20 && !creado; i += 1) { const todos = await c.leerColeccion('products'); creado = [...todos.values()].find((p) => p.upc === '036000291452') ?? null; if (!creado) await new Promise((r) => setTimeout(r, 300)); }
-  v.ok('el producto creado desde el teléfono queda firmado con el código de la empleada', creado?.nombre === 'MANGO' && creado.actualizadoPor === '1023', JSON.stringify(creado && { nombre: creado.nombre, por: creado.actualizadoPor }));
+  v.ok('el producto creado desde el teléfono queda firmado con el código de la empleada', creado?.nombre === 'MANGO' && creado.actualizadoPor === c.EMPLEADA.codigo, JSON.stringify(creado && { nombre: creado.nombre, por: creado.actualizadoPor }));
   erroresTotales.push(...errores);
   await ctx.close();
   await browser.close();

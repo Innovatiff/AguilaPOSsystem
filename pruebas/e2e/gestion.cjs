@@ -26,7 +26,7 @@ const c = require('./comun.cjs');
   // ---- alta por código
   await admin.page.keyboard.press('Alt+n');
   await admin.page.waitForSelector('#editor[open]');
-  v.ok('Alt+N abre el alta con el siguiente código libre propuesto', (await admin.page.inputValue('#e-codigo')) === '1001');
+  v.ok('Alt+N abre el alta con el siguiente código libre propuesto', (await admin.page.inputValue('#e-codigo')) === '100001');
   await admin.page.fill('#e-nombre', 'María López');
   await admin.page.selectOption('#e-tienda', 'talbot');
   await admin.page.fill('#e-secreto', '123456');
@@ -44,23 +44,23 @@ const c = require('./comun.cjs');
   await admin.page.click('#btn-guardar');
   await admin.page.waitForSelector('#mensaje.mensaje--ok', { timeout: 30000 });
   const msgAlta = c.texto(await admin.page.textContent('#mensaje'));
-  v.ok('el alta confirma código y nombre', /María López registrado con el código 1001/.test(msgAlta), msgAlta);
-  const acceso1001 = await c.leerDoc('accesos/1001');
-  v.ok('accesos/1001 publica la versión 1 de la cuenta', acceso1001?.version === 1, JSON.stringify(acceso1001));
-  const ficha1001 = await c.leerDoc('staff/1001');
+  v.ok('el alta confirma código y nombre', /María López registrado con el código 100001/.test(msgAlta), msgAlta);
+  const acceso1001 = await c.leerDoc('accesos/100001');
+  v.ok('accesos/100001 publica la versión 1 de la cuenta', acceso1001?.version === 1, JSON.stringify(acceso1001));
+  const ficha1001 = await c.leerDoc('staff/100001');
   v.ok('la ficha queda con el esquema completo (código, correo sintético v1, tienda, quién la creó)',
-    ficha1001?.tipo === 'codigo' && ficha1001.correoAuth === c.correoDeCodigo('1001') && ficha1001.cuentaVersion === 1 && ficha1001.tienda === 'talbot' && ficha1001.rol === 'empleado' && ficha1001.activo === true && ficha1001.actualizadoPor === c.ADMIN.correo && ficha1001.usuario === '1001' && typeof ficha1001.creadoEn === 'string',
+    ficha1001?.tipo === 'codigo' && ficha1001.correoAuth === c.correoDeCodigo('100001') && ficha1001.cuentaVersion === 1 && ficha1001.tienda === 'talbot' && ficha1001.rol === 'empleado' && ficha1001.activo === true && ficha1001.actualizadoPor === c.ADMIN.correo && ficha1001.usuario === '100001' && typeof ficha1001.creadoEn === 'string',
     JSON.stringify(ficha1001));
-  const cuenta1001 = await c.entrarAuthREST(c.correoDeCodigo('1001'), '482913');
-  v.ok('la cuenta de Firebase existe con ese NIP', cuenta1001.ok && cuenta1001.email === c.correoDeCodigo('1001'), JSON.stringify(cuenta1001.error ?? 'ok'));
+  const cuenta1001 = await c.entrarAuthREST(c.correoDeCodigo('100001'), '482913');
+  v.ok('la cuenta de Firebase existe con ese NIP', cuenta1001.ok && cuenta1001.email === c.correoDeCodigo('100001'), JSON.stringify(cuenta1001.error ?? 'ok'));
   v.ok('la sesión del gerente sigue siendo la suya tras crear la cuenta', /Alan \(admin\)/.test(await admin.page.textContent('#navegacion')));
   await admin.page.waitForFunction(() => document.querySelectorAll('#tabla-personal tbody tr').length === 2);
-  const fila1001 = c.texto(await admin.page.innerText('#tabla-personal tbody tr:has-text("1001")'));
-  v.ok('la fila muestra código, nombre, tienda y tipo de acceso', /1001\s+María López\s+Empleado\s+Águila Talbot\s+Código \+ NIP\s+Activo/.test(fila1001), fila1001);
+  const fila1001 = c.texto(await admin.page.innerText('#tabla-personal tbody tr:has-text("100001")'));
+  v.ok('la fila muestra código, nombre, tienda y tipo de acceso', /100001\s+María López\s+Empleado\s+Águila Talbot\s+Código \+ NIP\s+Activo/.test(fila1001), fila1001);
 
   // código repetido
   await admin.page.click('#btn-nuevo');
-  await admin.page.fill('#e-codigo', '1001');
+  await admin.page.fill('#e-codigo', '100001');
   await admin.page.fill('#e-nombre', 'Otra');
   await admin.page.fill('#e-secreto', '918273');
   await admin.page.fill('#e-secreto2', '918273');
@@ -71,7 +71,7 @@ const c = require('./comun.cjs');
 
   // ---- la empleada entra con su código y firma sus cambios con él
   const empleada = await c.nuevaPagina(browser);
-  await c.entrar(empleada.page, '1001', '482913');
+  await c.entrar(empleada.page, '100001', '482913');
   v.ok('la empleada nueva entra con código y NIP', /María López · empleado/.test(c.texto(await empleada.page.textContent('#navegacion'))));
   await empleada.page.goto(`${c.BASE}/productos.html`);
   await empleada.page.waitForSelector('#contenido:not([hidden])');
@@ -90,61 +90,61 @@ const c = require('./comun.cjs');
   }
   let tajin = null;
   for (let i = 0; i < 20 && tajin?.precioCentavos !== 549; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.precioCentavos !== 549) await new Promise((r) => setTimeout(r, 300)); }
-  v.ok('el cambio de precio queda firmado con el código, no con el correo sintético', tajin?.precioCentavos === 549 && tajin.actualizadoPor === '1001', JSON.stringify({ precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
+  v.ok('el cambio de precio queda firmado con el código, no con el correo sintético', tajin?.precioCentavos === 549 && tajin.actualizadoPor === '100001', JSON.stringify({ precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
   const historial = await c.leerColeccion('priceHistory');
-  v.ok('la entrada de historial lleva el código', historial.size === 1 && [...historial.values()][0].usuario === '1001', JSON.stringify([...historial.values()]));
+  v.ok('la entrada de historial lleva el código', historial.size === 1 && [...historial.values()][0].usuario === '100001', JSON.stringify([...historial.values()]));
   await empleada.page.fill('#busqueda', 'tajin');
   await empleada.page.press('#busqueda', 'Enter');
   await empleada.page.waitForSelector('#editor[open]');
-  await empleada.page.waitForFunction(() => /María López \(1001\)/.test(document.getElementById('meta').textContent), null, { timeout: 15000 }).catch(() => {});
+  await empleada.page.waitForFunction(() => /María López \(100001\)/.test(document.getElementById('meta').textContent), null, { timeout: 15000 }).catch(() => {});
   const metaTexto = c.texto(await empleada.page.textContent('#meta'));
-  v.ok('el editor muestra quién actualizó con nombre y código', /por María López \(1001\)/.test(metaTexto), metaTexto);
+  v.ok('el editor muestra quién actualizó con nombre y código', /por María López \(100001\)/.test(metaTexto), metaTexto);
   await empleada.page.click('#btn-cerrar');
 
   // ---- restablecer NIP
-  await admin.page.click('#tabla-personal tbody tr:has-text("1001") button:has-text("Restablecer NIP")');
+  await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Restablecer NIP")');
   await admin.page.waitForSelector('#editor[open]');
-  v.ok('el diálogo de restablecer solo pide el NIP nuevo', await admin.page.isHidden('#grupo-datos') && /Restablecer NIP · María López \(1001\)/.test(await admin.page.textContent('#editor-titulo')));
+  v.ok('el diálogo de restablecer solo pide el NIP nuevo', await admin.page.isHidden('#grupo-datos') && /Restablecer NIP · María López \(100001\)/.test(await admin.page.textContent('#editor-titulo')));
   await admin.page.fill('#e-secreto', '739201');
   await admin.page.fill('#e-secreto2', '739201');
   await admin.page.click('#btn-guardar');
   await admin.page.waitForFunction(() => /restablecido/.test(document.getElementById('mensaje').textContent), null, { timeout: 30000 });
-  const ficha1001b = await c.leerDoc('staff/1001');
-  v.ok('la ficha apunta a la cuenta nueva (versión 2)', ficha1001b?.cuentaVersion === 2 && ficha1001b.correoAuth === c.correoDeCodigo('1001', 2) && ficha1001b.creadoEn === ficha1001.creadoEn, JSON.stringify(ficha1001b));
-  v.ok('la fila indica que el NIP se restableció', /NIP restablecido 1 vez/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("1001")'))));
-  v.ok('accesos/1001 pasa a la versión 2', (await c.leerDoc('accesos/1001'))?.version === 2);
+  const ficha1001b = await c.leerDoc('staff/100001');
+  v.ok('la ficha apunta a la cuenta nueva (versión 2)', ficha1001b?.cuentaVersion === 2 && ficha1001b.correoAuth === c.correoDeCodigo('100001', 2) && ficha1001b.creadoEn === ficha1001.creadoEn, JSON.stringify(ficha1001b));
+  v.ok('la fila indica que el NIP se restableció', /NIP restablecido 1 vez/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("100001")'))));
+  v.ok('accesos/100001 pasa a la versión 2', (await c.leerDoc('accesos/100001'))?.version === 2);
   await empleada.page.reload();
   await empleada.page.waitForURL(/login\.html\?.*motivo=cuenta-renovada/, { timeout: 20000 });
   v.ok('la sesión anterior de la empleada se cierra con el motivo cuenta-renovada', /Tu NIP fue restablecido/.test(await empleada.page.textContent('#mensaje')));
-  let msg = await c.entrar(empleada.page, '1001', '482913', { esperarError: true });
+  let msg = await c.entrar(empleada.page, '100001', '482913', { esperarError: true });
   v.ok('el NIP anterior ya no entra', /NIP fue restablecido|Código o NIP incorrectos/.test(msg), msg);
-  await c.entrar(empleada.page, '1001', '739201');
+  await c.entrar(empleada.page, '100001', '739201');
   v.ok('el NIP nuevo entra', /María López/.test(await empleada.page.textContent('#navegacion')));
 
   // ---- editar: nombre y tienda
-  await admin.page.click('#tabla-personal tbody tr:has-text("1001") button:has-text("Editar")');
+  await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Editar")');
   await admin.page.waitForSelector('#editor[open]');
   v.ok('al editar, el código no se puede cambiar y no se pide NIP', (await admin.page.getAttribute('#e-codigo', 'readonly')) !== null && await admin.page.isHidden('#grupo-secreto'));
   await admin.page.fill('#e-nombre', 'María López García');
   await admin.page.selectOption('#e-tienda', 'erie');
   await admin.page.click('#btn-guardar');
   await admin.page.waitForFunction(() => /guardado/.test(document.getElementById('mensaje').textContent), null, { timeout: 20000 });
-  const ficha1001c = await c.leerDoc('staff/1001');
+  const ficha1001c = await c.leerDoc('staff/100001');
   v.ok('la edición cambia nombre y tienda y conserva la cuenta', ficha1001c?.nombre === 'María López García' && ficha1001c.tienda === 'erie' && ficha1001c.cuentaVersion === 2, JSON.stringify(ficha1001c));
 
   // ---- desactivar y reactivar
-  await admin.page.click('#tabla-personal tbody tr:has-text("1001") button:has-text("Desactivar")');
+  await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Desactivar")');
   await admin.page.waitForFunction(() => /desactivado/.test(document.getElementById('mensaje').textContent), null, { timeout: 20000 });
-  v.ok('desactivada desaparece de la lista hasta marcar «Ver inactivos»', (await admin.page.$$('#tabla-personal tbody tr:has-text("1001")')).length === 0);
+  v.ok('desactivada desaparece de la lista hasta marcar «Ver inactivos»', (await admin.page.$$('#tabla-personal tbody tr:has-text("100001")')).length === 0);
   await admin.page.check('#ver-inactivos');
-  v.ok('con «Ver inactivos» aparece como inactiva', /Inactivo/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("1001")'))));
+  v.ok('con «Ver inactivos» aparece como inactiva', /Inactivo/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("100001")'))));
   await empleada.page.reload();
   await empleada.page.waitForURL(/login\.html\?.*motivo=desactivado/, { timeout: 20000 });
-  msg = await c.entrar(empleada.page, '1001', '739201', { esperarError: true });
+  msg = await c.entrar(empleada.page, '100001', '739201', { esperarError: true });
   v.ok('desactivada no puede volver a entrar', /desactivado/.test(msg), msg);
-  await admin.page.click('#tabla-personal tbody tr:has-text("1001") button:has-text("Activar")');
+  await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Activar")');
   await admin.page.waitForFunction(() => /reactivado/.test(document.getElementById('mensaje').textContent), null, { timeout: 20000 });
-  await c.entrar(empleada.page, '1001', '739201');
+  await c.entrar(empleada.page, '100001', '739201');
   v.ok('reactivada vuelve a entrar', /María López García/.test(await empleada.page.textContent('#navegacion')));
   await admin.page.uncheck('#ver-inactivos');
   await empleada.ctx.close();

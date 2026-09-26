@@ -18,7 +18,7 @@ field is rejected. Money is always **integer cents** (`499` = $4.99), never a fl
 Written by admins only. Never deleted.
 
 ### `staff/{usuario}`
-Document ID is the person's stable **usuario**: their employee code (3–8 digits)
+Document ID is the person's stable **usuario**: their employee code (exactly 6 digits)
 or, for email accounts, the email in lowercase. **Required for access**: a
 Firebase Authentication account with no active record cannot read or write
 anything. Records are created from Gestión (the manager app), which also

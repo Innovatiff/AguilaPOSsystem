@@ -5,46 +5,47 @@ import {
 } from '../../js/identidad.js';
 
 describe('identidad · códigos y correos', () => {
-  it('reconoce códigos de 3 a 8 dígitos y correos reales', () => {
-    assert.equal(tipoDeIdentificador('1023'), 'codigo');
-    assert.equal(tipoDeIdentificador(' 10 23 '), 'codigo');
-    assert.equal(tipoDeIdentificador('12'), null);
-    assert.equal(tipoDeIdentificador('123456789'), null);
+  it('reconoce códigos de 6 dígitos exactos y correos reales', () => {
+    assert.equal(tipoDeIdentificador('100123'), 'codigo');
+    assert.equal(tipoDeIdentificador(' 10 01 23 '), 'codigo');
+    assert.equal(tipoDeIdentificador('12345'), null);
+    assert.equal(tipoDeIdentificador('1234567'), null);
     assert.equal(tipoDeIdentificador('Alan@Ejemplo.com'), 'correo');
     assert.equal(tipoDeIdentificador('sin-arroba'), null);
-    assert.ok(esCodigo('007'));
-    assert.ok(!esCorreo(`1023@${DOMINIO_CODIGOS}`), 'un correo sintético no cuenta como correo real');
+    assert.ok(esCodigo('000123'));
+    assert.ok(!esCorreo(`100123@${DOMINIO_CODIGOS}`), 'un correo sintético no cuenta como correo real');
   });
   it('normaliza: correos en minúsculas, códigos sin espacios', () => {
     assert.equal(normalizarIdentificador('  Alan@Ejemplo.COM '), 'alan@ejemplo.com');
-    assert.equal(normalizarIdentificador('1 0 2 3'), '1023');
+    assert.equal(normalizarIdentificador('1 0 0 1 2 3'), '100123');
   });
   it('el correo de acceso de un código es sintético y versionado; el de un correo es él mismo', () => {
-    assert.equal(correoDeAcceso('1023'), `1023@${DOMINIO_CODIGOS}`);
-    assert.equal(correoDeAcceso('1023', 1), `1023@${DOMINIO_CODIGOS}`);
-    assert.equal(correoDeAcceso('1023', 3), `1023.3@${DOMINIO_CODIGOS}`);
+    assert.equal(correoDeAcceso('100123'), `100123@${DOMINIO_CODIGOS}`);
+    assert.equal(correoDeAcceso('100123', 1), `100123@${DOMINIO_CODIGOS}`);
+    assert.equal(correoDeAcceso('100123', 3), `100123.3@${DOMINIO_CODIGOS}`);
     assert.equal(correoDeAcceso('Alan@Ejemplo.com'), 'alan@ejemplo.com');
     assert.throws(() => correoDeAcceso('12'), /código de empleado/);
-    assert.throws(() => correoDeAcceso('1023', 0), /Versión/);
+    assert.throws(() => correoDeAcceso('100123', 0), /Versión/);
   });
   it('usuarioDe deshace el mapeo, con o sin versión, y deja los correos reales intactos', () => {
-    assert.equal(usuarioDe(`1023@${DOMINIO_CODIGOS}`), '1023');
-    assert.equal(usuarioDe(`1023.7@${DOMINIO_CODIGOS}`), '1023');
+    assert.equal(usuarioDe(`100123@${DOMINIO_CODIGOS}`), '100123');
+    assert.equal(usuarioDe(`100123.7@${DOMINIO_CODIGOS}`), '100123');
     assert.equal(usuarioDe('Alan.F@Ejemplo.com'), 'alan.f@ejemplo.com');
-    assert.equal(versionDe(`1023@${DOMINIO_CODIGOS}`), 1);
-    assert.equal(versionDe(`1023.7@${DOMINIO_CODIGOS}`), 7);
+    assert.equal(versionDe(`100123@${DOMINIO_CODIGOS}`), 1);
+    assert.equal(versionDe(`100123.7@${DOMINIO_CODIGOS}`), 7);
     assert.equal(versionDe('alan@ejemplo.com'), 1);
-    assert.ok(esCorreoDeCodigo(`1023@${DOMINIO_CODIGOS}`));
-    assert.ok(!esCorreoDeCodigo('1023@otro.com'));
+    assert.ok(esCorreoDeCodigo(`100123@${DOMINIO_CODIGOS}`));
+    assert.ok(!esCorreoDeCodigo('100123@otro.com'));
   });
 });
 
 describe('identidad · validación', () => {
   it('códigos', () => {
-    assert.equal(validarCodigo('1023'), null);
+    assert.equal(validarCodigo('100123'), null);
     assert.match(validarCodigo(''), /Escribe/);
-    assert.match(validarCodigo('12'), /3 a 8/);
-    assert.match(validarCodigo('a123'), /3 a 8/);
+    assert.match(validarCodigo('12345'), /6 dígitos/);
+    assert.match(validarCodigo('1234567'), /6 dígitos/);
+    assert.match(validarCodigo('a12345'), /6 dígitos/);
   });
   it('NIP: 6 a 10 dígitos, ni repetido ni secuencia', () => {
     assert.equal(validarNIP('482913'), null);
@@ -62,44 +63,45 @@ describe('identidad · validación', () => {
     assert.match(validarContrasena('abc'), /8 caracteres/);
   });
   it('sugiere el siguiente código libre', () => {
-    assert.equal(siguienteCodigo([]), '1001');
-    assert.equal(siguienteCodigo(['1001', '1002', 'alan@ejemplo.com']), '1003');
-    assert.equal(siguienteCodigo(['007']), '1001');
-    assert.equal(siguienteCodigo(['20999']), '21000');
+    assert.equal(siguienteCodigo([]), '100001');
+    assert.equal(siguienteCodigo(['100001', '100002', 'alan@ejemplo.com']), '100003');
+    assert.equal(siguienteCodigo(['1234', '12345678']), '100001', 'los códigos que no son de 6 dígitos se ignoran');
+    assert.equal(siguienteCodigo(['250999']), '251000');
+    assert.equal(siguienteCodigo(['999999']), '', 'no hay siguiente de 6 dígitos');
   });
   it('etiqueta de usuario para mostrar', () => {
-    assert.equal(etiquetaUsuario('1023', 'María'), 'María (1023)');
-    assert.equal(etiquetaUsuario('1023', ''), '1023');
+    assert.equal(etiquetaUsuario('100123', 'María'), 'María (100123)');
+    assert.equal(etiquetaUsuario('100123', ''), '100123');
     assert.equal(etiquetaUsuario('alan@ejemplo.com', 'alan@ejemplo.com'), 'alan@ejemplo.com');
   });
 });
 
 describe('identidad · ficha de personal', () => {
   it('arma una ficha de código con su correo sintético', () => {
-    const ficha = armarFichaPersonal({ usuario: ' 1023 ', nombre: ' María ', rol: 'empleado', tienda: 'talbot' }, 'admin@aguila.test');
+    const ficha = armarFichaPersonal({ usuario: ' 100123 ', nombre: ' María ', rol: 'empleado', tienda: 'talbot' }, 'admin@aguila.test');
     assert.deepEqual(ficha, {
-      usuario: '1023', tipo: 'codigo', correoAuth: `1023@${DOMINIO_CODIGOS}`, nombre: 'María', rol: 'empleado', activo: true, tienda: 'talbot',
+      usuario: '100123', tipo: 'codigo', correoAuth: `100123@${DOMINIO_CODIGOS}`, nombre: 'María', rol: 'empleado', activo: true, tienda: 'talbot',
       actualizadoPor: 'admin@aguila.test', cuentaVersion: 1,
     });
     assert.deepEqual(validarFichaPersonal(ficha), []);
   });
   it('arma una ficha de correo y una de código con versión', () => {
-    const correo = armarFichaPersonal({ usuario: 'Gerente@Aguila.test', nombre: 'Gerente', rol: 'admin', tienda: '' }, '1001');
+    const correo = armarFichaPersonal({ usuario: 'Gerente@Aguila.test', nombre: 'Gerente', rol: 'admin', tienda: '' }, '100001');
     assert.equal(correo.tipo, 'correo');
     assert.equal(correo.correoAuth, 'gerente@aguila.test');
     assert.equal(correo.tienda, null);
     assert.deepEqual(validarFichaPersonal(correo), []);
-    const renovada = armarFichaPersonal({ usuario: '1023', nombre: 'María', rol: 'empleado', cuentaVersion: 2 }, '1001');
-    assert.equal(renovada.correoAuth, `1023.2@${DOMINIO_CODIGOS}`);
+    const renovada = armarFichaPersonal({ usuario: '100123', nombre: 'María', rol: 'empleado', cuentaVersion: 2 }, '100001');
+    assert.equal(renovada.correoAuth, `100123.2@${DOMINIO_CODIGOS}`);
     assert.deepEqual(validarFichaPersonal(renovada), []);
   });
   it('detecta incoherencias', () => {
-    const base = armarFichaPersonal({ usuario: '1023', nombre: 'María', rol: 'empleado' }, '1001');
-    assert.ok(validarFichaPersonal({ ...base, correoAuth: `1024@${DOMINIO_CODIGOS}` }).some((e) => /no corresponde/.test(e)));
+    const base = armarFichaPersonal({ usuario: '100123', nombre: 'María', rol: 'empleado' }, '100001');
+    assert.ok(validarFichaPersonal({ ...base, correoAuth: `100124@${DOMINIO_CODIGOS}` }).some((e) => /no corresponde/.test(e)));
     assert.ok(validarFichaPersonal({ ...base, rol: 'jefe' }).some((e) => /rol/.test(e)));
     assert.ok(validarFichaPersonal({ ...base, tienda: 'Talbot St' }).some((e) => /tienda/.test(e)));
     assert.ok(validarFichaPersonal({ ...base, nombre: '' }).some((e) => /nombre/.test(e)));
-    const correo = armarFichaPersonal({ usuario: 'gerente@aguila.test', nombre: 'G', rol: 'admin' }, '1001');
+    const correo = armarFichaPersonal({ usuario: 'gerente@aguila.test', nombre: 'G', rol: 'admin' }, '100001');
     assert.ok(validarFichaPersonal({ ...correo, cuentaVersion: 2 }).some((e) => /versión/.test(e)));
   });
 });

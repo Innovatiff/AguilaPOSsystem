@@ -11,7 +11,7 @@ import { armarFichaPersonal, correoDeAcceso } from '../../js/identidad.js';
 const PRODUCTOS_POR_LOTE_IMPORTACION = 12; // debe coincidir con js/productos.js
 
 setLogLevel('silent');
-const CODIGO = '1001'; // empleada por código; actualizadoPor lleva el código
+const CODIGO = '100001'; // empleada por código; actualizadoPor lleva el código
 const EMPLEADA = correoDeAcceso(CODIGO);
 let entorno;
 const contexto = (email) => entorno.authenticatedContext(email.replace(/[^a-z0-9]/g, '-'), { email, email_verified: true }).firestore();

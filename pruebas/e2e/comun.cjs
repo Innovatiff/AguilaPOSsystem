@@ -20,7 +20,7 @@ const DOMINIO_CODIGOS = 'codigo.aguilapos.firebaseapp.com'; // igual que js/iden
 const correoDeCodigo = (codigo, version = 1) => `${codigo}${version > 1 ? `.${version}` : ''}@${DOMINIO_CODIGOS}`;
 
 const ADMIN = { correo: 'admin@aguila.test', contrasena: 'Prueba1234', nombre: 'Alan (admin)' };
-const EMPLEADA = { codigo: '1023', nip: '482913', nombre: 'María López', tienda: 'talbot' };
+const EMPLEADA = { codigo: '100123', nip: '482913', nombre: 'María López', tienda: 'talbot' };
 
 // ------------------------------------------------------------- Firestore REST (propietario, sin reglas)
 function valor(v) {

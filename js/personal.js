@@ -24,7 +24,7 @@ export function cargarNombres() {
   return carga;
 }
 
-/** "María (1023)" si el nombre ya se conoce; si no, el usuario tal cual. */
+/** "María (100123)" si el nombre ya se conoce; si no, el usuario tal cual. */
 export function nombreDeUsuario(usuario) {
   const id = String(usuario ?? '');
   return etiquetaUsuario(id, nombres?.get(id));

@@ -11,7 +11,7 @@
  * El "usuario" de una persona es su identificador estable: el código, o el
  * correo real en minúsculas. Es lo que queda en actualizadoPor y en el
  * historial de precios. Al restablecer un NIP se crea una cuenta nueva (sube
- * la versión: "1023.2@…") pero el usuario sigue siendo "1023".
+ * la versión: "100123.2@…") pero el usuario sigue siendo "100123".
  *
  * Módulo puro (sin Firebase ni DOM): se prueba en Node y lo reflejan las
  * reglas de Firestore (función usuarioActual()).
@@ -20,7 +20,7 @@
 /** Dominio de los correos sintéticos. Subdominio del proyecto: nadie más lo posee. */
 export const DOMINIO_CODIGOS = 'codigo.aguilapos.firebaseapp.com';
 
-export const REGEX_CODIGO = /^[0-9]{3,8}$/;
+export const REGEX_CODIGO = /^[0-9]{6}$/;
 export const REGEX_NIP = /^[0-9]{6,10}$/;
 export const REGEX_CORREO = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 export const LONGITUD_MINIMA_CONTRASENA = 8;
@@ -97,7 +97,7 @@ export function versionDe(correoAuth) {
 export function validarCodigo(codigo) {
   const id = normalizarIdentificador(codigo);
   if (id === '') return 'Escribe el código de empleado.';
-  if (!REGEX_CODIGO.test(id)) return 'El código de empleado son de 3 a 8 dígitos.';
+  if (!REGEX_CODIGO.test(id)) return 'El código de empleado son 6 dígitos.';
   return null;
 }
 
@@ -122,18 +122,18 @@ export function validarContrasena(texto) {
   return null;
 }
 
-/** Siguiente código libre: el mayor numérico + 1, con al menos 4 dígitos; 1001 si no hay ninguno. */
+/** Siguiente código libre: el mayor + 1, siempre de 6 dígitos; 100001 si no hay ninguno. */
 export function siguienteCodigo(codigosExistentes) {
-  let mayor = 1000;
+  let mayor = 100000;
   for (const codigo of codigosExistentes ?? []) {
     const texto = String(codigo);
     if (REGEX_CODIGO.test(texto)) mayor = Math.max(mayor, Number(texto));
   }
-  const siguiente = String(mayor + 1).padStart(4, '0');
+  const siguiente = String(mayor + 1).padStart(6, '0');
   return REGEX_CODIGO.test(siguiente) ? siguiente : '';
 }
 
-/** Texto para mostrar a una persona: "Nombre (1023)" o "Nombre (correo)"; si no hay nombre, el usuario. */
+/** Texto para mostrar a una persona: "Nombre (100123)" o "Nombre (correo)"; si no hay nombre, el usuario. */
 export function etiquetaUsuario(usuario, nombre) {
   const id = String(usuario ?? '');
   const limpio = String(nombre ?? '').trim();

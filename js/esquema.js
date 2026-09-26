@@ -202,7 +202,7 @@ export function validarProducto(p) {
   if (!(p.creadoEn && typeof p.creadoEn === 'object')) errores.push('Falta creadoEn');
   if (!(p.actualizadoEn && typeof p.actualizadoEn === 'object')) errores.push('Falta actualizadoEn');
   // Usuario estable de quien escribe: código de empleado (dígitos) o correo. Ver js/identidad.js.
-  if (!(typeof p.actualizadoPor === 'string' && (/^[0-9]{3,8}$/.test(p.actualizadoPor) || p.actualizadoPor.includes('@')))) errores.push('actualizadoPor debe ser el usuario de quien escribe (código o correo)');
+  if (!(typeof p.actualizadoPor === 'string' && (/^[0-9]{6}$/.test(p.actualizadoPor) || p.actualizadoPor.includes('@')))) errores.push('actualizadoPor debe ser el usuario de quien escribe (código o correo)');
   return errores;
 }
 

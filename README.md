@@ -71,8 +71,8 @@ deactivated, and access ends the moment that happens.
 
 Two kinds of access:
 
-- **Employee code + NIP** (the normal case). The code is 3–8 digits (Gestión
-  proposes the next free one, e.g. `1001`); the NIP is 6–10 digits chosen by
+- **Employee code + NIP** (the normal case). The code is exactly 6 digits
+  (Gestión proposes the next free one, e.g. `100001`); the NIP is 6–10 digits chosen by
   the manager and handed over in person. Behind it is an Authentication
   account with the synthetic email `<code>@codigo.aguilapos.firebaseapp.com`
   (the constant `DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in
