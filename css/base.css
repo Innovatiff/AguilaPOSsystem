@@ -1683,3 +1683,139 @@ dialog.escaner[open] {
     min-width: 0;
   }
 }
+
+/* =====================================================================
+   Paginación de resultados (productos)
+   ===================================================================== */
+.paginacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: 12px 0 0;
+  padding: 10px 0;
+  border-top: 1px solid #e3e3e3;
+  font-size: 14px;
+}
+
+.paginacion[hidden],
+.paginacion__botones[hidden] {
+  display: none;
+}
+
+.paginacion__resumen {
+  margin: 0;
+  color: var(--color-texto-suave);
+  white-space: nowrap;
+}
+
+.paginacion__botones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.paginacion__numeros {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.paginacion__botones .boton {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.paginacion__numero {
+  min-width: 38px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #c9c9c9;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.paginacion__numero:hover {
+  background: #fff6ee;
+  border-color: var(--color-marca);
+}
+
+.paginacion__numero[aria-current="page"] {
+  background: var(--color-nav);
+  border-color: var(--color-nav);
+  color: #fff;
+  font-weight: 700;
+  cursor: default;
+}
+
+.paginacion__numero:focus-visible,
+.paginacion__botones .boton:focus-visible {
+  outline: 3px solid rgba(232, 121, 29, 0.55);
+  outline-offset: 1px;
+}
+
+.paginacion__hueco {
+  min-width: 24px;
+  text-align: center;
+  color: var(--color-texto-suave);
+  user-select: none;
+}
+
+.paginacion__tamano {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--color-texto-suave);
+  white-space: nowrap;
+}
+
+.paginacion__tamano select {
+  padding: 6px 8px;
+  border: 1px solid #b5b5b5;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+@media screen and (max-width: 720px) {
+  .paginacion {
+    gap: 8px 12px;
+  }
+
+  .paginacion__resumen {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  /* En pantalla angosta bastan Anterior / Siguiente: el resumen dice en qué página se está. */
+  .paginacion__numeros {
+    display: none;
+  }
+
+  .paginacion__botones {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+
+  .paginacion__botones .boton {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .paginacion__tamano {
+    margin-left: 0;
+  }
+
+  .paginacion__tamano select {
+    min-height: 44px;
+  }
+}

@@ -59,6 +59,7 @@ const CASCARA = [
   'js/inicio.js',
   'js/login.js',
   'js/nav.js',
+  'js/paginacion.js',
   'js/pantalla-captura.js',
   'js/pantalla-imprimir.js',
   'js/pantalla-productos.js',

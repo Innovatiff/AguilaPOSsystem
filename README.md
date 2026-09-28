@@ -152,9 +152,15 @@ is written in one batch with its `priceHistory` entry. Without signal the write
 is queued locally and the screen says so; a later server rejection (for
 example a price changed first on another station) shows up as an alert.
 
-Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
-search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
-`Enter` inside the UPC field just moves on, so a scan there does not save.
+Results come in pages of 50 (25 or 100 selectable; the choice is remembered
+on the device). The pager under the table shows the range, the page count and
+the page numbers; changing the search or the "Ver inactivos" filter goes back
+to page 1, and a catalog update keeps the current page.
+
+Keyboard: `Enter` opens, `↓`/`↑` move through results and cross page edges,
+`Av Pág`/`Re Pág` change page, `/` returns to the search box, `Alt+N` new
+product, `Esc` closes. In the editor `Enter` saves and `Enter` inside the UPC
+field just moves on, so a scan there does not save.
 
 ## Barcodes
 

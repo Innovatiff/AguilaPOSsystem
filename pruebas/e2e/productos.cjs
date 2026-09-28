@@ -175,6 +175,56 @@ async function sembrar() {
   const manifiesto = await page.evaluate(async () => (await fetch('manifest.webmanifest')).json());
   ok('manifest instalable', manifiesto.name === 'Catálogo Águila' && manifiesto.icons.length === 3);
 
+  // paginación: 120 productos más (122 en total), páginas de 50
+  for (let desde = 1; desde <= 120; desde += 20) {
+    await Promise.all(Array.from({ length: 20 }, (_, i) => desde + i).map((n) => {
+      const num = String(n).padStart(3, '0');
+      return c.sembrarProducto(`p-pag-${num}`, { nombre: `PRODUCTO ${num}`, marca: 'PRUEBA', precioCentavos: 100 + n, tiendas: ['talbot'], tokensBusqueda: c.tokens(`PRODUCTO ${num}`, 'PRUEBA') });
+    }));
+  }
+  await page.fill('#busqueda', '');
+  await page.waitForFunction(() => /^122 productos/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll('#resultados tr').length === 50);
+  const resumen = () => page.textContent('#paginacion-resumen');
+  ok('página 1: 50 filas y resumen "1–50 de 122 · página 1 de 3"', /1–50 de 122 · página 1 de 3/.test(await resumen()), await resumen());
+  ok('Anterior deshabilitado en la primera página; números 1 2 3', await page.isDisabled('#pag-anterior') && (await page.$$eval('#pag-numeros button', (l) => l.map((b) => b.textContent).join(' '))) === '1 2 3');
+  ok('la página actual lleva aria-current', (await page.getAttribute('#pag-numeros button:has-text("1")', 'aria-current')) === 'page');
+  await page.click('#pag-siguiente');
+  await page.waitForFunction(() => /página 2 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  const primeraFilaP2 = await page.textContent('#resultados tr:first-child');
+  ok('Siguiente pasa a la página 2 (51–100) y sigue donde terminó la 1', /51–100 de 122/.test(await resumen()) && /PRODUCTO 049/.test(primeraFilaP2), primeraFilaP2.replace(/\s+/g, ' ').trim());
+  await page.click('#pag-numeros button:has-text("3")');
+  await page.waitForFunction(() => /página 3 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  ok('última página: 101–122, 22 filas, Siguiente deshabilitado', /101–122 de 122/.test(await resumen()) && (await page.$$eval('#resultados tr', (l) => l.length)) === 22 && await page.isDisabled('#pag-siguiente'));
+  await page.focus('#resultados tr');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForFunction(() => /página 2 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  ok('↑ en la primera fila retrocede de página y enfoca la última fila', await page.evaluate(() => document.activeElement === document.querySelector('#resultados tr:last-child')));
+  await page.keyboard.press('ArrowDown');
+  await page.waitForFunction(() => /página 3 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  ok('↓ en la última fila avanza de página y enfoca la primera', await page.evaluate(() => document.activeElement === document.querySelector('#resultados tr:first-child')));
+  await page.keyboard.press('PageUp');
+  await page.waitForFunction(() => /página 2 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('PageDown');
+  await page.waitForFunction(() => /página 3 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  ok('Re Pág / Av Pág cambian de página desde la lista y desde el buscador', await page.evaluate(() => document.activeElement?.id === 'busqueda'));
+  await page.fill('#busqueda', 'prueba');
+  await page.waitForFunction(() => /1–50 de 120 · página 1 de 3/.test(document.getElementById('paginacion-resumen').textContent));
+  ok('cambiar la búsqueda vuelve a la página 1', true);
+  await page.selectOption('#por-pagina', '100');
+  await page.waitForFunction(() => document.querySelectorAll('#resultados tr').length === 100);
+  ok('100 por página: "1–100 de 120 · página 1 de 2"', /1–100 de 120 · página 1 de 2/.test(await resumen()), await resumen());
+  await page.reload(); // sin networkidle: el oyente de Firestore mantiene la conexión abierta
+  await page.waitForSelector('#contenido:not([hidden])', { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll('#resultados tr').length === 100, null, { timeout: 20000 });
+  ok('el tamaño de página se recuerda al volver a entrar', (await page.inputValue('#por-pagina')) === '100' && /página 1 de 2/.test(await resumen()), await resumen());
+  await page.fill('#busqueda', 'taj');
+  await page.waitForFunction(() => document.querySelectorAll('#resultados tr').length === 1);
+  ok('con un solo resultado no hay botones de página y el resumen dice "1 resultado"', (await page.textContent('#paginacion-resumen')) === '1 resultado' && !(await page.isVisible('#paginacion-botones')));
+  await page.screenshot({ path: `${OUT}/e2e-productos-paginacion.png`, fullPage: true });
+  await page.fill('#busqueda', '');
+
   await page.screenshot({ path: `${OUT}/e2e-productos.png`, fullPage: true });
   await browser.close();
   console.log('\n=== productos ===');

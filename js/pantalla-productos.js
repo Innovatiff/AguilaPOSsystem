@@ -15,8 +15,7 @@ import { formatearPrecio, indicadorFiscal, centavosDesdeTexto, textoDesdeCentavo
 import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
 import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
 import { cargarNombres, nombreDeUsuario } from './personal.js';
-
-const MAXIMO_RESULTADOS = 100;
+import { paginar, ventanaDePaginas, tamanoDePagina } from './paginacion.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'productos.html' });
@@ -27,7 +26,14 @@ const verInactivos = $('ver-inactivos');
 const estadoCatalogo = $('estado-catalogo');
 const cuerpoResultados = $('resultados');
 const sinResultados = $('sin-resultados');
-const recorte = $('recorte');
+const tabla = document.querySelector('.tabla--resultados');
+const paginacion = $('paginacion');
+const resumenPaginacion = $('paginacion-resumen');
+const botonesPaginacion = $('paginacion-botones');
+const numerosPaginacion = $('pag-numeros');
+const btnAnterior = $('pag-anterior');
+const btnSiguiente = $('pag-siguiente');
+const selectorTamano = $('por-pagina');
 const avisoBusqueda = $('aviso-busqueda');
 const oferta = $('oferta-crear');
 const editor = $('editor');
@@ -60,6 +66,12 @@ let ordenados = null;
 let tiendas = [];
 let temporizadorBusqueda = null;
 let temporizadorVista = null;
+const leerPreferencia = (clave) => { try { return localStorage.getItem(clave); } catch { return null; } };
+const guardarPreferencia = (clave, valor) => { try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento */ } };
+let pagina = 1;
+let porPagina = tamanoDePagina(leerPreferencia('productos.porPagina'));
+let ultimoResultado = null; // última salida de paginar(): total, página, elementos en pantalla
+let ultimoFiltro = null; // término + 'ver inactivos' del último pintado; si cambia, se vuelve a la página 1
 const estado = { modo: null, actual: null, inicial: '', guardando: false, dejarDeObservar: null, dejarDeObservarHistorial: null, tiendasSeleccion: null };
 
 const formatoFecha = new Intl.DateTimeFormat('es-CA', { dateStyle: 'medium', timeStyle: 'short' });
@@ -113,25 +125,90 @@ function listaOrdenada() {
 }
 
 // ------------------------------------------------------------- búsqueda
-function pintarResultados() {
+/**
+ * Pinta la página actual de resultados. Cambiar el filtro vuelve a la página 1;
+ * una actualización del catálogo conserva la página (acotada al total).
+ *   irA: página a mostrar · enfocarFila: 'primera' | 'ultima' · desplazar: subir a la tabla si quedó arriba
+ */
+function pintarResultados({ irA = null, enfocarFila = null, desplazar = false } = {}) {
   const termino = busqueda.value.trim();
   const incluirInactivos = verInactivos.checked;
-  const lista = [];
-  let total = 0;
+  const filtro = `${incluirInactivos ? '1' : '0'}|${termino}`;
+  if (filtro !== ultimoFiltro) pagina = 1;
+  ultimoFiltro = filtro;
+  if (irA !== null) pagina = irA;
+  const filtrados = [];
   for (const producto of listaOrdenada()) {
     if (!incluirInactivos && !producto.activo) continue;
     if (termino && !coincideBusqueda(producto, termino)) continue;
-    total += 1;
-    if (lista.length < MAXIMO_RESULTADOS) lista.push(producto);
+    filtrados.push(producto);
   }
-  cuerpoResultados.replaceChildren(...lista.map(fila));
-  if (lista.length === 0 && catalogo.size === 0) {
+  const resultado = paginar(filtrados, pagina, porPagina);
+  pagina = resultado.pagina;
+  ultimoResultado = resultado;
+  cuerpoResultados.replaceChildren(...resultado.elementos.map(fila));
+  if (resultado.total === 0 && catalogo.size === 0) {
     mostrarMensaje(sinResultados, 'El catálogo está vacío. Escanea un producto o pulsa Alt+N para crear el primero.');
+  } else if (resultado.total === 0) {
+    mostrarMensaje(sinResultados, termino ? `Sin resultados para «${termino}».` : 'No hay productos activos. Marca «Ver inactivos» para verlos todos.');
   } else {
-    mostrarMensaje(sinResultados, lista.length === 0 ? `Sin resultados para «${termino}».` : '');
+    mostrarMensaje(sinResultados, '');
   }
-  mostrarMensaje(recorte, total > MAXIMO_RESULTADOS ? `Se muestran ${MAXIMO_RESULTADOS} de ${total}. Afina la búsqueda.` : '');
+  pintarPaginacion(resultado);
+  if (desplazar && tabla.getBoundingClientRect().top < 0) tabla.scrollIntoView({ block: 'start' });
+  if (enfocarFila === 'primera') cuerpoResultados.querySelector('tr')?.focus();
+  else if (enfocarFila === 'ultima') cuerpoResultados.querySelector('tr:last-child')?.focus();
 }
+
+function pintarPaginacion(r) {
+  paginacion.hidden = r.total === 0;
+  if (r.total === 0) return;
+  const rango = r.inicio === r.fin ? `${r.inicio}` : `${r.inicio}–${r.fin}`;
+  resumenPaginacion.textContent = r.paginas > 1
+    ? `${rango} de ${r.total} · página ${r.pagina} de ${r.paginas}`
+    : `${r.total} ${r.total === 1 ? 'resultado' : 'resultados'}`;
+  botonesPaginacion.hidden = r.paginas <= 1;
+  if (r.paginas <= 1) {
+    numerosPaginacion.replaceChildren();
+    return;
+  }
+  // Si el foco estaba en el paginador, se conserva en el botón equivalente tras repintar.
+  const enfocado = document.activeElement;
+  const teclaPrevia = paginacion.contains(enfocado) ? (enfocado.dataset.tecla ?? null) : null;
+  btnAnterior.disabled = r.pagina <= 1;
+  btnSiguiente.disabled = r.pagina >= r.paginas;
+  numerosPaginacion.replaceChildren(...ventanaDePaginas(r.pagina, r.paginas).map((n) => {
+    if (n === null) return crear('span', 'paginacion__hueco', '…');
+    const boton = crear('button', 'paginacion__numero', String(n));
+    boton.type = 'button';
+    boton.dataset.tecla = `p${n}`;
+    boton.setAttribute('aria-label', `Página ${n}`);
+    if (n === r.pagina) boton.setAttribute('aria-current', 'page');
+    else boton.addEventListener('click', () => irAPagina(n));
+    return boton;
+  }));
+  if (teclaPrevia) {
+    const destino = paginacion.querySelector(`[data-tecla="${teclaPrevia}"]`);
+    (destino && !destino.disabled ? destino : paginacion.querySelector('[aria-current="page"]'))?.focus({ preventScroll: true });
+  }
+}
+
+function irAPagina(n) {
+  pintarResultados({ irA: n, desplazar: true });
+}
+
+btnAnterior.addEventListener('click', () => irAPagina(pagina - 1));
+btnSiguiente.addEventListener('click', () => irAPagina(pagina + 1));
+
+selectorTamano.value = String(porPagina);
+selectorTamano.addEventListener('change', () => {
+  const primero = Math.max((ultimoResultado?.inicio ?? 1) - 1, 0);
+  porPagina = tamanoDePagina(selectorTamano.value);
+  selectorTamano.value = String(porPagina);
+  guardarPreferencia('productos.porPagina', String(porPagina));
+  // La página nueva es la que contiene el primer producto que se estaba viendo.
+  pintarResultados({ irA: Math.floor(primero / porPagina) + 1 });
+});
 
 function fila(producto) {
   const tr = document.createElement('tr');
@@ -159,9 +236,27 @@ function teclasFila(evento) {
   const filas = [...cuerpoResultados.querySelectorAll('tr')];
   const indice = filas.indexOf(tr);
   const ir = (destino) => { evento.preventDefault(); destino?.focus(); };
+  const { pagina: actual, paginas } = ultimoResultado ?? { pagina: 1, paginas: 1 };
+  const cambiarPagina = (destino, enfocarFila) => { evento.preventDefault(); pintarResultados({ irA: destino, enfocarFila }); };
   switch (evento.key) {
-    case 'ArrowDown': ir(filas[indice + 1]); break;
-    case 'ArrowUp': indice === 0 ? ir(busqueda) : ir(filas[indice - 1]); break;
+    case 'ArrowDown':
+      if (indice < filas.length - 1) ir(filas[indice + 1]);
+      else if (actual < paginas) cambiarPagina(actual + 1, 'primera'); // de la última fila se sigue en la página siguiente
+      else evento.preventDefault();
+      break;
+    case 'ArrowUp':
+      if (indice > 0) ir(filas[indice - 1]);
+      else if (actual > 1) cambiarPagina(actual - 1, 'ultima');
+      else ir(busqueda);
+      break;
+    case 'PageDown':
+      if (actual < paginas) cambiarPagina(actual + 1, 'primera');
+      else evento.preventDefault();
+      break;
+    case 'PageUp':
+      if (actual > 1) cambiarPagina(actual - 1, 'primera');
+      else evento.preventDefault();
+      break;
     case 'Home': ir(filas[0]); break;
     case 'End': ir(filas[filas.length - 1]); break;
     case 'Enter':
@@ -188,6 +283,13 @@ busqueda.addEventListener('keydown', (evento) => {
       evento.preventDefault();
       primera.focus();
     }
+  } else if (evento.key === 'PageDown' || evento.key === 'PageUp') {
+    const r = ultimoResultado;
+    if (r && r.paginas > 1) {
+      evento.preventDefault();
+      const destino = evento.key === 'PageDown' ? Math.min(r.pagina + 1, r.paginas) : Math.max(r.pagina - 1, 1);
+      if (destino !== r.pagina) pintarResultados({ irA: destino });
+    }
   } else if (evento.key === 'Escape') {
     busqueda.value = '';
     ocultarOferta();
@@ -195,7 +297,7 @@ busqueda.addEventListener('keydown', (evento) => {
   }
 });
 
-verInactivos.addEventListener('change', pintarResultados);
+verInactivos.addEventListener('change', () => pintarResultados());
 
 async function alEnterEnBusqueda() {
   clearTimeout(temporizadorBusqueda);
@@ -205,9 +307,9 @@ async function alEnterEnBusqueda() {
     await procesarCodigo(texto);
     return;
   }
-  const filas = cuerpoResultados.querySelectorAll('tr');
-  if (filas.length === 1) abrirSegunDispositivo(filas[0].dataset.id);
-  else if (filas.length > 1) filas[0].focus();
+  const r = ultimoResultado;
+  if (r?.total === 1) abrirSegunDispositivo(r.elementos[0].id);
+  else if (r && r.total > 1) cuerpoResultados.querySelector('tr')?.focus();
 }
 
 /** Lo que teclea el escáner: abre el producto o propone crearlo. */

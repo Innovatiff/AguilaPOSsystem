@@ -32,7 +32,7 @@
       <label class="casilla"><input id="ver-inactivos" type="checkbox"> Ver inactivos</label>
       <button id="btn-nuevo" class="boton" type="button">Nuevo producto <kbd>Alt+N</kbd></button>
     </div>
-    <p class="pista"><kbd>Enter</kbd> abre · <kbd>↓</kbd> <kbd>↑</kbd> recorre la lista · <kbd>/</kbd> vuelve al buscador · <kbd>Esc</kbd> cierra</p>
+    <p class="pista"><kbd>Enter</kbd> abre · <kbd>↓</kbd> <kbd>↑</kbd> recorre la lista · <kbd>Av Pág</kbd> <kbd>Re Pág</kbd> cambian de página · <kbd>/</kbd> vuelve al buscador · <kbd>Esc</kbd> cierra</p>
     <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
 
     <div id="oferta-crear" class="mensaje mensaje--ok oferta" hidden>
@@ -49,7 +49,21 @@
       <tbody id="resultados"></tbody>
     </table>
     <p id="sin-resultados" class="nota" hidden></p>
-    <p id="recorte" class="nota" hidden></p>
+    <nav id="paginacion" class="paginacion" aria-label="Páginas de resultados" hidden>
+      <p id="paginacion-resumen" class="paginacion__resumen" aria-live="polite"></p>
+      <div id="paginacion-botones" class="paginacion__botones" hidden>
+        <button id="pag-anterior" class="boton boton--secundario boton--pequeno" type="button" data-tecla="anterior">‹ Anterior</button>
+        <span id="pag-numeros" class="paginacion__numeros"></span>
+        <button id="pag-siguiente" class="boton boton--secundario boton--pequeno" type="button" data-tecla="siguiente">Siguiente ›</button>
+      </div>
+      <label class="paginacion__tamano">Por página
+        <select id="por-pagina">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+    </nav>
   </main>
 
   <dialog id="editor" class="editor" aria-labelledby="editor-titulo">
