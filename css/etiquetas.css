@@ -238,3 +238,48 @@
     vertical-align: top;
   }
 }
+
+/* El envoltorio de cada etiqueta del lote no participa en el diseño en pantalla
+   ni en hoja carta: las etiquetas fluyen como siempre. */
+.hoja-etiquetas__pagina {
+  display: contents;
+}
+
+/* Impresora de etiquetas: la hoja mide lo que una etiqueta (ningún lado pasa
+   de 70 mm; una hoja carta mide 216 × 279). Cada etiqueta va en su propia
+   hoja y CENTRADA en ella, exactamente como en la página de prueba. La
+   Brother QL no imprime los primeros milímetros de la hoja: pegada al borde
+   superior, la línea de marca se perdía; centrada, queda a la misma
+   distancia del borde que en la prueba. Se comprueban los dos lados porque el
+   navegador evalúa la consulta con el papel tal cual lo entrega el driver
+   (32 × 62 en vertical) antes de girarlo a apaisado. */
+@media print and (max-width: 70mm) and (max-height: 70mm) {
+  .hoja-etiquetas {
+    display: block !important;
+  }
+
+  .hoja-etiquetas__pagina {
+    box-sizing: border-box;
+    display: flex;
+    width: 100%;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    break-after: page;
+    break-inside: avoid;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .hoja-etiquetas__pagina:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .hoja-etiquetas .etiqueta {
+    display: flex;
+  }
+}

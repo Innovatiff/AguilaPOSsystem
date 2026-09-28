@@ -109,6 +109,24 @@ const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.
   const paginasLote = paginasPDF(`${OUT}/lote-etiqueta.pdf`);
   ok('en la impresora de etiquetas sale exactamente una hoja por etiqueta (TAJIN lleva descriptor)', paginasLote === enVista.length, `${paginasLote} hojas para ${enVista.length} etiquetas`);
   ok('en hoja carta caben todas en una página', paginasPDF(`${OUT}/lote-carta.pdf`) === 1, `${paginasPDF(`${OUT}/lote-carta.pdf`)} páginas`);
+  // La hoja que entrega el driver de la Brother es la etiqueta completa (62 × 32 mm, apaisada):
+  // ahí cada etiqueta debe ir centrada en su hoja, como en la página de prueba.
+  await page.emulateMedia({ media: 'print' });
+  await page.pdf({ path: `${OUT}/lote-62x32.pdf`, width: '32mm', height: '62mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
+  await page.emulateMedia({ media: 'screen' });
+  ok('con la hoja real de 62 × 32 mm también sale exactamente una hoja por etiqueta', paginasPDF(`${OUT}/lote-62x32.pdf`) === enVista.length, `${paginasPDF(`${OUT}/lote-62x32.pdf`)} hojas`);
+  // Posición en la hoja: con una ventana del tamaño de la hoja (62 × 32 mm en px CSS) y medios de
+  // impresión, el diseño es el que va al papel. Se compara más abajo con la página de prueba.
+  const HOJA = { width: Math.round(62 / 25.4 * 96), height: Math.round(32 / 25.4 * 96) };
+  const posicion = async (pagina, selector) => {
+    await pagina.setViewportSize(HOJA);
+    await pagina.emulateMedia({ media: 'print' });
+    const r = await pagina.$eval(selector, (e) => { const b = e.getBoundingClientRect(); return { arriba: Math.round(b.top * 10) / 10, izquierda: Math.round(b.left * 10) / 10, alto: Math.round(b.height * 10) / 10 }; });
+    await pagina.emulateMedia({ media: 'screen' });
+    await pagina.setViewportSize({ width: 1280, height: 900 });
+    return r;
+  };
+  const enLote = await posicion(page, '#hoja .etiqueta');
 
   // Esc vuelve a la selección sin perderla; Alt+P vuelve a la vista
   await page.keyboard.press('Escape');
@@ -155,6 +173,14 @@ const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.
   await p2.emulateMedia({ media: 'print' });
   await p2.pdf({ path: `${OUT}/prueba.pdf`, width: '28.9mm', height: '58.9mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
   ok('la página de prueba imprime sus dos etiquetas en dos hojas', paginasPDF(`${OUT}/prueba.pdf`) === 2, `${paginasPDF(`${OUT}/prueba.pdf`)} hojas`);
+  await p2.pdf({ path: `${OUT}/prueba-62x32.pdf`, width: '32mm', height: '62mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
+
+  // Misma posición en la hoja que la página de prueba (verificada en la impresora):
+  // la etiqueta del lote debe quedar centrada, no pegada al borde superior.
+  const enPrueba = await posicion(p2, '.muestra .etiqueta');
+  ok('en la hoja de 62 × 32 la etiqueta del lote queda donde la de la página de prueba (centrada, no pegada arriba)',
+    Math.abs(enLote.arriba - enPrueba.arriba) <= 1 && Math.abs(enLote.izquierda - enPrueba.izquierda) <= 1 && enLote.arriba >= 4,
+    `lote ${JSON.stringify(enLote)} · prueba ${JSON.stringify(enPrueba)}`);
 
   await browser.close();
   console.log('\n=== imprimir ===');

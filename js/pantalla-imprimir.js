@@ -305,7 +305,13 @@ function mostrarVista() {
     try {
       const etiqueta = renderEtiqueta(item.producto);
       etiqueta.dataset.id = item.producto.id;
-      hoja.append(etiqueta);
+      // En la impresora de etiquetas cada envoltorio es una hoja con la etiqueta
+      // centrada (como en la página de prueba); en pantalla y en hoja carta no
+      // participa en el diseño (display: contents).
+      const pagina = document.createElement('div');
+      pagina.className = 'hoja-etiquetas__pagina';
+      pagina.append(etiqueta);
+      hoja.append(pagina);
     } catch (error) {
       fallidas += 1;
       console.error('Etiqueta no generada', item.producto.id, error);
