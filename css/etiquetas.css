@@ -215,6 +215,8 @@
   .etiqueta {
     width: min(var(--ancho-util), 100vw);
     height: min(var(--alto-util), 100vh);
+    margin: 0 !important;
+    overflow: hidden !important;
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -224,8 +226,9 @@
      muchas. Sin márgenes ni espacios: cualquier separación podría dejar
      una etiqueta fuera de la hoja de 62 × 32. */
   .hoja-etiquetas {
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
     font-size: 0;
     line-height: 0;
   }

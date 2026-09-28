@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const fs = require('node:fs');
 const c = require('./comun.cjs');
 const OUT = c.SALIDA;
 const BASE = 'http://127.0.0.1:5500';
@@ -34,7 +35,7 @@ async function sembrar() {
   await c.sembrarAdmin();
   await rest('PATCH', 'stores/talbot', campos({ nombre: 'Águila Talbot', direccion: 'Talbot St', activo: true }));
   await rest('PATCH', 'stores/erie', campos({ nombre: 'Águila Erie', direccion: 'Erie St', activo: true }));
-  await rest('PATCH', 'products/p-tajin', campos(producto({ upc: '633148100013', nombre: 'CLASICO', marca: 'TAJIN', presentacion: '142g', precioCentavos: 549, tiendas: ['talbot', 'erie'], tokensBusqueda: ['cla', 'clas', 'clasi', 'clasic', 'clasico', 'taj', 'taji', 'tajin'] })));
+  await rest('PATCH', 'products/p-tajin', campos(producto({ upc: '633148100013', nombre: 'CLASICO', marca: 'TAJIN', descriptor: 'Chile, limón y sal · sin gluten', presentacion: '142g', precioCentavos: 549, tiendas: ['talbot', 'erie'], tokensBusqueda: ['cla', 'clas', 'clasi', 'clasic', 'clasico', 'taj', 'taji', 'tajin'] })));
   await rest('PATCH', 'products/p-chile', campos(producto({ nombre: 'CHILE GUAJILLO', precioCentavos: 500, claseFiscal: 'tasaCero', tiendas: ['talbot'], ultimoPrecioImpresoCentavos: 500, fechaUltimaImpresion: '2026-09-20', tokensBusqueda: ['chi', 'chil', 'chile', 'gua', 'guaj', 'guaji', 'guajil', 'guajill', 'guajillo'] })));
   await rest('PATCH', 'products/p-jumex', campos(producto({ upc: '036000291452', nombre: 'MANGO', marca: 'JUMEX', presentacion: '335mL', precioCentavos: 199, tiendas: ['erie'], ultimoPrecioImpresoCentavos: 179, fechaUltimaImpresion: '2026-09-01', tokensBusqueda: ['man', 'mang', 'mango', 'jum', 'jume', 'jumex'] })));
   await rest('PATCH', 'products/p-viejo', campos(producto({ nombre: 'DESCONTINUADO', precioCentavos: 300, tiendas: ['talbot'], activo: false, tokensBusqueda: ['des'] })));
@@ -102,6 +103,12 @@ const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.
   await page.pdf({ path: `${OUT}/lote-etiqueta.pdf`, width: '28.9mm', height: '58.9mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
   await page.pdf({ path: `${OUT}/lote-carta.pdf`, width: '215.9mm', height: '279.4mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
   await page.emulateMedia({ media: 'screen' });
+  // Páginas del PDF (objetos /Type /Page): una etiqueta nunca debe partirse en dos hojas,
+  // ni siquiera con descriptor, ni con las reglas de pantalla angosta (la hoja mide 59 mm).
+  const paginasPDF = (ruta) => (fs.readFileSync(ruta).toString('latin1').match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
+  const paginasLote = paginasPDF(`${OUT}/lote-etiqueta.pdf`);
+  ok('en la impresora de etiquetas sale exactamente una hoja por etiqueta (TAJIN lleva descriptor)', paginasLote === enVista.length, `${paginasLote} hojas para ${enVista.length} etiquetas`);
+  ok('en hoja carta caben todas en una página', paginasPDF(`${OUT}/lote-carta.pdf`) === 1, `${paginasPDF(`${OUT}/lote-carta.pdf`)} páginas`);
 
   // Esc vuelve a la selección sin perderla; Alt+P vuelve a la vista
   await page.keyboard.press('Escape');
@@ -147,6 +154,7 @@ const hoy = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.
   await p2.waitForFunction(() => document.querySelectorAll('.etiqueta').length === 2);
   await p2.emulateMedia({ media: 'print' });
   await p2.pdf({ path: `${OUT}/prueba.pdf`, width: '28.9mm', height: '58.9mm', margin: { top: 0, right: 0, bottom: 0, left: 0 }, preferCSSPageSize: true });
+  ok('la página de prueba imprime sus dos etiquetas en dos hojas', paginasPDF(`${OUT}/prueba.pdf`) === 2, `${paginasPDF(`${OUT}/prueba.pdf`)} hojas`);
 
   await browser.close();
   console.log('\n=== imprimir ===');

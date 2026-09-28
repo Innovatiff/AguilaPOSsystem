@@ -204,9 +204,18 @@ main {
     background: #fff;
   }
 
+  /* !important: ninguna regla de pantalla (ni las de teléfonos, que también
+     coinciden con el ancho de una etiqueta) puede desplazar la etiqueta. */
   main {
-    max-width: none;
-    padding: 0;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .encabezado,
+  .menu-boton,
+  .encabezado__panel {
+    display: none !important;
   }
 
   .no-imprimir {
@@ -803,7 +812,7 @@ fieldset.campo label {
   margin: 0 0 0 auto;
 }
 
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .editor__cuerpo {
     grid-template-columns: 1fr;
   }
@@ -1109,7 +1118,7 @@ fieldset.campo label {
   color: var(--color-texto-suave);
 }
 
-@media (max-width: 900px) {
+@media screen and (max-width: 900px) {
   .captura__cuerpo {
     grid-template-columns: 1fr;
   }
@@ -1450,7 +1459,7 @@ dialog.escaner[open] {
 /* =====================================================================
    Teléfonos y pantallas angostas
    ===================================================================== */
-@media (max-width: 720px) {
+@media screen and (max-width: 720px) {
   main {
     padding: 14px 16px calc(24px + env(safe-area-inset-bottom));
   }
