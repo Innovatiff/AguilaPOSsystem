@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { modulosUPCA, modulosEAN13, modulosGTIN, normalizarUPC, tipoDeCodigo, digitoVerificadorUPCA, digitoVerificadorGTIN, MODULOS_UPCA, MODULOS_CODIGO } from '../../js/upca.js';
+import { modulosUPCA, modulosEAN13, modulosGTIN, normalizarUPC, tipoDeCodigo, digitoVerificadorUPCA, digitoVerificadorGTIN, expandirUPCE, MODULOS_UPCA, MODULOS_CODIGO } from '../../js/upca.js';
 
 // Anchos (espacio, barra, espacio, barra) de cada dígito según la norma UPC.
 const ANCHOS = { 0: '3211', 1: '2221', 2: '2122', 3: '1411', 4: '1132', 5: '1231', 6: '1114', 7: '1312', 8: '1213', 9: '3112' };
@@ -16,7 +16,7 @@ describe('UPC-A', () => {
     for (const malo of ['63314810001', '633148100014', '7501234567890', '75012345678931', 'abc', '', null]) {
       assert.throws(() => normalizarUPC(malo), `debería rechazar ${JSON.stringify(malo)}`);
     }
-    assert.throws(() => normalizarUPC('96385074'), /8 dígitos/);
+    assert.throws(() => normalizarUPC('96385074'), /EAN-8/);
     assert.throws(() => normalizarUPC('633148100014'), /verificador incorrecto/);
   });
   it('codifica 95 módulos con guardas y los patrones L/R de la norma', () => {
@@ -87,5 +87,20 @@ describe('EAN-13', () => {
     assert.equal(modulosGTIN('4006381333931'), modulosEAN13('4006381333931'));
     assert.throws(() => modulosUPCA('4006381333931'), /EAN-13/);
     assert.equal(MODULOS_UPCA, MODULOS_CODIGO);
+  });
+});
+
+describe('UPC-E', () => {
+  it('expande los cuatro casos de compresión al UPC-A de 12 dígitos', () => {
+    assert.equal(expandirUPCE('01234565'), '012345000065', 'último dígito 5-9: cinco de fabricante y el propio dígito');
+    assert.equal(expandirUPCE('06742708'), '067000004278', 'último dígito 0-2: dos de fabricante + ese dígito (Coca-Cola 067000)');
+    assert.equal(expandirUPCE('01234531'), '012300000451', 'último dígito 3');
+    assert.equal(expandirUPCE('01234548'), '012340000058', 'último dígito 4');
+    assert.throws(() => expandirUPCE('96385074'), /no es un UPC-E/);
+  });
+  it('normalizarUPC acepta un UPC-E con verificador correcto y rechaza uno alterado', () => {
+    assert.equal(normalizarUPC('06742708'), '067000004278');
+    assert.equal(normalizarUPC('01234565'), '012345000065');
+    assert.throws(() => normalizarUPC('06742709'), /verificador incorrecto/);
   });
 });

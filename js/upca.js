@@ -7,7 +7,9 @@
  *   EAN-13 · 13 dígitos · igual, salvo que el primer dígito no se codifica en
  *            barras: fija la paridad (L o G) de los seis dígitos de la izquierda.
  * Un EAN-13 que empieza por 0 es la forma de 13 dígitos de un UPC-A: se
- * normaliza a sus 12 dígitos. Los de 8 dígitos (EAN-8, UPC-E) no se admiten.
+ * normaliza a sus 12 dígitos. Un UPC-E (8 dígitos que empiezan por 0 o 1, la
+ * forma comprimida de un UPC-A) se expande a sus 12 dígitos. Los EAN-8 no se
+ * admiten.
  *
  * Sin dependencias. Sigue las GS1 General Specifications: las guardas bajan
  * 5 módulos más que las barras de los dígitos y los dígitos legibles van
@@ -99,7 +101,10 @@ export function normalizarUPC(entrada) {
   let digitos = texto;
   if (digitos.length === 13 && digitos[0] === '0') digitos = digitos.slice(1); // forma EAN-13 de un UPC-A
   if (digitos.length === 8) {
-    throw new Error(`"${texto}" es un código de 8 dígitos (EAN-8 o UPC-E), que todavía no se admite`);
+    if (digitos[0] !== '0' && digitos[0] !== '1') {
+      throw new Error(`"${texto}" es un EAN-8, que todavía no se admite`);
+    }
+    digitos = expandirUPCE(digitos); // UPC-E: forma comprimida de un UPC-A
   }
   if (digitos.length !== 12 && digitos.length !== 13) {
     throw new Error(`El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13); "${texto}" tiene ${texto.length}`);
@@ -111,7 +116,28 @@ export function normalizarUPC(entrada) {
   return digitos;
 }
 
-/** Alias con nombre neutro: el campo se sigue llamando upc, pero admite EAN-13. */
+/**
+ * Expande un UPC-E (8 dígitos: sistema 0 o 1, seis de datos y verificador)
+ * al UPC-A de 12 dígitos que comprime. El verificador se conserva y se
+ * comprueba después sobre el código expandido.
+ * @param {string} ocho
+ * @returns {string} 12 dígitos
+ */
+export function expandirUPCE(ocho) {
+  if (!/^[01]\d{7}$/.test(ocho)) throw new Error(`"${ocho}" no es un UPC-E (8 dígitos que empiezan por 0 o 1)`);
+  const sistema = ocho[0];
+  const d = ocho.slice(1, 7);
+  const verificador = ocho[7];
+  const ultimo = d[5];
+  let cuerpo;
+  if (ultimo === '0' || ultimo === '1' || ultimo === '2') cuerpo = `${d.slice(0, 2)}${ultimo}0000${d.slice(2, 5)}`;
+  else if (ultimo === '3') cuerpo = `${d.slice(0, 3)}00000${d.slice(3, 5)}`;
+  else if (ultimo === '4') cuerpo = `${d.slice(0, 4)}00000${d[4]}`;
+  else cuerpo = `${d.slice(0, 5)}0000${ultimo}`;
+  return `${sistema}${cuerpo}${verificador}`;
+}
+
+/** Alias con nombre neutro: el campo se sigue llamando upc, pero admite EAN-13 y UPC-E. */
 export const normalizarCodigo = normalizarUPC;
 
 /** 'UPC-A' o 'EAN-13' según la forma canónica del código. */
