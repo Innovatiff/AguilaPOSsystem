@@ -196,6 +196,61 @@ you confirm. Writes go in batches of 12 products (a price change costs one
 rule read and Firestore allows 20 per batch, see
 `pruebas/reglas/limites.test.mjs`); price changes carry their history entry.
 
+## Migrating a BestPOS catalog
+
+`herramientas/convertir-bestpos.mjs` turns the BestPOS "Inventory List"
+report (open it in Excel, save as CSV: fields separated by `;`) into the CSV
+that Gestión → Importar / exportar accepts, plus a review file with every
+decision. No dependencies: it reuses `js/upca.js` and `js/csv.js`.
+
+```
+node herramientas/convertir-bestpos.mjs Rapport.csv --tienda=<store id> --salida=migracion
+```
+
+`--tienda` is the store identifier as shown in Gestión → Tiendas (without it
+the products are imported with no store). The output folder `migracion/` is
+gitignored because it holds real store data. It writes:
+
+- `importar-bestpos-<store>.csv`: columns `upc, plu, nombre, marca,
+  presentacion, precioCentavos, unidadVenta, claseFiscal, tiendas`. It is
+  validated with `planificarImportacion` before being written, so the app
+  imports it with zero errors. Do not open and re-save it in Excel (leading
+  zeros of UPCs are lost); import it as it is.
+- `revision-bestpos-<store>.csv`: one row per report line with the original
+  code and description, what was made of them, the proposed tax class with
+  its reason, and a `revisar` flag for anything worth a human look.
+- `resumen-bestpos-<store>.txt`: counts.
+
+What it does with each row:
+
+- **Codes**: UPC-A (12) and EAN-13 (13) with a verified check digit; UPC-E
+  (8, starting with 0 or 1) expanded; 4–5 digits become the `plu` (3 digits
+  are padded, e.g. `100` → `0100`); a GS1 read `(01)` + GTIN-14 (16 digits
+  starting with `01`, produce stickers) yields the EAN-13 inside. Invalid
+  codes do not block the product: it is imported without a code and flagged.
+  A 15–16 digit code is a scanner double read: when the same product exists
+  with its full code the row is dropped as a duplicate; when the description
+  belongs to another product, that product is imported without a code and
+  flagged to be scanned in the app.
+- **Description**: the trailing size becomes `presentacion` (`591ml`,
+  `2 Lbs (907g)`, `6packs 406g`…), a known or frequent leading brand becomes
+  `marca`, the rest is `nombre`; when the whole name is the brand
+  (`Coca Cola 2l`) it stays as the name. A second code glued to a description
+  is removed.
+- **Price**: `#1 Price` in cents. Rows without a price or at $0.00 are
+  excluded and listed. Prices at or above $100 are flagged.
+- **Tax class**: the report has no tax data, so it is proposed from keywords
+  (non-food, carbonated/energy/sports drinks, candy and snacks, single-serve
+  drinks under 600 mL → `gravado`; the rest → `tasaCero`) and every proposal
+  shows its reason in the review file. Check the flagged ones before
+  importing, or fix them in the app afterwards.
+- Everything is imported active, sold by piece, in the given store.
+
+Suggested flow: import a handful of rows first (cut the import file after
+the header), print a tag, scan it, then import the rest. The importer
+updates a product whose `upc` already exists, so re-running an import is
+safe.
+
 ## Scan-and-add (step 5)
 
 `captura.html` is the shelf-walking loop, keyboard only. The UPC field is

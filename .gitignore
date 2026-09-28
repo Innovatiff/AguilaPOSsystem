@@ -14,3 +14,6 @@ Thumbs.db
 
 # Capturas y archivos de las pruebas de extremo a extremo
 pruebas/e2e/salida/
+
+# Salidas de herramientas/convertir-bestpos.mjs (datos reales de la tienda)
+migracion/
