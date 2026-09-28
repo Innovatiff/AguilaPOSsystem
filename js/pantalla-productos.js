@@ -10,7 +10,7 @@ import {
   crearProducto, actualizarProducto, esperarConfirmacion,
 } from './productos.js';
 import { coincideBusqueda, diferenciasProducto, validarProducto, armarProducto, pareceUPC } from './esquema.js';
-import { normalizarUPC } from './upca.js';
+import { normalizarUPC, tipoDeCodigo } from './upca.js';
 import { formatearPrecio, indicadorFiscal, centavosDesdeTexto, textoDesdeCentavos } from './precios.js';
 import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
 import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
@@ -728,7 +728,7 @@ function pintarDetalle(p) {
   }
   const datos = $('detalle-datos');
   datos.replaceChildren();
-  filaFicha(datos, 'UPC', p.upc ?? 'Sin UPC');
+  filaFicha(datos, 'Código', p.upc ? `${p.upc} · ${tipoDeCodigo(p.upc)}` : 'Sin código de barras');
   if (p.plu) filaFicha(datos, 'PLU', p.plu);
   filaFicha(datos, 'Clase fiscal', p.claseFiscal === 'gravado' ? 'Gravado (+Tx)' : 'Tasa cero');
   filaFicha(datos, 'Unidad', p.unidadVenta === 'peso' ? 'Por peso' : 'Por pieza');

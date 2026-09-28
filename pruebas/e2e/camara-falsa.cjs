@@ -9,15 +9,15 @@ const { BASE } = require('./comun.cjs');
 
 /**
  * @param {import('playwright').Browser} browser navegador ya abierto (sin cámara falsa)
- * @param {string} upc 12 dígitos
+ * @param {string} upc 12 dígitos (UPC-A) o 13 (EAN-13)
  * @param {string} ruta archivo .y4m de salida
  */
 async function generarVideoUPC(browser, upc, ruta, { ancho = 640, alto = 480, cuadros = 2 } = {}) {
   const page = await browser.newPage();
   await page.goto(`${BASE}/prueba-etiquetas.html`, { waitUntil: 'domcontentloaded' });
   const gris = await page.evaluate(async ({ upc, ancho, alto }) => {
-    const { modulosUPCA } = await import('./js/upca.js');
-    const modulos = [...modulosUPCA(upc)].map(Number);
+    const { modulosGTIN } = await import('./js/upca.js');
+    const modulos = [...modulosGTIN(upc)].map(Number);
     const lienzo = document.createElement('canvas');
     lienzo.width = ancho;
     lienzo.height = alto;

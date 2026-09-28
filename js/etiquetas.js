@@ -2,7 +2,7 @@
  * Etiquetas de anaquel: elección de plantilla, render y ajuste de textos.
  * Las medidas físicas viven en css/etiquetas.css (variables :root, en mm).
  */
-import { svgUPCA } from './upca.js';
+import { svgCodigoBarras } from './upca.js';
 import { formatearPrecio, indicadorFiscal } from './precios.js';
 
 export const PLANTILLA = Object.freeze({
@@ -93,7 +93,7 @@ export function renderEtiqueta(producto) {
     // 4. cuerpo: código a la izquierda, presentación y precio a la derecha
     const cuerpo = crear('div', 'etiqueta__cuerpo');
     const codigo = crear('div', 'etiqueta__codigo');
-    codigo.append(svgUPCA(producto.upc, medidasCodigoBarras()));
+    codigo.append(svgCodigoBarras(producto.upc, medidasCodigoBarras()));
     const derecha = crear('div', 'etiqueta__derecha');
     derecha.append(crear('div', 'etiqueta__presentacion ajustable', producto.presentacion ?? ''));
     derecha.append(nodoPrecio(producto));

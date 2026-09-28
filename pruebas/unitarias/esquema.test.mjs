@@ -64,7 +64,9 @@ describe('validarProducto', () => {
     assert.match(validarProducto({ ...productoValido(), precioPorKgCentavos: 100 }).join(' '), /no lleva precio por kilo/);
   });
   it('valida UPC, PLU, clase fiscal y fecha de impresión', () => {
-    assert.match(validarProducto({ ...productoValido(), upc: '12345' }).join(' '), /UPC/);
+    assert.match(validarProducto({ ...productoValido(), upc: '12345' }).join(' '), /UPC-A/);
+    assert.deepEqual(validarProducto({ ...productoValido(), upc: '7501234567893' }), [], 'EAN-13 de 13 dígitos');
+    assert.match(validarProducto({ ...productoValido(), upc: '0633148100013' }).join(' '), /UPC-A/, 'la forma canónica de un UPC-A son 12 dígitos');
     assert.match(validarProducto({ ...productoValido(), plu: '12' }).join(' '), /PLU/);
     assert.match(validarProducto({ ...productoValido(), claseFiscal: 'exento' }).join(' '), /clase fiscal/);
     assert.match(validarProducto({ ...productoValido(), fechaUltimaImpresion: '24/09/2026' }).join(' '), /YYYY-MM-DD/);

@@ -13,12 +13,14 @@ const { generarVideoUPC, argumentosCamaraFalsa } = require('./camara-falsa.cjs')
   await c.sembrarTiendas();
   await c.sembrarEmpleadaCodigo();
   await c.sembrarCatalogoDemo();
+  await c.sembrarProducto('p-valentina', { upc: '7501234567893', nombre: 'SALSA PICANTE', marca: 'VALENTINA', presentacion: '370mL', precioCentavos: 349, tiendas: ['talbot', 'erie'], tokensBusqueda: c.tokens('SALSA PICANTE', 'VALENTINA') });
   const erroresTotales = [];
 
   // videos para la cámara falsa: un UPC del catálogo y otro que no existe
   const generador = await c.abrirNavegador();
   const videoTajin = await generarVideoUPC(generador, '633148100013', path.join(c.SALIDA, 'camara-tajin.y4m'));
   const videoNuevo = await generarVideoUPC(generador, '036000291452', path.join(c.SALIDA, 'camara-nuevo.y4m'));
+  const videoEAN = await generarVideoUPC(generador, '7501234567893', path.join(c.SALIDA, 'camara-ean13.y4m'));
   await generador.close();
 
   // ---- 1) teléfono con la cámara apuntando a TAJIN
@@ -46,7 +48,7 @@ const { generarVideoUPC, argumentosCamaraFalsa } = require('./camara-falsa.cjs')
   await page.click('#resultados tr:has-text("CLASICO")');
   await page.waitForSelector('#detalle[open]');
   const detalle = c.texto(await page.innerText('#detalle'));
-  v.ok('tocar un producto abre la ficha de consulta con precio grande, impuesto, UPC, tiendas y etiqueta', /CLASICO.*\$4\.99.*\+Tx.*UPC\s*633148100013.*Águila Talbot, Águila Erie/.test(detalle) && (await page.$$('#detalle-etiqueta .etiqueta')).length === 1, detalle.slice(0, 200));
+  v.ok('tocar un producto abre la ficha de consulta con precio grande, impuesto, UPC, tiendas y etiqueta', /CLASICO.*\$4\.99.*\+Tx.*Código\s*633148100013 · UPC-A.*Águila Talbot, Águila Erie/.test(detalle) && (await page.$$('#detalle-etiqueta .etiqueta')).length === 1, detalle.slice(0, 200));
   v.ok('la ficha no muestra el aviso de inactivo para un producto activo', !/Producto inactivo/.test(detalle));
   v.ok('la ficha ocupa toda la pantalla del teléfono', await page.$eval('#detalle', (d) => Math.round(d.getBoundingClientRect().width) === window.innerWidth));
   v.ok('la ficha avisa que la etiqueta está pendiente (nunca impresa)', /nunca se ha impreso/.test(detalle));
@@ -97,6 +99,22 @@ const { generarVideoUPC, argumentosCamaraFalsa } = require('./camara-falsa.cjs')
   let creado = null;
   for (let i = 0; i < 20 && !creado; i += 1) { const todos = await c.leerColeccion('products'); creado = [...todos.values()].find((p) => p.upc === '036000291452') ?? null; if (!creado) await new Promise((r) => setTimeout(r, 300)); }
   v.ok('el producto creado desde el teléfono queda firmado con el código de la empleada', creado?.nombre === 'MANGO' && creado.actualizadoPor === c.EMPLEADA.codigo, JSON.stringify(creado && { nombre: creado.nombre, por: creado.actualizadoPor }));
+  erroresTotales.push(...errores);
+  await ctx.close();
+  await browser.close();
+
+  // ---- 3) teléfono con la cámara apuntando a un EAN-13 (producto mexicano, prefijo 750)
+  browser = await c.abrirNavegador({ args: argumentosCamaraFalsa(videoEAN) });
+  ({ ctx, page, errores } = await c.nuevaPagina(browser, { movil: true, permissions: ['camera'] }));
+  await c.entrar(page, c.EMPLEADA.codigo, c.EMPLEADA.nip);
+  await page.goto(`${c.BASE}/productos.html`);
+  await page.waitForSelector('#contenido:not([hidden])');
+  await page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
+  await page.click('#btn-escanear');
+  await page.waitForSelector('#detalle[open]', { timeout: 30000 });
+  const detalleEAN = c.texto(await page.innerText('#detalle'));
+  v.ok('la cámara lee un EAN-13 (750…) y abre su ficha; la etiqueta lleva código de barras EAN-13', /SALSA PICANTE.*\$3\.49.*7501234567893 · EAN-13/.test(detalleEAN) && (await page.$$('#detalle-etiqueta svg.ean13')).length === 1, detalleEAN.slice(0, 160));
+  await page.screenshot({ path: `${c.SALIDA}/movil-detalle-ean13.png` });
   erroresTotales.push(...errores);
   await ctx.close();
   await browser.close();

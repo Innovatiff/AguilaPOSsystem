@@ -156,6 +156,18 @@ Keyboard: `Enter` opens, `↓`/`↑` move through results, `/` returns to the
 search box, `Alt+N` new product, `Esc` closes. In the editor `Enter` saves and
 `Enter` inside the UPC field just moves on, so a scan there does not save.
 
+## Barcodes
+
+The `upc` field holds a GTIN in canonical form: 12 digits for UPC-A, 13 digits
+for EAN-13 (Mexican and Central American products start with 750, 740–745…).
+A 13-digit code starting with 0 is the EAN-13 form of a UPC-A and is stored as
+its 12 digits. Check digits are verified everywhere a code enters: the USB
+scanner, the phone camera, the editor and the CSV import. Tags render both
+symbols with the same 95-module width; the encoder lives in `js/upca.js` and
+its output is verified against an independent decoder in the phone scenario.
+Eight-digit codes (EAN-8, UPC-E) are not supported yet and are refused with a
+clear message.
+
 ## CSV import and export (step 6)
 
 `gestion/datos.html` (admins, inside Gestión) exports the whole catalog and imports a CSV back.

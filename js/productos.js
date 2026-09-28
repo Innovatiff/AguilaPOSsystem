@@ -57,7 +57,7 @@ export function observarTiendas(alCambiar, alFallar) {
   );
 }
 
-/** Productos con ese UPC (normalizado a 12 dígitos). Debería haber 0 o 1. */
+/** Productos con ese código (forma canónica: 12 dígitos UPC-A o 13 EAN-13). Debería haber 0 o 1. */
 export async function buscarPorUPC(upc) {
   const codigo = normalizarUPC(upc);
   const resultado = await getDocs(query(productos(), where('upc', '==', codigo), limit(2)));

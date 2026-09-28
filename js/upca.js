@@ -1,12 +1,17 @@
 /**
- * UPC-A → SVG en línea con medidas físicas en milímetros.
+ * Códigos de barras de producto (GTIN) → SVG en línea con medidas físicas en mm.
  *
- * Sin dependencias. Sigue las GS1 General Specifications:
- *   guarda 101 · 6 dígitos en codificación L · guarda central 01010 ·
- *   6 dígitos en codificación R · guarda 101  =  95 módulos.
- * Las guardas bajan 5 módulos más que las barras de los dígitos y los
- * dígitos legibles van debajo: el primero a la izquierda del símbolo,
- * cinco bajo cada mitad y el verificador a la derecha.
+ * Símbolos admitidos, ambos de 95 módulos (ocupan lo mismo en la etiqueta):
+ *   UPC-A  · 12 dígitos · guarda 101 · 6 dígitos en L · guarda central 01010 ·
+ *            6 dígitos en R · guarda 101.
+ *   EAN-13 · 13 dígitos · igual, salvo que el primer dígito no se codifica en
+ *            barras: fija la paridad (L o G) de los seis dígitos de la izquierda.
+ * Un EAN-13 que empieza por 0 es la forma de 13 dígitos de un UPC-A: se
+ * normaliza a sus 12 dígitos. Los de 8 dígitos (EAN-8, UPC-E) no se admiten.
+ *
+ * Sin dependencias. Sigue las GS1 General Specifications: las guardas bajan
+ * 5 módulos más que las barras de los dígitos y los dígitos legibles van
+ * debajo, el primero a la izquierda del símbolo.
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -22,16 +27,48 @@ const CODIGOS_R = Object.freeze(
   CODIGOS_L.map((patron) => patron.replace(/[01]/g, (bit) => (bit === '1' ? '0' : '1'))),
 );
 
+/** Patrones G (paridad par): los R leídos al revés. Solo los usa el EAN-13. */
+const CODIGOS_G = Object.freeze(CODIGOS_R.map((patron) => [...patron].reverse().join('')));
+
+/** EAN-13: paridad de los seis dígitos de la izquierda según el primer dígito. */
+const PARIDAD_EAN13 = Object.freeze([
+  'LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG',
+  'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL',
+]);
+
 const GUARDA_LATERAL = '101';
 const GUARDA_CENTRAL = '01010';
 
-export const MODULOS_UPCA = 95;
+export const MODULOS_CODIGO = 95;
+/** @deprecated Mismo valor que MODULOS_CODIGO; se conserva por compatibilidad. */
+export const MODULOS_UPCA = MODULOS_CODIGO;
 export const QUIET_ZONE_MINIMA_MODULOS = 9;
 const EXTENSION_GUARDAS_MODULOS = 5;
+
+export const TIPO_CODIGO = Object.freeze({ UPCA: 'UPC-A', EAN13: 'EAN-13' });
 
 /** Módulos ocupados por guardas (inicio 0-2, centro 45-49, fin 92-94). */
 function esGuarda(indice) {
   return indice < 3 || (indice >= 45 && indice < 50) || indice >= 92;
+}
+
+/**
+ * Dígito verificador GTIN (módulo 10, pesos 3 y 1 desde la derecha) del
+ * cuerpo de un código: 11 dígitos para UPC-A, 12 para EAN-13.
+ * @param {string} cuerpo
+ * @returns {number}
+ */
+export function digitoVerificadorGTIN(cuerpo) {
+  if (!/^\d{11,12}$/.test(cuerpo)) {
+    throw new Error('Se necesitan 11 dígitos (UPC-A) o 12 (EAN-13) para calcular el verificador');
+  }
+  const n = cuerpo.length;
+  let suma = 0;
+  for (let i = 0; i < n; i += 1) {
+    const digito = cuerpo.charCodeAt(i) - 48;
+    suma += (n - 1 - i) % 2 === 0 ? digito * 3 : digito;
+  }
+  return (10 - (suma % 10)) % 10;
 }
 
 /**
@@ -43,21 +80,16 @@ export function digitoVerificadorUPCA(once) {
   if (!/^\d{11}$/.test(once)) {
     throw new Error('Se necesitan exactamente 11 dígitos para calcular el verificador');
   }
-  let suma = 0;
-  for (let i = 0; i < 11; i += 1) {
-    const digito = once.charCodeAt(i) - 48;
-    suma += i % 2 === 0 ? digito * 3 : digito;
-  }
-  return (10 - (suma % 10)) % 10;
+  return digitoVerificadorGTIN(once);
 }
 
 /**
- * Valida y normaliza un UPC-A a sus 12 dígitos.
- * Acepta 12 dígitos, o 13 con cero inicial (forma EAN-13 de un UPC-A).
+ * Valida y normaliza un código de producto a su forma canónica:
+ * 12 dígitos si es UPC-A (también un EAN-13 que empiece por 0), 13 si es EAN-13.
  * No completa códigos de 11 dígitos: un dígito perdido al teclear no debe
  * convertirse en silencio en otro código válido.
  * @param {unknown} entrada
- * @returns {string} 12 dígitos
+ * @returns {string} 12 o 13 dígitos
  */
 export function normalizarUPC(entrada) {
   const texto = String(entrada ?? '').replace(/\s+/g, '');
@@ -65,35 +97,67 @@ export function normalizarUPC(entrada) {
   if (!/^\d+$/.test(texto)) throw new Error(`El UPC "${texto}" contiene caracteres que no son dígitos`);
 
   let digitos = texto;
-  if (digitos.length === 13) {
-    if (digitos[0] !== '0') {
-      throw new Error(`"${texto}" es un EAN-13, no un UPC-A (todavía no se imprime)`);
-    }
-    digitos = digitos.slice(1);
+  if (digitos.length === 13 && digitos[0] === '0') digitos = digitos.slice(1); // forma EAN-13 de un UPC-A
+  if (digitos.length === 8) {
+    throw new Error(`"${texto}" es un código de 8 dígitos (EAN-8 o UPC-E), que todavía no se admite`);
   }
-  if (digitos.length !== 12) {
-    throw new Error(`El UPC-A debe tener 12 dígitos; "${texto}" tiene ${texto.length}`);
+  if (digitos.length !== 12 && digitos.length !== 13) {
+    throw new Error(`El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13); "${texto}" tiene ${texto.length}`);
   }
-  const esperado = digitoVerificadorUPCA(digitos.slice(0, 11));
-  if (esperado !== digitos.charCodeAt(11) - 48) {
+  const esperado = digitoVerificadorGTIN(digitos.slice(0, -1));
+  if (esperado !== digitos.charCodeAt(digitos.length - 1) - 48) {
     throw new Error(`Dígito verificador incorrecto en "${texto}" (debería terminar en ${esperado})`);
   }
   return digitos;
 }
 
+/** Alias con nombre neutro: el campo se sigue llamando upc, pero admite EAN-13. */
+export const normalizarCodigo = normalizarUPC;
+
+/** 'UPC-A' o 'EAN-13' según la forma canónica del código. */
+export function tipoDeCodigo(codigo) {
+  return normalizarUPC(codigo).length === 13 ? TIPO_CODIGO.EAN13 : TIPO_CODIGO.UPCA;
+}
+
 /**
  * Secuencia de 95 módulos ('1' barra, '0' espacio) de un UPC-A.
- * @param {string} upc
- * @returns {string}
+ * @param {string} upc 12 dígitos (o 13 con cero inicial)
  */
 export function modulosUPCA(upc) {
   const digitos = normalizarUPC(upc);
+  if (digitos.length !== 12) throw new Error(`"${upc}" es un EAN-13; usa modulosEAN13 o modulosGTIN`);
   let bits = GUARDA_LATERAL;
   for (let i = 0; i < 6; i += 1) bits += CODIGOS_L[digitos.charCodeAt(i) - 48];
   bits += GUARDA_CENTRAL;
   for (let i = 6; i < 12; i += 1) bits += CODIGOS_R[digitos.charCodeAt(i) - 48];
   bits += GUARDA_LATERAL;
   return bits;
+}
+
+/**
+ * Secuencia de 95 módulos de un EAN-13: el primer dígito decide la paridad
+ * (L o G) de los dígitos 2 a 7; los dígitos 8 a 13 van en R.
+ * @param {string} ean 13 dígitos que no empiezan por 0
+ */
+export function modulosEAN13(ean) {
+  const digitos = normalizarUPC(ean);
+  if (digitos.length !== 13) throw new Error(`"${ean}" es un UPC-A; usa modulosUPCA o modulosGTIN`);
+  const paridad = PARIDAD_EAN13[digitos.charCodeAt(0) - 48];
+  let bits = GUARDA_LATERAL;
+  for (let i = 1; i <= 6; i += 1) {
+    const tabla = paridad[i - 1] === 'L' ? CODIGOS_L : CODIGOS_G;
+    bits += tabla[digitos.charCodeAt(i) - 48];
+  }
+  bits += GUARDA_CENTRAL;
+  for (let i = 7; i < 13; i += 1) bits += CODIGOS_R[digitos.charCodeAt(i) - 48];
+  bits += GUARDA_LATERAL;
+  return bits;
+}
+
+/** Módulos de cualquiera de los dos símbolos, según el código. */
+export function modulosGTIN(codigo) {
+  const digitos = normalizarUPC(codigo);
+  return digitos.length === 13 ? modulosEAN13(digitos) : modulosUPCA(digitos);
 }
 
 const redondear = (valor) => Math.round(valor * 1000) / 1000;
@@ -107,9 +171,10 @@ function elementoSVG(nombre, atributos) {
 }
 
 /**
- * Genera el UPC-A como elemento <svg> con unidades físicas (mm).
+ * Genera el código de barras (UPC-A o EAN-13) como elemento <svg> con
+ * unidades físicas (mm).
  *
- * @param {string} upc  12 dígitos (o 13 con cero inicial)
+ * @param {string} codigo  12 dígitos (UPC-A) o 13 (EAN-13)
  * @param {object} medidas  todas en milímetros
  * @param {number} medidas.modulo        ancho del módulo X (0.33 = 100 %)
  * @param {number} medidas.quietZone     zona silenciosa a cada lado (≥ 9 módulos)
@@ -118,7 +183,7 @@ function elementoSVG(nombre, atributos) {
  * @param {string} [medidas.fuenteDigitos]
  * @returns {SVGSVGElement}
  */
-export function svgUPCA(upc, medidas) {
+export function svgCodigoBarras(codigo, medidas) {
   const {
     modulo,
     quietZone,
@@ -139,12 +204,13 @@ export function svgUPCA(upc, medidas) {
     );
   }
 
-  const codigo = normalizarUPC(upc);
-  const bits = modulosUPCA(codigo);
+  const digitos = normalizarUPC(codigo);
+  const tipo = digitos.length === 13 ? TIPO_CODIGO.EAN13 : TIPO_CODIGO.UPCA;
+  const bits = modulosGTIN(digitos);
   const X = modulo;
   const extensionGuardas = EXTENSION_GUARDAS_MODULOS * X;
   const lineaBase = altoBarras + extensionGuardas; // los dígitos apoyan donde acaban las guardas
-  const ancho = MODULOS_UPCA * X + 2 * quietZone;
+  const ancho = MODULOS_CODIGO * X + 2 * quietZone;
   const alto = lineaBase + tamanoDigitos * 0.15;
 
   const svg = elementoSVG('svg', {
@@ -153,9 +219,10 @@ export function svgUPCA(upc, medidas) {
     height: `${redondear(alto)}mm`,
     viewBox: `0 0 ${redondear(ancho)} ${redondear(alto)}`,
     role: 'img',
-    'aria-label': `UPC ${codigo}`,
-    class: 'upca',
-    'data-upc': codigo,
+    'aria-label': `${tipo} ${digitos}`,
+    class: `codigo-barras ${tipo === TIPO_CODIGO.EAN13 ? 'ean13' : 'upca'}`,
+    'data-upc': digitos,
+    'data-tipo': tipo,
   });
 
   // Fondo blanco explícito: el código necesita blanco real detrás.
@@ -163,14 +230,14 @@ export function svgUPCA(upc, medidas) {
 
   // Barras: se agrupan los módulos '1' consecutivos del mismo tipo en un solo rect.
   let i = 0;
-  while (i < MODULOS_UPCA) {
+  while (i < MODULOS_CODIGO) {
     if (bits[i] !== '1') {
       i += 1;
       continue;
     }
     const guarda = esGuarda(i);
     let j = i;
-    while (j < MODULOS_UPCA && bits[j] === '1' && esGuarda(j) === guarda) j += 1;
+    while (j < MODULOS_CODIGO && bits[j] === '1' && esGuarda(j) === guarda) j += 1;
     svg.append(
       elementoSVG('rect', {
         x: redondear(quietZone + i * X),
@@ -196,11 +263,23 @@ export function svgUPCA(upc, medidas) {
     texto.textContent = caracter;
     svg.append(texto);
   };
-  const celda = (42 * X) / 5; // cada mitad tiene 42 módulos para 5 dígitos
-  digito(codigo[0], quietZone - 4 * X);
-  for (let k = 0; k < 5; k += 1) digito(codigo[1 + k], quietZone + 3 * X + (k + 0.5) * celda);
-  for (let k = 0; k < 5; k += 1) digito(codigo[6 + k], quietZone + 50 * X + (k + 0.5) * celda);
-  digito(codigo[11], quietZone + MODULOS_UPCA * X + 4 * X);
+  if (tipo === TIPO_CODIGO.UPCA) {
+    // Primero y último fuera del símbolo; cinco bajo cada mitad de 42 módulos.
+    const celda = (42 * X) / 5;
+    digito(digitos[0], quietZone - 4 * X);
+    for (let k = 0; k < 5; k += 1) digito(digitos[1 + k], quietZone + 3 * X + (k + 0.5) * celda);
+    for (let k = 0; k < 5; k += 1) digito(digitos[6 + k], quietZone + 50 * X + (k + 0.5) * celda);
+    digito(digitos[11], quietZone + MODULOS_CODIGO * X + 4 * X);
+  } else {
+    // El primero fuera, a la izquierda; seis bajo cada mitad.
+    const celda = (42 * X) / 6;
+    digito(digitos[0], quietZone - 4 * X);
+    for (let k = 0; k < 6; k += 1) digito(digitos[1 + k], quietZone + 3 * X + (k + 0.5) * celda);
+    for (let k = 0; k < 6; k += 1) digito(digitos[7 + k], quietZone + 50 * X + (k + 0.5) * celda);
+  }
 
   return svg;
 }
+
+/** @deprecated Nombre anterior; genera también EAN-13. */
+export const svgUPCA = svgCodigoBarras;

@@ -65,7 +65,7 @@ equal `staff/{codigo}.cuentaVersion` after the same batch. Never deleted.
 
 | field | type | rule |
 |---|---|---|
-| upc | string \| null | exactly 12 digits (UPC-A) |
+| upc | string \| null | 12 digits (UPC-A) or 13 digits not starting with 0 (EAN-13); a 13-digit code starting with 0 is stored as its 12-digit UPC-A form |
 | plu | string \| null | 4–5 digits |
 | nombre | string, 1–80 | main tag line (reversed bar) |
 | marca | string \| null, ≤60 | tag line 1 |

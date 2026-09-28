@@ -90,7 +90,8 @@ service cloud.firestore {
     function productoValido(d) {
       return d.keys().hasAll(camposProducto())
         && d.keys().hasOnly(camposProducto())
-        && (d.upc == null || (d.upc is string && d.upc.matches('^[0-9]{12}$')))
+        // UPC-A de 12 dígitos o EAN-13 de 13 (un EAN-13 que empieza por 0 se guarda como UPC-A de 12)
+        && (d.upc == null || (d.upc is string && d.upc.matches('^([0-9]{12}|[1-9][0-9]{12})$')))
         && (d.plu == null || (d.plu is string && d.plu.matches('^[0-9]{4,5}$')))
         && esTextoNoVacio(d.nombre, 80)
         && esTextoONulo(d.marca, 60)

@@ -57,6 +57,8 @@ describe('exportación', () => {
 describe('interpretarCelda', () => {
   it('UPC: completa el cero que quita Excel y rechaza notación científica', () => {
     assert.equal(interpretarCelda('upc', '36000291452'), '036000291452');
+    assert.equal(interpretarCelda('upc', '7501234567893'), '7501234567893', 'EAN-13');
+    assert.equal(interpretarCelda('upc', '0633148100013'), '633148100013', 'EAN-13 con cero inicial = UPC-A');
     assert.throws(() => interpretarCelda('upc', '6.33148E+11'), /notación científica/);
     assert.equal(interpretarCelda('upc', ''), null);
   });

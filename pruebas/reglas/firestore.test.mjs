@@ -140,10 +140,13 @@ describe('reglas de Firestore', () => {
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { precioCentavos: -1 })));
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { precioCentavos: 0 })));
     });
-    it('rechaza UPC que no tenga 12 dígitos y acepta null', async () => {
+    it('acepta UPC-A de 12 dígitos, EAN-13 de 13 y null; rechaza otras longitudes y el EAN-13 con cero inicial', async () => {
       const db = contexto(EMPLEADA);
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '12345' })));
-      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: null })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '0633148100013' })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '75012345678931' })));
+      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '7501234567893' })));
+      await assertSucceeds(setDoc(doc(db, 'products/p3'), productoDemo(EMPLEADA, { upc: null })));
     });
     it('rechaza enumeraciones fuera de rango', async () => {
       const db = contexto(EMPLEADA);

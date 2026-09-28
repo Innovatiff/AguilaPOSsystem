@@ -37,7 +37,8 @@ export const CAMPOS_EDITABLES = Object.freeze([
   'tiendas', 'proveedor', 'activo',
 ]);
 
-const REGEX_UPC = /^[0-9]{12}$/;
+/** Forma canónica del código: 12 dígitos (UPC-A) o 13 que no empiecen por 0 (EAN-13). */
+const REGEX_UPC = /^(?:[0-9]{12}|[1-9][0-9]{12})$/;
 const REGEX_PLU = /^[0-9]{4,5}$/;
 const REGEX_FECHA_ISO = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 
@@ -177,7 +178,7 @@ export function validarProducto(p) {
   for (const clave of claves) if (!CAMPOS_PRODUCTO.includes(clave)) errores.push(`Campo no permitido: ${clave}`);
   if (errores.length > 0) return errores;
 
-  if (!(p.upc === null || (typeof p.upc === 'string' && REGEX_UPC.test(p.upc)))) errores.push('El UPC debe tener 12 dígitos o estar vacío');
+  if (!(p.upc === null || (typeof p.upc === 'string' && REGEX_UPC.test(p.upc)))) errores.push('El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13), o estar vacío');
   if (!(p.plu === null || (typeof p.plu === 'string' && REGEX_PLU.test(p.plu)))) errores.push('El PLU debe tener 4 o 5 dígitos o estar vacío');
   if (!(typeof p.nombre === 'string' && p.nombre.length > 0 && p.nombre.length <= LIMITES.nombre)) errores.push(`El nombre es obligatorio (máximo ${LIMITES.nombre} caracteres)`);
   if (!esTextoONulo(p.marca, LIMITES.marca)) errores.push(`La marca no puede superar ${LIMITES.marca} caracteres`);
