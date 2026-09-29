@@ -211,6 +211,7 @@ const MARCAS_MULTIPALABRA = [
   'las sevillanas', 'del frutal', 'el azteca', 'el caporal', 'black diamond', 'canada dry', "uncle ben's", 'uncle bens',
   'chef boyardee', "president's choice", 'robin hood', 'red vulcan', 'el sabor', 'la reina', 'dos pinos', 'el rey',
   'sol de mexico', 'la nuestra', 'la mejor', 'la tapatia', 'la tortilleria', 'el charro', 'don pepe', 'la dona', 'santa cruz', 'del molcajete',
+  'pake taxo', 'hubba bubba', 'act ii', 'life savers', 'rosa venus', 'scotch brite', 'scotch-brite', 'tia rosa', 'jelly belly', 'chao mein',
 ];
 const MARCAS = new Set([
   'gamesa', 'nestle', 'knorr', 'bimbo', 'maggi', "d'gari", 'dgari', 'jumex', 'marinela', 'cuetara', 'mccormick', 'mccormicl', 'axe',
@@ -247,6 +248,8 @@ const MARCAS = new Set([
   'electrolit', 'suerox', 'pedialyte', 'gatorade', 'powerade', 'rockstar', 'amp',
 ]);
 const GENERICAS = new Set(['chamoy', 'marias', 'maria', 'barritas', 'pinto', 'tres', 'don', 'dona', 'san', 'santa', 'mama', 'mexico', 'medi', 'chipotle', 'extra', 'mini', 'black', 'inca', 'mega', 'eddie',
+  'desodorante', 'detergente', 'cepillo', 'gelatina', 'avena', 'panque', 'michelada', 'rosa', 'scotch', 'jelly', 'popping', 'choco', 'fruti', 'act', 'emperador',
+  'pinguinos', 'chokis', 'principe', 'rancheritos', 'chocolatines', 'sazon', 'verde', 'chao', 'life', 'pake', 'wave', 'hubba', 'dulces', 'bebida', 'refresco', 'jugo',
   'la', 'el', 'los', 'las', 'de', 'del', 'con', 'sin', 'para', 'y', 'e', 'o', 'a', 'al', 'the', 'and', 'of', 'in', 'con',
   'salsa', 'salsas', 'chile', 'chiles', 'veladora', 'veladoras', 'sopa', 'sopas', 'frijol', 'frijoles', 'arroz', 'aceite', 'jabon', 'shampoo',
   'cookies', 'butter', 'corn', 'black', 'chopped', 'canela', 'comino', 'oregano', 'pimienta', 'clavo', 'semilla', 'semillas', 'hoja', 'hojas',

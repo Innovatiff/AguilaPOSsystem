@@ -257,6 +257,30 @@ the header), print a tag, scan it, then import the rest. The importer
 updates a product whose `upc` already exists, so re-running an import is
 safe.
 
+### Loading a newer report on top of an existing catalog
+
+A second export from BestPOS (new products, changed prices) should not be
+imported as is: rows without a UPC would be created again, and every
+imported column would overwrite what the staff already corrected by hand
+(brand, name, tax class, stores). `herramientas/actualizar-desde-bestpos.mjs`
+splits the new conversion into what is safe to import:
+
+```
+node herramientas/actualizar-desde-bestpos.mjs --anterior=<catalog csv> --nuevo=migracion/importar-bestpos-<store>.csv --salida=migracion --nombre=<store>
+```
+
+`--anterior` is what the catalog holds today: the export from Gestión →
+Importar / exportar (it carries `id`, so products are recognised by UPC, by
+PLU and by name, and updated by id), or, failing that, the CSV that was
+imported last time (no ids: only UPC matches count). It writes
+`crear-<store>.csv` (products missing from the catalog, all columns),
+`precios-<store>.csv` (`id` or `upc` plus `precioCentavos` for the products
+whose price changed; the import records each change in `priceHistory`) and
+`pendientes-<store>.txt` (price changes on products it could only recognise
+by PLU or name without an id, and catalog products that no longer appear in
+the report). Both CSVs are validated with `planificarImportacion` before
+being written.
+
 ## Scan-and-add (step 5)
 
 `captura.html` is the shelf-walking loop, keyboard only. The UPC field is
