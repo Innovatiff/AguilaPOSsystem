@@ -89,6 +89,15 @@ Whatever the kind, every write is signed with the person's stable **usuario**
 (the code, or the email): that is what `actualizadoPor` and the price history
 store, and the rules verify it.
 
+**Prices belong to the manager.** Only an `admin` can change the price of an
+existing product (`precioCentavos`, `precioPorKgCentavos`, and the unit of
+sale that decides which one applies). The rules reject it for everyone else,
+so it holds whatever client is used; the product editor and Captura rápida
+show those fields read-only to employees and say why. Employees still create
+products with their initial price, edit names, brands, sizes and the tax
+class, and print tags. Price history entries are therefore always written by
+an admin.
+
 First-time setup (once per Firebase project):
 
 1. Firebase console → Authentication → Sign-in method → enable **Email/Password**.

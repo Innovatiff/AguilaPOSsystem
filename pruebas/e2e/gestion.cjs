@@ -79,7 +79,9 @@ const c = require('./comun.cjs');
   await empleada.page.fill('#busqueda', 'tajin');
   await empleada.page.press('#busqueda', 'Enter');
   await empleada.page.waitForSelector('#editor[open]');
-  await empleada.page.fill('#f-precio', '5.49');
+  v.ok('la empleada ve el precio y la unidad en solo lectura, con la nota de que solo los cambia un administrador',
+    await empleada.page.$eval('#f-precio', (i) => i.readOnly) && await empleada.page.$eval('input[name="unidad"]', (i) => i.disabled) && await empleada.page.isVisible('#nota-precio'));
+  await empleada.page.fill('#f-presentacion', '142 g');
   await empleada.page.click('#btn-guardar');
   try {
     await empleada.page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
@@ -89,10 +91,8 @@ const c = require('./comun.cjs');
     throw e;
   }
   let tajin = null;
-  for (let i = 0; i < 20 && tajin?.precioCentavos !== 549; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.precioCentavos !== 549) await new Promise((r) => setTimeout(r, 300)); }
-  v.ok('el cambio de precio queda firmado con el código, no con el correo sintético', tajin?.precioCentavos === 549 && tajin.actualizadoPor === '100001', JSON.stringify({ precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
-  const historial = await c.leerColeccion('priceHistory');
-  v.ok('la entrada de historial lleva el código', historial.size === 1 && [...historial.values()][0].usuario === '100001', JSON.stringify([...historial.values()]));
+  for (let i = 0; i < 20 && tajin?.presentacion !== '142 g'; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.presentacion !== '142 g') await new Promise((r) => setTimeout(r, 300)); }
+  v.ok('la empleada guarda lo que no es precio, firmado con el código y sin tocar el precio', tajin?.presentacion === '142 g' && tajin.precioCentavos === 499 && tajin.actualizadoPor === '100001', JSON.stringify({ presentacion: tajin?.presentacion, precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
   await empleada.page.fill('#busqueda', 'tajin');
   await empleada.page.press('#busqueda', 'Enter');
   await empleada.page.waitForSelector('#editor[open]');
@@ -100,6 +100,24 @@ const c = require('./comun.cjs');
   const metaTexto = c.texto(await empleada.page.textContent('#meta'));
   v.ok('el editor muestra quién actualizó con nombre y código', /por María López \(100001\)/.test(metaTexto), metaTexto);
   await empleada.page.click('#btn-cerrar');
+
+  // ---- el precio lo cambia un admin desde el catálogo, con historial a su nombre
+  const jefe = await c.nuevaPagina(browser);
+  await c.entrar(jefe.page, c.ADMIN.correo, c.ADMIN.contrasena);
+  await jefe.page.goto(`${c.BASE}/productos.html`);
+  await jefe.page.waitForSelector('#contenido:not([hidden])');
+  await jefe.page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
+  await jefe.page.fill('#busqueda', 'tajin');
+  await jefe.page.press('#busqueda', 'Enter');
+  await jefe.page.waitForSelector('#editor[open]');
+  v.ok('el admin ve el precio editable y sin la nota', !(await jefe.page.$eval('#f-precio', (i) => i.readOnly)) && await jefe.page.isHidden('#nota-precio'));
+  await jefe.page.fill('#f-precio', '5.49');
+  await jefe.page.click('#btn-guardar');
+  await jefe.page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
+  for (let i = 0; i < 20 && tajin?.precioCentavos !== 549; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.precioCentavos !== 549) await new Promise((r) => setTimeout(r, 300)); }
+  const historial = await c.leerColeccion('priceHistory');
+  v.ok('el cambio de precio del admin queda en el historial a su nombre', tajin?.precioCentavos === 549 && historial.size === 1 && [...historial.values()][0].usuario === c.ADMIN.correo, JSON.stringify([...historial.values()]));
+  await jefe.ctx.close();
 
   // ---- restablecer NIP
   await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Restablecer NIP")');
@@ -203,7 +221,7 @@ const c = require('./comun.cjs');
   await admin.page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
   v.ok('Importar / exportar vive en Gestión y carga el catálogo', /gestion\/datos\.html/.test(admin.page.url()) && await admin.page.isVisible('#btn-exportar'));
 
-  erroresTotales.push(...admin.errores, ...empleada.errores);
+  erroresTotales.push(...admin.errores, ...empleada.errores, ...jefe.errores);
   await admin.ctx.close();
   await browser.close();
   v.terminar(erroresTotales);

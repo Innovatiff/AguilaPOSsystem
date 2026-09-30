@@ -11,7 +11,7 @@ import { armarFichaPersonal, correoDeAcceso } from '../../js/identidad.js';
 const PRODUCTOS_POR_LOTE_IMPORTACION = 12; // debe coincidir con js/productos.js
 
 setLogLevel('silent');
-const CODIGO = '100001'; // empleada por código; actualizadoPor lleva el código
+const CODIGO = '100001'; // admin por código (solo el admin cambia precios); actualizadoPor lleva el código
 const EMPLEADA = correoDeAcceso(CODIGO);
 let entorno;
 const contexto = (email) => entorno.authenticatedContext(email.replace(/[^a-z0-9]/g, '-'), { email, email_verified: true }).firestore();
@@ -31,7 +31,7 @@ describe('límites por lote', () => {
     await entorno.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.firestore();
       const ahora = Timestamp.fromMillis(1_700_000_000_000);
-      await setDoc(doc(db, `staff/${CODIGO}`), { ...armarFichaPersonal({ usuario: CODIGO, nombre: 'Ana', rol: 'empleado' }, 'admin@aguila.test'), creadoEn: ahora, actualizadoEn: ahora });
+      await setDoc(doc(db, `staff/${CODIGO}`), { ...armarFichaPersonal({ usuario: CODIGO, nombre: 'Ana', rol: 'admin' }, 'admin@aguila.test'), creadoEn: ahora, actualizadoEn: ahora });
       for (let i = 0; i < 60; i += 1) await setDoc(doc(db, `products/p${i}`), productoDemo(i));
     });
   });

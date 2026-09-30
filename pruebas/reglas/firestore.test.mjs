@@ -18,6 +18,7 @@ const ADMIN = 'admin@aguila.test'; // ficha completa, tipo correo
 const LEGADO = 'legado@aguila.test'; // ficha anterior a Gestión (solo nombre, rol, activo), admin
 const ANA = 'ana@aguila.test'; // ficha anterior a Gestión, empleada
 const EMPLEADA = correoDeAcceso('100123'); // código 100123, cuenta versión 1
+const JEFA = correoDeAcceso('100150'); // código 100150, admin
 const RENOVADA = correoDeAcceso('100130', 2); // código 100130 tras restablecer el NIP
 const CADUCA = correoDeAcceso('100130', 1); // la cuenta anterior del código 100130
 const INACTIVO = correoDeAcceso('100199');
@@ -71,6 +72,7 @@ describe('reglas de Firestore', () => {
       [`staff/${ANA}`]: { nombre: 'Ana', rol: 'empleado', activo: true },
       'staff/100123': fichaDemo({ usuario: '100123', nombre: 'María', rol: 'empleado', tienda: 'talbot' }),
       'staff/100130': fichaDemo({ usuario: '100130', nombre: 'Luis', rol: 'empleado', cuentaVersion: 2 }),
+      'staff/100150': fichaDemo({ usuario: '100150', nombre: 'Jefa', rol: 'admin', tienda: 'talbot' }),
       'staff/100199': fichaDemo({ usuario: '100199', nombre: 'Baja', rol: 'empleado', activo: false }),
       'stores/talbot': { nombre: 'Águila Talbot', direccion: 'Talbot St, Leamington', activo: true },
       'products/p1': productoDemo(ADMIN),
@@ -210,27 +212,37 @@ describe('reglas de Firestore', () => {
       return lote;
     }
 
-    it('cambiar el precio sin entrada de historial se rechaza', async () => {
-      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { precioCentavos: 549, actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
+    it('cambiar el precio sin entrada de historial se rechaza, incluso al admin', async () => {
+      await assertFails(updateDoc(doc(contexto(JEFA), 'products/p1'), { precioCentavos: 549, actualizadoEn: Timestamp.now(), actualizadoPor: '100150' }));
     });
-    it('cambiar el precio con su entrada de historial en el mismo lote se acepta y queda firmado con el código', async () => {
-      const db = contexto(EMPLEADA);
-      await assertSucceeds(lotePrecio(db, EMPLEADA).commit());
+    it('el admin cambia el precio con su entrada de historial en el mismo lote, firmado con su código', async () => {
+      const db = contexto(JEFA);
+      await assertSucceeds(lotePrecio(db, JEFA).commit());
       const producto = await getDoc(doc(db, 'products/p1'));
       assert.equal(producto.data().precioCentavos, 549);
       await entorno.withSecurityRulesDisabled(async (ctx) => {
         const entradas = await getDocs(collection(ctx.firestore(), 'priceHistory'));
-        assert.equal(entradas.docs[0].data().usuario, '100123');
+        assert.equal(entradas.docs[0].data().usuario, '100150');
       });
     });
+    it('una empleada no cambia el precio, ni con su entrada de historial: solo el admin', async () => {
+      await assertFails(lotePrecio(contexto(EMPLEADA), EMPLEADA).commit());
+      await assertFails(lotePrecio(contexto(ANA), ANA).commit());
+      await assertSucceeds(lotePrecio(contexto(ADMIN), ADMIN).commit());
+    });
+    it('una empleada tampoco cambia la unidad de venta ni el precio por kilo; el admin sí', async () => {
+      const cambio = { unidadVenta: 'peso', precioPorKgCentavos: 1099, actualizadoEn: Timestamp.now() };
+      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { ...cambio, actualizadoPor: '100123' }));
+      await assertSucceeds(updateDoc(doc(contexto(ADMIN), 'products/p1'), { ...cambio, actualizadoPor: ADMIN }));
+    });
     it('la entrada de historial debe llevar el usuario de quien escribe', async () => {
-      await assertFails(lotePrecio(contexto(EMPLEADA), EMPLEADA, { usuario: EMPLEADA }).commit());
+      await assertFails(lotePrecio(contexto(JEFA), JEFA, { usuario: EMPLEADA }).commit());
     });
     it('la entrada debe registrar el precio anterior real', async () => {
-      await assertFails(lotePrecio(contexto(EMPLEADA), EMPLEADA, { anterior: 100 }).commit());
+      await assertFails(lotePrecio(contexto(JEFA), JEFA, { anterior: 100 }).commit());
     });
     it('el id de la entrada debe ser productId_milisegundos de actualizadoEn', async () => {
-      await assertFails(lotePrecio(contexto(EMPLEADA), EMPLEADA, { idHistorial: 'p1_otro' }).commit());
+      await assertFails(lotePrecio(contexto(JEFA), JEFA, { idHistorial: 'p1_otro' }).commit());
     });
     it('no se puede escribir historial suelto, sin cambiar el producto', async () => {
       const db = contexto(EMPLEADA);
@@ -240,7 +252,7 @@ describe('reglas de Firestore', () => {
       }));
     });
     it('el historial es inmutable, incluso para el admin', async () => {
-      await assertSucceeds(lotePrecio(contexto(EMPLEADA), EMPLEADA).commit());
+      await assertSucceeds(lotePrecio(contexto(JEFA), JEFA).commit());
       let idEntrada;
       await entorno.withSecurityRulesDisabled(async (ctx) => {
         const entradas = await getDocs(collection(ctx.firestore(), 'priceHistory'));

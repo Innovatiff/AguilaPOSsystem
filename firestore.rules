@@ -16,6 +16,9 @@ rules_version = '2';
 //  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
 //    del mismo lote (batch), con el precio anterior real y el nuevo.
 //  - Nada se borra: productos y personal se desactivan; el historial es inmutable.
+//  - El precio de un producto existente (precioCentavos, precioPorKgCentavos y la
+//    unidad de venta que decide cuál manda) solo lo cambia un admin. El resto del
+//    personal crea productos con su precio inicial y edita todo lo demás.
 //  - accesos/{código} publica solo el número de versión de cuenta de un código
 //    (lo necesita la pantalla de entrada tras restablecer un NIP).
 // ---------------------------------------------------------------------
@@ -127,6 +130,14 @@ service cloud.firestore {
       return productId + '_' + string(d.actualizadoEn.toMillis());
     }
 
+    // Solo el admin cambia el precio de un producto existente (y la unidad de
+    // venta, que decide qué precio manda). El resto del personal edita lo demás.
+    function precioIntacto() {
+      return request.resource.data.precioCentavos == resource.data.precioCentavos
+        && request.resource.data.precioPorKgCentavos == resource.data.precioPorKgCentavos
+        && request.resource.data.unidadVenta == resource.data.unidadVenta;
+    }
+
     match /products/{productId} {
       allow read: if esPersonal();
 
@@ -142,6 +153,7 @@ service cloud.firestore {
         && request.resource.data.creadoEn == resource.data.creadoEn
         && request.resource.data.existencias == resource.data.existencias
         && request.resource.data.costoCentavos == resource.data.costoCentavos
+        && (precioIntacto() || esAdmin())
         && (request.resource.data.precioCentavos == resource.data.precioCentavos
             || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, request.resource.data))));
 
@@ -176,7 +188,8 @@ service cloud.firestore {
 
     match /priceHistory/{entradaId} {
       allow read: if esPersonal();
-      allow create: if esPersonal() && entradaHistorialValida(request.resource.data, entradaId);
+      // Solo el admin cambia precios, así que solo él escribe historial.
+      allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);
       allow update, delete: if false;
     }
 

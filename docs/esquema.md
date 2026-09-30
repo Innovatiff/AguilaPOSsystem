@@ -100,6 +100,12 @@ Immutable. `entradaId` = `${productId}_${fecha.toMillis()}`.
 
 ## Invariants the rules enforce
 
+**Only admins change prices.** On an existing product, `precioCentavos`,
+`precioPorKgCentavos` and `unidadVenta` must stay as they are unless the writer's
+`staff` record has `rol = admin`; `priceHistory` is written by admins only.
+Any active staff member can still create a product with its initial price and
+edit the other fields.
+
 **Every price change carries its history entry, atomically.** A product update
 that changes `precioCentavos` is accepted only if a `priceHistory` document with
 ID `${productId}_${actualizadoEn.toMillis()}` exists after the write. The history

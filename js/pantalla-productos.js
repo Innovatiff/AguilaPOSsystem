@@ -19,6 +19,7 @@ import { paginar, ventanaDePaginas, tamanoDePagina } from './paginacion.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'productos.html' });
+const esAdmin = personal.rol === 'admin';
 
 const $ = (id) => document.getElementById(id);
 const busqueda = $('busqueda');
@@ -435,6 +436,15 @@ function llenarFormulario(p) {
   actualizarUnidad();
 }
 
+/** Solo un administrador cambia el precio (y la unidad de venta) de un producto existente; los demás lo ven en solo lectura. */
+const CAMPOS_PRECIO = ['precioCentavos', 'precioPorKgCentavos', 'unidadVenta'];
+function bloquearPrecio(bloqueado) {
+  $('f-precio').readOnly = bloqueado;
+  $('f-precio-kg').readOnly = bloqueado;
+  for (const radio of form.querySelectorAll('input[name="unidad"]')) radio.disabled = bloqueado;
+  $('nota-precio').hidden = !bloqueado;
+}
+
 class ErrorCampo extends Error {
   constructor(mensaje, campo) {
     super(mensaje);
@@ -527,6 +537,7 @@ function abrirNuevo(prefijado = {}) {
   meta.replaceChildren();
   historial.replaceChildren(crear('li', 'nota', 'Sin cambios de precio.'));
   llenarFormulario({ ...VACIO, ...prefijado });
+  bloquearPrecio(false); // el precio inicial lo pone quien captura
   mostrarEditor();
   enfocar(prefijado.upc ? $('f-marca') : $('f-upc'));
 }
@@ -541,6 +552,7 @@ function abrirProducto(id) {
   btnDesactivar.hidden = false;
   btnDesactivar.textContent = producto.activo ? 'Desactivar producto' : 'Reactivar producto';
   llenarFormulario(producto);
+  bloquearPrecio(!esAdmin);
   pintarMeta(producto);
   historial.replaceChildren(crear('li', 'nota', 'Cargando…'));
   estado.dejarDeObservarHistorial = observarHistorial(
@@ -742,6 +754,10 @@ async function guardar() {
       );
     } else {
       const cambios = diferenciasProducto(estado.actual, preparado);
+      if (!esAdmin && CAMPOS_PRECIO.some((campo) => campo in cambios)) {
+        mostrarAvisoEditor('Solo un administrador puede cambiar el precio o la unidad de venta. Deja el precio como estaba y guarda lo demás.');
+        return;
+      }
       if (Object.keys(cambios).length === 0) {
         avisar('Sin cambios.', 'info', 2500);
         estado.inicial = huellaFormulario();
@@ -762,7 +778,9 @@ async function guardar() {
   } catch (error) {
     mostrarAvisoEditor(
       error?.code === 'permission-denied' && estado.modo === 'editar'
-        ? 'El servidor rechazó el cambio. Si cambiaste el precio, puede que otra estación lo haya cambiado antes: cierra y vuelve a abrir el producto.'
+        ? (esAdmin
+          ? 'El servidor rechazó el cambio. Si cambiaste el precio, puede que otra estación lo haya cambiado antes: cierra y vuelve a abrir el producto.'
+          : 'El servidor rechazó el cambio: el precio y la unidad de venta solo los cambia un administrador.')
         : mensajeError(error),
     );
   } finally {

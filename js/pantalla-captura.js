@@ -15,6 +15,7 @@ import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'captura.html' });
+const esAdmin = personal.rol === 'admin'; // solo el admin cambia el precio de un producto existente
 
 const $ = (id) => document.getElementById(id);
 const form = $('form-captura');
@@ -132,6 +133,7 @@ function tiendasParaNuevo() {
 function limpiar({ conservarUPC = false } = {}) {
   if (!conservarUPC) campos.upc.value = '';
   campos.upc.readOnly = false;
+  campos.precio.readOnly = false;
   campos.nombre.value = '';
   campos.marca.value = '';
   campos.presentacion.value = '';
@@ -342,6 +344,12 @@ function guardar() {
       return;
     }
     const cambios = diferenciasProducto(base, preparado);
+    if (!esAdmin && 'precioCentavos' in cambios) {
+      mostrarBanner('error', 'Solo un administrador puede cambiar el precio. Deja el precio como estaba y guarda lo demás.');
+      campos.precio.value = textoDesdeCentavos(base.precioCentavos);
+      campos.nombre.focus();
+      return;
+    }
     if (Object.keys(cambios).length === 0) {
       mostrarBanner('info', 'Sin cambios.');
       limpiar();
@@ -423,8 +431,11 @@ function corregirUltimo() {
   campos.marca.value = producto.marca ?? '';
   campos.presentacion.value = producto.presentacion ?? '';
   campos.precio.value = textoDesdeCentavos(producto.precioCentavos);
+  campos.precio.readOnly = !esAdmin;
   seleccionarClase(producto.claseFiscal);
-  mostrarBanner('info', `Corrigiendo «${nombreCompleto(producto)}». Enter en la clase fiscal guarda · Esc cancela. Un precio distinto queda en el historial.`);
+  mostrarBanner('info', esAdmin
+    ? `Corrigiendo «${nombreCompleto(producto)}». Enter en la clase fiscal guarda · Esc cancela. Un precio distinto queda en el historial.`
+    : `Corrigiendo «${nombreCompleto(producto)}». Enter en la clase fiscal guarda · Esc cancela. El precio solo lo cambia un administrador.`);
   actualizarVista();
   campos.nombre.focus();
   campos.nombre.select();
