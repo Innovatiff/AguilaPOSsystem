@@ -16,9 +16,14 @@ rules_version = '2';
 //  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
 //    del mismo lote (batch), con el precio anterior real y el nuevo.
 //  - Nada se borra: productos y personal se desactivan; el historial es inmutable.
-//  - El precio de un producto existente (precioCentavos, precioPorKgCentavos y la
-//    unidad de venta que decide cuál manda) solo lo cambia un admin. El resto del
-//    personal crea productos con su precio inicial y edita todo lo demás.
+//  - Dos apps: el back office (catálogo, precios, personal, reportes) es solo
+//    para administradores; la caja (POS) es para todo el personal registrado.
+//    Por eso el catálogo solo lo escribe un admin.
+//  - POS: una caja tiene a lo sumo un turno abierto; abrir y cerrar turno se
+//    hace en un lote junto con la caja. Cada venta y cada movimiento de
+//    efectivo pertenece al turno de quien lo registra, y es inmutable.
+//    Descuentos, cambios de precio y devoluciones necesitan una autorización
+//    escrita por un admin (con su propia sesión) para ese turno.
 //  - accesos/{código} publica solo el número de versión de cuenta de un código
 //    (lo necesita la pantalla de entrada tras restablecer un NIP).
 // ---------------------------------------------------------------------
@@ -37,12 +42,11 @@ service cloud.firestore {
     function emailActual() {
       return request.auth.token.email.lower();
     }
-    // Código de empleado (sin versión) si el correo es sintético; si no, el correo.
+    // Código de empleado (sin versión) si el correo es sintético; si no, el
+    // correo. Una sola expresión regular (el dominio repite dominioCodigos()):
+    // las reglas tienen un tope de expresiones por petición.
     function usuarioActual() {
-      let partes = emailActual().split('@');
-      return partes.size() == 2 && partes[1] == dominioCodigos()
-        ? partes[0].split('[.]')[0]
-        : emailActual();
+      return emailActual().replace('^([0-9]{6})([.][0-9]+)?@codigo[.]aguilapos[.]firebaseapp[.]com$', '$1');
     }
     function rutaPersonal() {
       return /databases/$(database)/documents/staff/$(usuarioActual());
@@ -53,10 +57,13 @@ service cloud.firestore {
     // Personal registrado y activo, con la cuenta vigente (correoAuth). Las
     // fichas anteriores a Gestión no tienen correoAuth: vale el correo mismo.
     function esPersonal() {
-      return autenticado()
-        && exists(rutaPersonal())
-        && fichaActual().activo == true
-        && fichaActual().get('correoAuth', emailActual()) == emailActual();
+      let ruta = rutaPersonal();
+      return autenticado() && exists(ruta) && fichaVigente(get(ruta).data);
+    }
+    function fichaVigente(ficha) {
+      let f = ficha;
+      let email = emailActual();
+      return f.activo == true && f.get('correoAuth', email) == email;
     }
     function esAdmin() {
       return esPersonal() && fichaActual().rol == 'admin';
@@ -78,6 +85,14 @@ service cloud.firestore {
     function esFechaISO(v) {
       return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
     }
+    // Exactamente estos campos: ni uno más ni uno menos.
+    // Nota de costo: en las reglas, un argumento se vuelve a evaluar cada vez
+    // que se usa y un `let` solo una vez; por eso se fijan con let.
+    function exactamente(d, campos) {
+      let lista = campos;
+      let claves = d.keys();
+      return claves.hasOnly(lista) && claves.size() == lista.size();
+    }
 
     // ----- products ------------------------------------------------------
     function camposProducto() {
@@ -91,8 +106,7 @@ service cloud.firestore {
     }
 
     function productoValido(d) {
-      return d.keys().hasAll(camposProducto())
-        && d.keys().hasOnly(camposProducto())
+      return exactamente(d, camposProducto())
         // UPC-A de 12 dígitos o EAN-13 de 13 (un EAN-13 que empieza por 0 se guarda como UPC-A de 12)
         && (d.upc == null || (d.upc is string && d.upc.matches('^([0-9]{12}|[1-9][0-9]{12})$')))
         && (d.plu == null || (d.plu is string && d.plu.matches('^[0-9]{4,5}$')))
@@ -130,30 +144,22 @@ service cloud.firestore {
       return productId + '_' + string(d.actualizadoEn.toMillis());
     }
 
-    // Solo el admin cambia el precio de un producto existente (y la unidad de
-    // venta, que decide qué precio manda). El resto del personal edita lo demás.
-    function precioIntacto() {
-      return request.resource.data.precioCentavos == resource.data.precioCentavos
-        && request.resource.data.precioPorKgCentavos == resource.data.precioPorKgCentavos
-        && request.resource.data.unidadVenta == resource.data.unidadVenta;
-    }
-
     match /products/{productId} {
       allow read: if esPersonal();
 
-      allow create: if esPersonal()
+      // El catálogo se administra en el back office: solo administradores.
+      allow create: if esAdmin()
         && productoValido(request.resource.data)
         && request.resource.data.creadoEn == request.resource.data.actualizadoEn
         // existencias y costo los administra el POS: el catálogo los deja en null
         && request.resource.data.existencias == null
         && request.resource.data.costoCentavos == null;
 
-      allow update: if esPersonal()
+      allow update: if esAdmin()
         && productoValido(request.resource.data)
         && request.resource.data.creadoEn == resource.data.creadoEn
         && request.resource.data.existencias == resource.data.existencias
         && request.resource.data.costoCentavos == resource.data.costoCentavos
-        && (precioIntacto() || esAdmin())
         && (request.resource.data.precioCentavos == resource.data.precioCentavos
             || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, request.resource.data))));
 
@@ -169,8 +175,7 @@ service cloud.firestore {
       return /databases/$(database)/documents/products/$(productId);
     }
     function entradaHistorialValida(d, entradaId) {
-      return d.keys().hasAll(camposHistorial())
-        && d.keys().hasOnly(camposHistorial())
+      return exactamente(d, camposHistorial())
         && d.productId is string
         && d.productId.size() > 0
         && d.fecha is timestamp
@@ -207,8 +212,7 @@ service cloud.firestore {
       return codigo + (version == 1 ? '' : '.' + string(version)) + '@' + dominioCodigos();
     }
     function personalValido(d, usuario) {
-      return d.keys().hasAll(camposPersonal())
-        && d.keys().hasOnly(camposPersonal())
+      return exactamente(d, camposPersonal())
         && d.usuario == usuario
         && d.tipo in ['codigo', 'correo']
         && d.correoAuth is string
@@ -274,12 +278,17 @@ service cloud.firestore {
     }
 
     // ----- stores --------------------------------------------------------
+    // Los datos del encabezado del recibo (teléfono, correo, número de HST)
+    // son opcionales: las tiendas anteriores al POS no los tienen.
     function tiendaValida(d) {
       return d.keys().hasAll(['nombre', 'direccion', 'activo'])
-        && d.keys().hasOnly(['nombre', 'direccion', 'activo'])
+        && d.keys().hasOnly(['nombre', 'direccion', 'activo', 'telefono', 'correo', 'numeroImpuesto'])
         && esTextoNoVacio(d.nombre, 80)
         && esTexto(d.direccion, 160)
-        && d.activo is bool;
+        && d.activo is bool
+        && esTexto(d.get('telefono', ''), 30)
+        && esTexto(d.get('correo', ''), 80)
+        && esTexto(d.get('numeroImpuesto', ''), 30);
     }
 
     match /stores/{storeId} {
@@ -288,6 +297,333 @@ service cloud.firestore {
         && tiendaValida(request.resource.data)
         && storeId.matches('^[a-z0-9-]{2,40}$');
       allow delete: if false;
+    }
+
+    // =====================================================================
+    // POS · caja registradora
+    // =====================================================================
+    // Firestore corta la evaluación de una petición tras un número fijo de
+    // expresiones, y en las reglas un argumento de función se vuelve a evaluar
+    // cada vez que se usa (un `let`, solo una vez). Por eso cada regla del POS
+    // es una sola función que fija con `let` quién escribe, su ficha y el
+    // documento, y comprueba lo que protege el dinero y el acceso.
+    // pruebas/reglas/holgura.test.mjs mide el margen que queda en cada una.
+    function fichaDe(usuario) {
+      return get(/databases/$(database)/documents/staff/$(usuario)).data;
+    }
+    function vigente(ficha, email) {
+      let f = ficha;
+      let e = email;
+      return f.activo == true && f.get('correoAuth', e) == e;
+    }
+    // Hora del equipo: puede ir algo adelantada, nunca en el futuro lejano.
+    function noEnElFuturo(marca) {
+      let t = marca;
+      return t is timestamp && t <= request.time + duration.value(5, 'm');
+    }
+    function rutaTurno(turnoId) {
+      return /databases/$(database)/documents/turnos/$(turnoId);
+    }
+    function rutaCaja(cajaId) {
+      return /databases/$(database)/documents/cajas/$(cajaId);
+    }
+    // Ventas, turnos, movimientos y autorizaciones: cada quien lo suyo; el admin, todo.
+    function puedeLeerDe(cajero) {
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      return vigente(ficha, email) && (ficha.rol == 'admin' || cajero == yo);
+    }
+
+    // ----- config/pos: impuesto, recibo, teclas de departamento ------------
+    function camposConfigPos() {
+      return ['impuestoNombre', 'tasaImpuestoBP', 'fondoSugeridoCentavos', 'limiteVentaLibreCentavos',
+              'conteoCiego', 'papelRecibo', 'reciboPie', 'departamentos', 'actualizadoEn', 'actualizadoPor'];
+    }
+    function configPosValida(d) {
+      return exactamente(d, camposConfigPos())
+        && esTextoNoVacio(d.impuestoNombre, 20)
+        && d.tasaImpuestoBP is int && d.tasaImpuestoBP >= 0 && d.tasaImpuestoBP <= 3000
+        && d.fondoSugeridoCentavos is int && d.fondoSugeridoCentavos >= 0
+        && d.limiteVentaLibreCentavos is int && d.limiteVentaLibreCentavos >= 0
+        && d.conteoCiego is bool
+        && d.papelRecibo in [58, 80]
+        && esTexto(d.reciboPie, 300)
+        && d.departamentos is list
+        && d.departamentos.size() <= 24
+        && d.actualizadoEn is timestamp
+        && d.actualizadoPor == usuarioActual();
+    }
+
+    match /config/{documento} {
+      allow read: if esPersonal();
+      allow create, update: if esAdmin() && documento == 'pos' && configPosValida(request.resource.data);
+      allow delete: if false;
+    }
+
+    // ----- cajas ------------------------------------------------------------
+    // cajas/{id}: el admin la da de alta y la edita; quien abre o cierra turno
+    // solo toca los campos del turno, en el mismo lote que turnos/{id}.
+    function camposCaja() {
+      return ['nombre', 'numero', 'tienda', 'activo',
+              'turnoActual', 'turnoCajero', 'turnoCajeroNombre', 'turnoDesde',
+              'actualizadoEn', 'actualizadoPor'];
+    }
+    function cajaConfigValida(d) {
+      return esTextoNoVacio(d.nombre, 40)
+        && d.numero is int && d.numero >= 1 && d.numero <= 99
+        && d.tienda.matches('^[a-z0-9-]{2,40}$')
+        && d.activo is bool
+        && d.actualizadoEn is timestamp;
+    }
+    function actualizarCaja(cajaId) {
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let antes = resource.data;
+      let d = request.resource.data;
+      let cambios = d.diff(antes).affectedKeys();
+      return vigente(ficha, email)
+        && exactamente(d, camposCaja())
+        && ((ficha.rol == 'admin'
+              && cambios.hasOnly(['nombre', 'numero', 'tienda', 'activo', 'actualizadoEn', 'actualizadoPor'])
+              && cajaConfigValida(d)
+              && d.actualizadoPor == yo)
+            || (cambios.hasOnly(['turnoActual', 'turnoCajero', 'turnoCajeroNombre', 'turnoDesde'])
+                && (abreTurnoEnCaja(cajaId, antes, d, yo) || cierraTurnoEnCaja(antes, d, yo, ficha))));
+    }
+    // Abrir turno: la caja activa estaba libre y queda con un turno propio,
+    // abierto en este mismo lote.
+    function abreTurnoEnCaja(cajaId, antes, d, yo) {
+      return antes.turnoActual == null
+        && antes.activo == true
+        && d.turnoActual is string
+        && d.turnoCajero == yo
+        && d.turnoCajeroNombre is string
+        && turnoRecienAbierto(cajaId, d, yo);
+    }
+    function turnoRecienAbierto(cajaId, d, yo) {
+      let turno = getAfter(rutaTurno(d.turnoActual)).data;
+      return turno.cajero == yo && turno.caja == cajaId && turno.estado == 'abierto' && d.turnoDesde == turno.abiertoEn;
+    }
+    // Cerrar turno: la caja queda libre y su turno, cerrado en este mismo lote
+    // por quien lo abrió o por un admin.
+    function cierraTurnoEnCaja(antes, d, yo, ficha) {
+      return antes.turnoActual is string
+        && d.turnoActual == null && d.turnoCajero == null && d.turnoCajeroNombre == null && d.turnoDesde == null
+        && turnoRecienCerrado(antes.turnoActual, yo, ficha);
+    }
+    function turnoRecienCerrado(turnoId, yo, ficha) {
+      let turno = getAfter(rutaTurno(turnoId)).data;
+      return turno.estado == 'cerrado' && (turno.cajero == yo || ficha.rol == 'admin');
+    }
+
+    match /cajas/{cajaId} {
+      allow read: if esPersonal();
+      allow create: if esAdmin()
+        && exactamente(request.resource.data, camposCaja())
+        && cajaConfigValida(request.resource.data)
+        && request.resource.data.turnoActual == null
+        && request.resource.data.turnoCajero == null
+        && request.resource.data.actualizadoPor == usuarioActual();
+      allow update: if actualizarCaja(cajaId);
+      allow delete: if false;
+    }
+
+    // ----- turnos -----------------------------------------------------------
+    // La apertura usa la hora del servidor (las horas trabajadas no dependen
+    // del reloj del equipo). El cierre puede registrarse sin conexión: lleva
+    // la hora del equipo (cerradoEn) y la del servidor al sincronizar.
+    function camposTurno() {
+      return ['caja', 'cajaNombre', 'numeroCaja', 'tienda', 'tiendaNombre', 'cajero', 'cajeroNombre',
+              'estado', 'abiertoEn', 'fondoInicialCentavos',
+              'cerradoEn', 'cerradoPor', 'cierreRegistradoEn', 'cierreForzado',
+              'efectivoContadoCentavos', 'conteo', 'diferenciaCentavos', 'resumen', 'notaCierre'];
+    }
+    function camposCierreTurno() {
+      return ['estado', 'cerradoEn', 'cerradoPor', 'cierreRegistradoEn', 'cierreForzado',
+              'efectivoContadoCentavos', 'conteo', 'diferenciaCentavos', 'resumen', 'notaCierre'];
+    }
+    function abrirTurno(datos, turnoId) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      let caja = get(rutaCaja(d.caja)).data;
+      return vigente(fichaDe(yo), email)
+        && exactamente(d, camposTurno())
+        && d.cajero == yo
+        && d.estado == 'abierto'
+        && d.abiertoEn == request.time
+        && d.fondoInicialCentavos is int && d.fondoInicialCentavos >= 0
+        && d.cerradoEn == null && d.cierreForzado == false && d.resumen == null
+        && caja.activo == true
+        && caja.turnoActual == null
+        && caja.tienda == d.tienda
+        && caja.numero == d.numeroCaja
+        && getAfter(rutaCaja(d.caja)).data.turnoActual == turnoId;
+    }
+    function cerrarTurno(turnoId) {
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let antes = resource.data;
+      let d = request.resource.data;
+      return vigente(ficha, email)
+        && antes.estado == 'abierto'
+        && (antes.cajero == yo || ficha.rol == 'admin')
+        && d.diff(antes).affectedKeys().hasOnly(camposCierreTurno())
+        && d.estado == 'cerrado'
+        && d.cerradoPor == yo
+        && d.cierreForzado == (yo != antes.cajero)
+        && d.cierreRegistradoEn == request.time
+        && noEnElFuturo(d.cerradoEn)
+        && d.cerradoEn >= antes.abiertoEn
+        && (d.efectivoContadoCentavos == null || d.efectivoContadoCentavos is int)
+        && d.resumen is map
+        && getAfter(rutaCaja(antes.caja)).data.turnoActual != turnoId;
+    }
+
+    match /turnos/{turnoId} {
+      allow read: if puedeLeerDe(resource.data.cajero);
+      allow create: if abrirTurno(request.resource.data, turnoId);
+      allow update: if cerrarTurno(turnoId);
+      allow delete: if false;
+    }
+
+    // ----- ventas -----------------------------------------------------------
+    // Inmutables. Las reglas no pueden recorrer las líneas: comprueban los
+    // campos, que los totales cuadren entre sí y con los pagos, la hora del
+    // servidor y que la venta sea del turno de quien la registra. Cada línea
+    // la valida la app (js/ticket.js, validarVenta) antes de guardar.
+    // Descuentos, cambios de precio y devoluciones necesitan una autorización
+    // de un admin para ese turno (salvo que quien vende sea admin).
+    function camposVenta() {
+      return ['folio', 'numero', 'dia', 'tipo',
+              'turno', 'caja', 'cajaNombre', 'numeroCaja', 'tienda', 'tiendaNombre', 'cajero', 'cajeroNombre',
+              'fecha', 'registradoEn', 'lineas', 'articulos',
+              'brutoCentavos', 'descuentoLineasCentavos', 'subtotalCentavos', 'descuentoTicketCentavos',
+              'baseGravadaCentavos', 'baseTasaCeroCentavos', 'tasaImpuestoBP', 'impuestoCentavos', 'totalCentavos',
+              'redondeoCentavos', 'cambioCentavos', 'pagos', 'porMetodo',
+              'lineasAnuladas', 'lineasAnuladasCentavos', 'cambiosPrecio',
+              'autorizacion', 'autorizadoPor', 'ventaOriginal'];
+    }
+    function totalesCuadran(datos) {
+      let d = datos;
+      let m = d.porMetodo;
+      return d.tipo in ['venta', 'devolucion']
+        && d.lineas.size() > 0 && d.lineas.size() <= 300
+        && d.pagos.size() <= 10
+        // centavos enteros, nunca flotantes
+        && d.brutoCentavos is int && d.subtotalCentavos is int && d.totalCentavos is int
+        && d.impuestoCentavos is int && d.baseGravadaCentavos is int && d.baseTasaCeroCentavos is int
+        && d.descuentoLineasCentavos is int && d.descuentoTicketCentavos is int && d.redondeoCentavos is int
+        && m.efectivo is int && m.debito is int && m.credito is int && m.otro is int
+        && d.subtotalCentavos == d.brutoCentavos - d.descuentoLineasCentavos
+        && d.totalCentavos == d.subtotalCentavos - d.descuentoTicketCentavos + d.impuestoCentavos
+        && d.baseGravadaCentavos + d.baseTasaCeroCentavos == d.subtotalCentavos - d.descuentoTicketCentavos
+        && d.redondeoCentavos >= -2 && d.redondeoCentavos <= 2
+        && m.size() == 4
+        && m.efectivo + m.debito + m.credito + m.otro == d.totalCentavos + d.redondeoCentavos
+        && d.descuentoLineasCentavos >= 0 && d.descuentoTicketCentavos >= 0
+        && (d.tipo == 'venta' ? d.totalCentavos >= 0 : d.totalCentavos < 0);
+    }
+    function necesitaAutorizacion(datos) {
+      let d = datos;
+      return d.tipo == 'devolucion' || d.descuentoLineasCentavos > 0 || d.descuentoTicketCentavos > 0 || d.cambiosPrecio > 0;
+    }
+    function autorizacionCoincide(d, yo) {
+      let a = get(/databases/$(database)/documents/autorizaciones/$(d.autorizacion)).data;
+      return a.cajero == yo
+        && a.turno == d.turno
+        && a.admin == d.autorizadoPor
+        && a.tipo == (d.tipo == 'devolucion' ? 'devolucion' : 'modificacion');
+    }
+    function crearVenta(datos) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let turno = get(rutaTurno(d.turno)).data;
+      return vigente(ficha, email)
+        && exactamente(d, camposVenta())
+        && d.cajero == yo
+        && d.registradoEn == request.time
+        && noEnElFuturo(d.fecha)
+        && totalesCuadran(d)
+        && turno.cajero == yo
+        && turno.caja == d.caja
+        && turno.tienda == d.tienda
+        && turno.numeroCaja == d.numeroCaja
+        && d.fecha >= turno.abiertoEn - duration.value(5, 'm')
+        && (!necesitaAutorizacion(d) || ficha.rol == 'admin' || autorizacionCoincide(d, yo));
+    }
+
+    match /ventas/{ventaId} {
+      allow read: if puedeLeerDe(resource.data.cajero);
+      allow create: if crearVenta(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // ----- movimientos de efectivo -----------------------------------------
+    // Retiros (a la caja fuerte), entradas de cambio, pagos desde caja,
+    // aperturas de cajón sin venta y tickets cancelados. Inmutables.
+    function camposMovimiento() {
+      return ['turno', 'caja', 'tienda', 'cajero', 'cajeroNombre', 'tipo', 'importeCentavos', 'motivo', 'fecha', 'registradoEn'];
+    }
+    function crearMovimiento(datos) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      let turno = get(rutaTurno(d.turno)).data;
+      return vigente(fichaDe(yo), email)
+        && exactamente(d, camposMovimiento())
+        && d.cajero == yo
+        && d.tipo in ['retiro', 'entrada', 'pago', 'apertura', 'cancelacion']
+        && d.importeCentavos is int
+        && (d.tipo == 'apertura' ? d.importeCentavos == 0 : (d.importeCentavos > 0 || d.tipo == 'cancelacion'))
+        && d.importeCentavos >= 0
+        && noEnElFuturo(d.fecha)
+        && d.registradoEn == request.time
+        && turno.cajero == yo
+        && turno.caja == d.caja
+        && turno.tienda == d.tienda;
+    }
+
+    match /movimientosCaja/{movimientoId} {
+      allow read: if puedeLeerDe(resource.data.cajero);
+      allow create: if crearMovimiento(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // ----- autorizaciones ---------------------------------------------------
+    // Las escribe un admin desde la caja con su propio código y NIP (sesión
+    // aparte): autoriza descuentos y cambios de precio (modificacion) o una
+    // devolución para el turno abierto de una cajera.
+    function camposAutorizacion() {
+      return ['tipo', 'turno', 'caja', 'cajero', 'admin', 'fecha', 'detalle'];
+    }
+    function crearAutorizacion(datos) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let turno = get(rutaTurno(d.turno)).data;
+      return vigente(ficha, email)
+        && ficha.rol == 'admin'
+        && exactamente(d, camposAutorizacion())
+        && d.tipo in ['modificacion', 'devolucion']
+        && d.admin == yo
+        && d.fecha == request.time
+        && esTexto(d.detalle, 200)
+        && turno.cajero == d.cajero
+        && turno.caja == d.caja
+        && turno.estado == 'abierto';
+    }
+
+    match /autorizaciones/{autorizacionId} {
+      allow read: if puedeLeerDe(resource.data.cajero);
+      allow create: if crearAutorizacion(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }

@@ -122,81 +122,88 @@ describe('reglas de Firestore', () => {
   });
 
   describe('products · esquema', () => {
-    it('una empleada (código) crea un producto válido firmado con su código', async () => {
-      const db = contexto(EMPLEADA);
-      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA)));
+    it('un admin por código crea un producto válido firmado con su código', async () => {
+      const db = contexto(JEFA);
+      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(JEFA)));
       const guardado = await getDoc(doc(db, 'products/p2'));
-      assert.equal(guardado.data().actualizadoPor, '100123');
+      assert.equal(guardado.data().actualizadoPor, '100150');
+    });
+    it('el catálogo es del back office: una empleada no crea ni edita productos, aunque los lee', async () => {
+      const db = contexto(EMPLEADA);
+      await assertSucceeds(getDoc(doc(db, 'products/p1')));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA)));
+      await assertFails(updateDoc(doc(db, 'products/p1'), { nombre: 'OTRO', actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
+      await assertFails(updateDoc(doc(contexto(ANA), 'products/p1'), { nombre: 'OTRO', actualizadoEn: Timestamp.now(), actualizadoPor: ANA }));
     });
     it('rechaza un campo que no está en el esquema', async () => {
-      await assertFails(setDoc(doc(contexto(EMPLEADA), 'products/p2'), { ...productoDemo(EMPLEADA), color: 'rojo' }));
+      await assertFails(setDoc(doc(contexto(JEFA), 'products/p2'), { ...productoDemo(JEFA), color: 'rojo' }));
     });
     it('rechaza un campo que falta', async () => {
-      const p = productoDemo(EMPLEADA);
+      const p = productoDemo(JEFA);
       delete p.tokensBusqueda;
-      await assertFails(setDoc(doc(contexto(EMPLEADA), 'products/p2'), p));
+      await assertFails(setDoc(doc(contexto(JEFA), 'products/p2'), p));
     });
     it('rechaza precios flotantes, negativos o cero por pieza', async () => {
-      const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { precioCentavos: 4.99 })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { precioCentavos: -1 })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { precioCentavos: 0 })));
+      const db = contexto(JEFA);
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { precioCentavos: 4.99 })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { precioCentavos: -1 })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { precioCentavos: 0 })));
     });
     it('acepta UPC-A de 12 dígitos, EAN-13 de 13 y null; rechaza otras longitudes y el EAN-13 con cero inicial', async () => {
-      const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '12345' })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '0633148100013' })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '75012345678931' })));
-      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: '7501234567893' })));
-      await assertSucceeds(setDoc(doc(db, 'products/p3'), productoDemo(EMPLEADA, { upc: null })));
+      const db = contexto(JEFA);
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { upc: '12345' })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { upc: '0633148100013' })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { upc: '75012345678931' })));
+      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { upc: '7501234567893' })));
+      await assertSucceeds(setDoc(doc(db, 'products/p3'), productoDemo(JEFA, { upc: null })));
     });
     it('rechaza enumeraciones fuera de rango', async () => {
-      const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { claseFiscal: 'exento' })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { unidadVenta: 'caja' })));
+      const db = contexto(JEFA);
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { claseFiscal: 'exento' })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { unidadVenta: 'caja' })));
     });
     it('por peso exige precio por kilo; por pieza lo prohíbe', async () => {
-      const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { unidadVenta: 'peso', precioPorKgCentavos: null })));
-      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { upc: null, unidadVenta: 'peso', precioPorKgCentavos: 1599, precioCentavos: 0 })));
-      await assertFails(setDoc(doc(db, 'products/p3'), productoDemo(EMPLEADA, { precioPorKgCentavos: 100 })));
+      const db = contexto(JEFA);
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { unidadVenta: 'peso', precioPorKgCentavos: null })));
+      await assertSucceeds(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { upc: null, unidadVenta: 'peso', precioPorKgCentavos: 1599, precioCentavos: 0 })));
+      await assertFails(setDoc(doc(db, 'products/p3'), productoDemo(JEFA, { precioPorKgCentavos: 100 })));
     });
     it('el catálogo no puede fijar existencias ni costo (son del POS)', async () => {
-      const db = contexto(EMPLEADA);
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { existencias: 5 })));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { costoCentavos: 300 })));
-      await assertFails(updateDoc(doc(db, 'products/p1'), { existencias: 5, actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
+      const db = contexto(JEFA);
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { existencias: 5 })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { costoCentavos: 300 })));
+      await assertFails(updateDoc(doc(db, 'products/p1'), { existencias: 5, actualizadoEn: Timestamp.now(), actualizadoPor: '100150' }));
     });
     it('actualizadoPor debe ser el usuario de quien escribe: el código, no el correo sintético ni otro', async () => {
-      const db = contexto(EMPLEADA);
+      const db = contexto(JEFA);
       await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(ADMIN)));
-      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(EMPLEADA, { actualizadoPor: EMPLEADA })));
+      await assertFails(setDoc(doc(db, 'products/p2'), productoDemo(JEFA, { actualizadoPor: EMPLEADA })));
       await assertFails(updateDoc(doc(db, 'products/p1'), { nombre: 'CLASICO GRANDE', actualizadoEn: Timestamp.now() }));
       // por correo real, el usuario es el correo
-      await assertSucceeds(updateDoc(doc(contexto(ANA), 'products/p1'), { nombre: 'CLASICO GRANDE', actualizadoEn: Timestamp.now(), actualizadoPor: ANA }));
+      await assertSucceeds(updateDoc(doc(contexto(LEGADO), 'products/p1'), { nombre: 'CLASICO GRANDE', actualizadoEn: Timestamp.now(), actualizadoPor: LEGADO }));
     });
     it('permite editar campos que no son el precio, con actualizadoEn y actualizadoPor', async () => {
-      await assertSucceeds(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), {
-        nombre: 'CLASICO GRANDE', tokensBusqueda: ['cla', 'clas'], actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
+      await assertSucceeds(updateDoc(doc(contexto(JEFA), 'products/p1'), {
+        nombre: 'CLASICO GRANDE', tokensBusqueda: ['cla', 'clas'], actualizadoEn: Timestamp.now(), actualizadoPor: '100150',
       }));
     });
     it('marcar la etiqueta como impresa: último precio y fecha ISO, sin tocar el precio', async () => {
-      const db = contexto(EMPLEADA);
+      const db = contexto(JEFA);
       await assertSucceeds(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
+        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100150',
       }));
       await assertFails(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '24/09/2026', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
+        ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '24/09/2026', actualizadoEn: Timestamp.now(), actualizadoPor: '100150',
       }));
       await assertFails(updateDoc(doc(db, 'products/p1'), {
-        ultimoPrecioImpresoCentavos: 4.99, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100123',
+        ultimoPrecioImpresoCentavos: 4.99, fechaUltimaImpresion: '2026-09-24', actualizadoEn: Timestamp.now(), actualizadoPor: '100150',
       }));
     });
     it('nadie borra productos, ni el admin', async () => {
       await assertFails(deleteDoc(doc(contexto(ADMIN), 'products/p1')));
     });
     it('creadoEn no cambia al actualizar', async () => {
-      await assertFails(updateDoc(doc(contexto(EMPLEADA), 'products/p1'), { creadoEn: Timestamp.now(), actualizadoEn: Timestamp.now(), actualizadoPor: '100123' }));
+      await assertFails(updateDoc(doc(contexto(JEFA), 'products/p1'), { creadoEn: Timestamp.now(), actualizadoEn: Timestamp.now(), actualizadoPor: '100150' }));
     });
   });
 
