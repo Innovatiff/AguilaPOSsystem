@@ -2846,3 +2846,208 @@ dialog.editor--turno {
     position: static;
   }
 }
+
+/* =====================================================================
+   Consulta de precios (/caja/consulta.html), pensada para el teléfono
+   ===================================================================== */
+body.consulta {
+  min-height: 100vh;
+  background: #f4f5f7;
+}
+
+.consulta__barra {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+  color: #fff;
+  background: var(--color-lateral);
+}
+
+.consulta__marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.consulta__marca .marca__logo {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+}
+
+.consulta__usuario {
+  margin-left: auto;
+  overflow: hidden;
+  color: #c7ced8;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.consulta__barra .boton {
+  padding: 8px 12px;
+}
+
+main.consulta__cuerpo {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 16px calc(24px + env(safe-area-inset-bottom));
+}
+
+.consulta__acceso {
+  margin: 24px auto;
+}
+
+.consulta__buscar {
+  display: flex;
+  gap: 8px;
+}
+
+.consulta__buscar input {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 2px solid #c9d0d8;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  font-size: 18px;
+}
+
+.consulta__buscar input:focus {
+  border-color: var(--color-marca);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(232, 121, 29, 0.2);
+}
+
+.consulta__estado {
+  margin: 8px 2px 14px;
+}
+
+.precio-grande {
+  padding: 18px;
+  border: 1px solid var(--bo-linea);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(16, 24, 40, 0.06);
+}
+
+.precio-grande__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.precio-grande h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.precio-grande__sub {
+  margin: 4px 0 0;
+  color: var(--bo-suave);
+}
+
+.precio-grande__precio {
+  margin: 14px 0 0;
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.precio-grande__precio small {
+  color: var(--bo-suave);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.precio-grande__fiscal {
+  margin: 8px 0 12px;
+  color: var(--color-marca-oscuro);
+  font-weight: 700;
+}
+
+.precio-grande__datos {
+  margin: 0;
+}
+
+.consulta__resultados {
+  margin: 12px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--bo-linea);
+  border-radius: 12px;
+  background: #fff;
+  list-style: none;
+}
+
+.consulta__resultados:empty {
+  display: none;
+}
+
+.consulta__resultados button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid #eef0f3;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.consulta__resultados button:hover,
+.consulta__resultados button:focus-visible {
+  background: #fff6ec;
+  outline: none;
+}
+
+.consulta__resultados small {
+  color: var(--bo-suave);
+}
+
+.consulta__resultados strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.consulta__nombre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+@media screen and (max-width: 440px) {
+  .consulta__usuario {
+    display: none;
+  }
+
+  .consulta__barra #btn-nip {
+    margin-left: auto;
+  }
+
+  .consulta__marca span:last-child {
+    font-size: 15px;
+  }
+}

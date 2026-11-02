@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Consulta de precios · Águila POS</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="consulta.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Precios">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/consulta.js"></script>
+</head>
+<body class="consulta">
+  <header class="consulta__barra">
+    <a class="consulta__marca" href="./"><span class="marca__logo" aria-hidden="true">Á</span><span>Consulta de precios</span></a>
+    <span class="consulta__usuario" id="usuario" hidden></span>
+    <button id="btn-nip" class="boton boton--secundario" type="button" aria-label="Cambiar mi NIP" hidden>Mi NIP</button>
+    <button id="btn-salir" class="boton boton--secundario" type="button" hidden>Salir</button>
+  </header>
+
+  <main class="consulta__cuerpo">
+    <p id="cargando" class="nota">Cargando…</p>
+
+    <form id="form-acceso" class="tarjeta-login consulta__acceso" novalidate hidden>
+      <h1>Consulta de precios</h1>
+      <p class="subtitulo">Entra con tu código de empleado y tu NIP.</p>
+      <div class="campo">
+        <label for="codigo">Código de empleado</label>
+        <input id="codigo" type="text" inputmode="numeric" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="80" required>
+      </div>
+      <div class="campo">
+        <label for="nip">NIP</label>
+        <input id="nip" type="password" inputmode="numeric" autocomplete="current-password" maxlength="72" required>
+      </div>
+      <p id="mensaje-acceso" class="mensaje" role="alert" hidden></p>
+      <div class="acciones">
+        <button id="btn-entrar" class="boton" type="submit">Entrar</button>
+      </div>
+    </form>
+
+    <section id="vista-consulta" hidden>
+      <form id="form-buscar" class="consulta__buscar" role="search" novalidate>
+        <label class="visualmente-oculto" for="buscar">Producto</label>
+        <input id="buscar" type="search" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search"
+          placeholder="Código, PLU o nombre">
+        <button id="btn-camara" class="boton boton--escanear" type="button" hidden>Escanear</button>
+      </form>
+      <p id="estado-catalogo" class="nota consulta__estado" role="status" aria-live="polite"></p>
+
+      <article id="tarjeta" class="precio-grande" aria-live="polite" hidden>
+        <div class="precio-grande__cabecera">
+          <h2 id="t-nombre"></h2>
+          <span id="t-inactivo" class="chip chip--aviso" hidden>Inactivo</span>
+        </div>
+        <p id="t-sub" class="precio-grande__sub"></p>
+        <p class="precio-grande__precio"><span id="t-precio"></span> <small id="t-unidad"></small></p>
+        <p id="t-fiscal" class="precio-grande__fiscal"></p>
+        <dl id="t-datos" class="ficha ficha--compacta precio-grande__datos"></dl>
+      </article>
+      <p id="no-encontrado" class="mensaje mensaje--error" role="alert" hidden></p>
+
+      <ul id="resultados" class="consulta__resultados" aria-label="Productos"></ul>
+    </section>
+  </main>
+
+  <dialog id="dialogo-nip" class="editor editor--angosto" aria-labelledby="titulo-nip">
+    <form id="form-nip" class="editor__form" novalidate>
+      <header class="editor__cabecera"><h2 id="titulo-nip">Cambiar mi NIP</h2></header>
+      <div class="editor__cuerpo editor__cuerpo--simple">
+        <p class="nota">El NIP son de 6 a 10 dígitos. Sirve para entrar a la caja y a esta consulta. Si lo olvidas, un administrador lo restablece.</p>
+        <div class="campo"><label for="nip-actual">NIP actual</label><input id="nip-actual" type="password" inputmode="numeric" autocomplete="current-password" maxlength="72" required></div>
+        <div class="campo"><label for="nip-nuevo">NIP nuevo</label><input id="nip-nuevo" type="password" inputmode="numeric" autocomplete="new-password" maxlength="10" required></div>
+        <div class="campo"><label for="nip-repetir">Repite el NIP nuevo</label><input id="nip-repetir" type="password" inputmode="numeric" autocomplete="new-password" maxlength="10" required></div>
+        <p id="mensaje-nip" class="mensaje" role="alert" hidden></p>
+      </div>
+      <footer class="editor__pie">
+        <button id="nip-guardar" class="boton" type="submit">Cambiar NIP</button>
+        <button id="nip-cancelar" class="boton boton--claro" type="button">Cancelar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="escaner" class="escaner" aria-labelledby="escaner-titulo">
+    <header class="escaner__cabecera">
+      <h2 id="escaner-titulo">Escanear código</h2>
+      <button id="escaner-cerrar" class="boton boton--secundario" type="button">Cerrar</button>
+    </header>
+    <div class="escaner__visor">
+      <video id="escaner-video" playsinline muted autoplay></video>
+      <div class="escaner__marco" aria-hidden="true"></div>
+    </div>
+    <p id="escaner-estado" class="escaner__estado" role="status" aria-live="polite">Iniciando cámara…</p>
+    <div class="escaner__acciones">
+      <button id="escaner-linterna" class="boton boton--secundario" type="button" aria-pressed="false" hidden>Linterna</button>
+    </div>
+  </dialog>
+</body>
+</html>

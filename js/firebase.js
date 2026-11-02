@@ -4,10 +4,10 @@
  * - Firestore con caché persistente multi-pestaña: el personal trabaja en
  *   pasillos sin señal; las escrituras se encolan y se envían al reconectar.
  * - La configuración vive solo en js/config.js (no versionado).
- * - La caja registradora (/caja/) usa su propia instancia de Firebase
- *   ("caja"): su sesión y su caché local son independientes de las del back
- *   office, así que en una misma computadora una cajera puede tener su turno
- *   abierto mientras un administrador usa el back office en otra pestaña.
+ * - La caja registradora (/caja/) y la consulta de precios usan sus propias
+ *   instancias de Firebase: su sesión y su caché local son independientes de
+ *   las del back office, así que en una misma computadora una cajera puede
+ *   tener su turno abierto mientras un administrador usa el back office.
  */
 import { firebaseConfig, emuladores } from './config.js';
 import { initializeApp, getApps, deleteApp } from '../vendor/firebase/12.19.0/firebase-app.js';
@@ -52,8 +52,17 @@ import {
 
 export const VERSION_SDK = '12.19.0';
 
-/** Nombre de la instancia: "caja" en la caja registradora (/caja/), la predeterminada en el resto. */
-export const NOMBRE_APP = typeof location !== 'undefined' && /\/caja\/(index\.html)?$/.test(location.pathname) ? 'caja' : '[DEFAULT]';
+/**
+ * Nombre de la instancia (cada una con su propia sesión y su caché local):
+ * "caja" en la caja registradora (/caja/), "consulta" en la consulta de
+ * precios (/caja/consulta.html) y la predeterminada en el back office.
+ */
+function nombreDeApp(ruta) {
+  if (/\/caja\/(index\.html)?$/.test(ruta)) return 'caja';
+  if (/\/caja\/consulta\.html$/.test(ruta)) return 'consulta';
+  return '[DEFAULT]';
+}
+export const NOMBRE_APP = typeof location !== 'undefined' ? nombreDeApp(location.pathname) : '[DEFAULT]';
 export const app = getApps().find((a) => a.name === NOMBRE_APP)
   ?? (NOMBRE_APP === '[DEFAULT]' ? initializeApp(firebaseConfig) : initializeApp(firebaseConfig, NOMBRE_APP));
 export const auth = getAuth(app);

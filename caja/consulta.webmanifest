@@ -1,0 +1,18 @@
+{
+  "id": "/caja/consulta.html",
+  "name": "Águila · Consulta de precios",
+  "short_name": "Precios",
+  "description": "Consulta de precios de Águila Marketplace para el personal: escanea con la cámara o escribe el nombre.",
+  "lang": "es",
+  "start_url": "consulta.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f5f7",
+  "theme_color": "#1c1f24",
+  "icons": [
+    { "src": "../icons/icono-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/icono-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "../icons/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
