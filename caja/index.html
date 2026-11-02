@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Caja · Águila POS</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/caja.css">
+  <link rel="stylesheet" href="../css/recibo.css">
+  <script type="module" src="../js/caja.js"></script>
+</head>
+<body class="pos">
+  <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+    <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-espera" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-descuento" viewBox="0 0 24 24"><circle cx="7.5" cy="7.5" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16.5" cy="16.5" r="2.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-devolucion" viewBox="0 0 24 24"><path d="M9 7H15a5 5 0 0 1 0 10H8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M9 3 5 7l4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mas" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="19" cy="12" r="2" fill="currentColor"/></symbol>
+    <symbol id="i-candado" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+    <symbol id="i-sin-codigo" viewBox="0 0 24 24"><path d="M4 6v12M7 6v12M10 6v8M13 6v12M17 6v4M20 6v12" stroke="currentColor" stroke-width="1.8"/><path d="M14 15l6 6M20 15l-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-etiqueta" viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="8.5" r="1.6" fill="currentColor"/></symbol>
+    <symbol id="i-cobrar" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-tarjeta" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 9.5h19" stroke="currentColor" stroke-width="2.6"/></symbol>
+    <symbol id="i-imprimir" viewBox="0 0 24 24"><path d="M7 8V3h10v5" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="8" width="18" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="14" width="10" height="7" fill="#fff" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-cajon" viewBox="0 0 24 24"><rect x="2.5" y="9" width="19" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 14h6M6 9l2-5h8l2 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3.5 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-cerrar" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-flecha" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <header class="barra" id="barra">
+    <div class="barra__marca"><span class="logo">Á</span><span>Águila <b>POS</b></span></div>
+    <div class="barra__caja" id="barra-caja"></div>
+    <div class="barra__cajera" id="barra-cajera" hidden></div>
+    <div class="barra__espacio"></div>
+    <div class="estado-red" id="barra-estado" data-estado="conectando"><span class="estado-red__punto"></span><span id="barra-estado-texto">Conectando…</span></div>
+    <div class="barra__reloj" id="barra-reloj">--:--</div>
+    <button id="btn-bloquear" class="barra__boton" type="button" hidden>
+      <svg class="icono"><use href="#i-candado"/></svg><span>Bloquear</span>
+    </button>
+  </header>
+
+  <main id="pantalla-cargando" class="pantalla pantalla--centro">
+    <div class="cargando"><span class="cargando__giro"></span><p id="cargando-texto">Preparando la caja…</p></div>
+  </main>
+
+  <main id="pantalla-configurar" class="pantalla pantalla--centro" hidden>
+    <section class="tarjeta-pos">
+      <h1>Esta computadora todavía no es una caja</h1>
+      <p class="tarjeta-pos__nota">Un administrador la asigna a una de las cajas dadas de alta en el back office (Cajas). Solo se hace una vez por computadora.</p>
+      <form id="form-configurar" class="formulario-pos" novalidate>
+        <label for="config-identificador">Código o correo del administrador</label>
+        <input id="config-identificador" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+        <label for="config-secreto">NIP o contraseña</label>
+        <input id="config-secreto" type="password" autocomplete="off" required>
+        <p id="config-mensaje" class="mensaje-pos" role="alert" hidden></p>
+        <button type="submit" class="btn btn--primario btn--grande" id="config-entrar">Continuar</button>
+      </form>
+      <div id="config-cajas" class="lista-cajas" hidden></div>
+      <a class="enlace-pos" href="consulta.html">Usar esta computadora solo para consultar precios</a>
+    </section>
+  </main>
+
+  <main id="pantalla-acceso" class="pantalla pantalla--acceso" hidden>
+    <section class="acceso">
+      <div class="acceso__info">
+        <div class="acceso__caja" id="acceso-caja"></div>
+        <div class="acceso__tienda" id="acceso-tienda"></div>
+        <div class="acceso__reloj" id="acceso-reloj">--:--</div>
+        <div class="acceso__fecha" id="acceso-fecha"></div>
+        <p class="acceso__estado" id="acceso-estado"></p>
+      </div>
+      <form class="acceso__form" id="form-acceso" novalidate>
+        <h1 id="acceso-titulo">Iniciar turno</h1>
+        <p class="acceso__subtitulo" id="acceso-subtitulo">Escribe tu código de empleado y tu NIP.</p>
+        <div class="campo-pos">
+          <label for="acceso-codigo">Código de empleado</label>
+          <input id="acceso-codigo" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" required>
+        </div>
+        <div class="campo-pos">
+          <label for="acceso-nip">NIP</label>
+          <input id="acceso-nip" type="password" inputmode="numeric" autocomplete="off" maxlength="72" required>
+        </div>
+        <div class="teclado teclado--acceso" id="teclado-acceso"></div>
+        <p id="acceso-mensaje" class="mensaje-pos" role="alert" hidden></p>
+        <button type="submit" class="btn btn--primario btn--grande" id="acceso-entrar">Entrar</button>
+      </form>
+      <nav class="acceso__enlaces" aria-label="Otras opciones">
+        <a class="enlace-pos" href="consulta.html">Consultar precios</a>
+        <button type="button" class="enlace-pos" id="btn-reconfigurar">Asignar esta computadora a otra caja</button>
+      </nav>
+    </section>
+  </main>
+
+  <main id="pantalla-venta" class="pantalla pantalla--venta" hidden>
+    <section class="ticket" aria-label="Ticket en curso">
+      <header class="ticket__cabecera">
+        <div class="ticket__titulo">
+          <strong id="ticket-numero">Ticket</strong>
+          <span id="ticket-modo" class="insignia insignia--devolucion" hidden>DEVOLUCIÓN</span>
+          <span id="ticket-autorizado" class="insignia insignia--info" hidden></span>
+        </div>
+        <div class="ticket__articulos" id="ticket-articulos">0 artículos</div>
+      </header>
+      <ol id="ticket-lineas" class="ticket__lineas"></ol>
+      <div id="ticket-vacio" class="ticket__vacio">
+        <svg class="icono icono--grande"><use href="#i-sin-codigo"/></svg>
+        <p id="ticket-vacio-texto">Escanea un producto o escribe su código</p>
+      </div>
+      <div id="ticket-cobrado" class="ticket__cobrado" hidden aria-live="polite">
+        <div class="cobrado__icono" aria-hidden="true">✓</div>
+        <h2 id="cobrado-titulo">Venta registrada</h2>
+        <p class="cobrado__folio" id="cobrado-folio"></p>
+        <dl class="cobrado__cifras">
+          <div><dt>Total</dt><dd id="cobrado-total"></dd></div>
+          <div><dt id="cobrado-pago-titulo">Pagó</dt><dd id="cobrado-pago"></dd></div>
+        </dl>
+        <div class="cambio" id="cobrado-cambio-bloque">
+          <div class="cambio__etiqueta">Cambio</div>
+          <div class="cambio__monto" id="cobrado-cambio">$0.00</div>
+        </div>
+        <div class="cobrado__acciones">
+          <button type="button" class="btn btn--secundario btn--grande" id="btn-reimprimir"><svg class="icono"><use href="#i-imprimir"/></svg>Reimprimir recibo</button>
+          <button type="button" class="btn btn--primario btn--grande" id="btn-nuevo-ticket">Nuevo ticket <kbd>Enter</kbd></button>
+        </div>
+      </div>
+      <div class="ticket__acciones" id="acciones-linea" hidden>
+        <button type="button" class="btn btn--linea" data-accion="menos" aria-label="Una pieza menos">−</button>
+        <button type="button" class="btn btn--linea" data-accion="mas-uno" aria-label="Una pieza más">+</button>
+        <button type="button" class="btn btn--linea" data-accion="cantidad">Cantidad</button>
+        <button type="button" class="btn btn--linea" data-accion="precio">Precio</button>
+        <button type="button" class="btn btn--linea" data-accion="descuento-linea">Descuento</button>
+        <button type="button" class="btn btn--linea btn--linea-peligro" data-accion="anular-linea">Anular línea <kbd>Supr</kbd></button>
+      </div>
+      <footer class="ticket__totales" aria-live="polite">
+        <div class="totales__fila"><span>Subtotal</span><span id="tot-subtotal">$0.00</span></div>
+        <div class="totales__fila" id="fila-descuento" hidden><span>Descuento al ticket</span><span id="tot-descuento">-$0.00</span></div>
+        <div class="totales__fila"><span id="tot-impuesto-nombre">HST</span><span id="tot-impuesto">$0.00</span></div>
+        <div class="totales__fila totales__fila--total"><span id="tot-total-nombre">Total</span><span id="tot-total">$0.00</span></div>
+        <div class="totales__fila totales__fila--efectivo"><span>En efectivo (redondeado a 5 ¢)</span><span id="tot-efectivo">$0.00</span></div>
+      </footer>
+    </section>
+
+    <section class="mandos" aria-label="Teclado de la caja">
+      <div class="entrada" id="entrada">
+        <span class="entrada__multiplicador" id="entrada-multiplicador" hidden></span>
+        <span class="entrada__texto" id="entrada-texto"></span>
+        <span class="entrada__pista" id="entrada-pista">Escanea, o escribe código, PLU o nombre</span>
+        <span class="entrada__monto" id="entrada-monto" hidden></span>
+      </div>
+      <div class="sugerencias" id="sugerencias" role="listbox" aria-label="Productos que coinciden" hidden></div>
+      <div class="mandos__cuerpo">
+        <div class="teclado teclado--venta" id="teclado-venta"></div>
+        <div class="deptos" id="deptos" aria-label="Venta por departamento"></div>
+      </div>
+      <div class="funciones" id="funciones">
+        <button type="button" class="btn btn--funcion" data-accion="buscar"><svg class="icono"><use href="#i-buscar"/></svg><span>Buscar</span><kbd>F3</kbd></button>
+        <button type="button" class="btn btn--funcion" data-accion="consultar"><svg class="icono"><use href="#i-etiqueta"/></svg><span>Consultar</span><kbd>F2</kbd></button>
+        <button type="button" class="btn btn--funcion" data-accion="espera"><svg class="icono"><use href="#i-espera"/></svg><span>En espera</span><kbd>F6</kbd></button>
+        <button type="button" class="btn btn--funcion" data-accion="descuento"><svg class="icono"><use href="#i-descuento"/></svg><span>Descuento</span><kbd>F7</kbd></button>
+        <button type="button" class="btn btn--funcion" data-accion="devolucion"><svg class="icono"><use href="#i-devolucion"/></svg><span>Devolución</span><kbd>F8</kbd></button>
+        <button type="button" class="btn btn--funcion" data-accion="mas"><svg class="icono"><use href="#i-mas"/></svg><span>Más</span><kbd>F9</kbd></button>
+      </div>
+      <div class="cobro">
+        <button type="button" class="btn btn--cancelar-ticket" id="btn-cancelar-ticket">Cancelar ticket</button>
+        <button type="button" class="btn btn--cobrar" id="btn-cobrar" disabled>
+          <span class="btn--cobrar__texto" id="btn-cobrar-texto">Cobrar</span>
+          <span class="btn--cobrar__total" id="btn-cobrar-total">$0.00</span>
+          <kbd>F10</kbd>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <div class="avisos-pos" id="avisos-pos" aria-live="polite"></div>
+  <div id="zona-impresion"></div>
+</body>
+</html>

@@ -1,8 +1,9 @@
 /**
  * Service worker de Catálogo Águila.
  *
- * - Guarda la cáscara de las dos apps, Catálogo y Gestión (páginas, CSS, JS,
- *   SDK y decodificador vendidos, fuente, iconos).
+ * - Guarda la cáscara de las dos apps, el back office y la caja registradora
+ *   (/caja/): páginas, CSS, JS, SDK y decodificador vendidos, fuente, iconos.
+ *   Sin red, la caja sigue abriendo y vendiendo desde la caché.
  * - NUNCA guarda js/config.js ni nada que no sea de este mismo origen: las
  *   llamadas a Firestore y Auth (googleapis.com) pasan de largo, sin caché.
  * - La caché lleva versión: en cada despliegue Netlify sustituye __VERSION__
@@ -33,10 +34,15 @@ const CASCARA = [
   'gestion/empleados.html',
   'gestion/tiendas.html',
   'gestion/datos.html',
+  'caja/',
+  'caja/index.html',
   'manifest.webmanifest',
   'gestion/manifest.webmanifest',
+  'caja/manifest.webmanifest',
   'css/base.css',
+  'css/caja.css',
   'css/etiquetas.css',
+  'css/recibo.css',
   'fonts/Oswald-Variable.woff2',
   'icons/icono-180.png',
   'icons/icono-192.png',
@@ -44,7 +50,13 @@ const CASCARA = [
   'icons/icono-maskable-512.png',
   'js/auth.js',
   'js/avisos.js',
+  'js/caja.js',
+  'js/caja-local.js',
+  'js/caja-pago.js',
+  'js/caja-turno.js',
+  'js/caja-ui.js',
   'js/code128.js',
+  'js/config-pos.js',
   'js/csv.js',
   'js/cuenta.js',
   'js/cuentas.js',
@@ -65,13 +77,16 @@ const CASCARA = [
   'js/pantalla-imprimir.js',
   'js/pantalla-productos.js',
   'js/personal.js',
+  'js/pos-datos.js',
   'js/precios.js',
   'js/productos.js',
+  'js/recibo.js',
   'js/ticket.js',
   'js/turnos.js',
   'js/prueba-etiquetas.js',
   'js/pwa.js',
   'js/upca.js',
+  'js/verificador.js',
   'vendor/firebase/12.19.0/firebase-app.js',
   'vendor/firebase/12.19.0/firebase-auth.js',
   'vendor/firebase/12.19.0/firebase-firestore.js',
@@ -124,7 +139,9 @@ async function redPrimero(request) {
     const guardada = await cache.match(request, { ignoreSearch: true });
     if (guardada) return guardada;
     if (request.mode === 'navigate') {
-      const inicio = await cache.match('index.html');
+      // Sin red: la caja abre su propia pantalla; el resto, el inicio.
+      const enCaja = new URL(request.url).pathname.includes('/caja/');
+      const inicio = await cache.match(enCaja ? 'caja/index.html' : 'index.html');
       if (inicio) return inicio;
     }
     throw error;

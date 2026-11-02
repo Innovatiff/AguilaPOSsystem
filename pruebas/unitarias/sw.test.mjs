@@ -16,9 +16,12 @@ describe('service worker', () => {
     assert.match(codigo, /NUNCA_CACHEAR = \/\\\/js\\\/config\\\.js\$\//);
   });
   it('incluye todos los módulos de js/ salvo config, y todas las páginas', () => {
-    const modulos = readdirSync('js').filter((n) => n.endsWith('.js') && !n.startsWith('config'));
+    const modulos = readdirSync('js').filter((n) => n.endsWith('.js') && !['config.js', 'config.example.js'].includes(n));
     for (const m of modulos) assert.ok(archivos.includes(`js/${m}`), `falta js/${m}`);
-    const paginas = [...readdirSync('.').filter((n) => n.endsWith('.html')), ...readdirSync('gestion').filter((n) => n.endsWith('.html')).map((n) => `gestion/${n}`)];
+    const paginas = [
+      ...readdirSync('.').filter((n) => n.endsWith('.html')),
+      ...['gestion', 'caja'].flatMap((carpeta) => readdirSync(carpeta).filter((n) => n.endsWith('.html')).map((n) => `${carpeta}/${n}`)),
+    ];
     for (const p of paginas) assert.ok(archivos.includes(p), `falta ${p}`);
   });
   it('lleva la marca de versión que sella el despliegue', () => {

@@ -153,8 +153,21 @@ async function sembrarCatalogoDemo() {
 }
 
 // ------------------------------------------------------------- navegador
+/**
+ * Chromium de Playwright. Si el navegador que espera esta versión de Playwright
+ * no está instalado pero el equipo trae otro Chromium (CHROMIUM_E2E, o el de
+ * /opt/pw-browsers/chromium en los contenedores de CI), se usa ese.
+ */
+function ejecutableChromium() {
+  if (process.env.CHROMIUM_E2E) return process.env.CHROMIUM_E2E;
+  const propio = chromium.executablePath();
+  if (propio && fs.existsSync(propio)) return null;
+  return fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : null;
+}
+
 async function abrirNavegador({ args = [] } = {}) {
-  return chromium.launch({ args });
+  const ejecutable = ejecutableChromium();
+  return chromium.launch(ejecutable ? { args, executablePath: ejecutable } : { args });
 }
 
 const MOVIL = { viewport: { width: 390, height: 780 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' };

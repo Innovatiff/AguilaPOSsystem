@@ -44,6 +44,9 @@ describe('resumen del turno', () => {
     assert.equal(r.devolucionesCentavos, 564);
     assert.equal(r.impuestoCentavos, 130 - 65);
     assert.equal(ventasNetas(r), 998 + 686 + 1250 - 499);
+    assert.equal(r.brutoVentasCentavos, 998 + 686 + 1250);
+    assert.equal(r.devolucionesSinImpuestoCentavos, 499);
+    assert.equal(r.brutoVentasCentavos - r.descuentosCentavos - r.devolucionesSinImpuestoCentavos, ventasNetas(r));
     assert.equal(r.redondeoCentavos, 1 - 1);
     assert.equal(r.autorizadas, 1);
     assert.equal(r.primerFolio, '261102-01-0001');

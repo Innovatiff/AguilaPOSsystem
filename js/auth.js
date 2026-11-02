@@ -118,7 +118,7 @@ export async function iniciarSesion(identificador, secreto) {
  * tras restablecer un NIP el código apunta a "<código>.<versión>@…". Sin dato
  * o sin conexión se asume la 1.
  */
-async function versionDeCodigo(codigo) {
+export async function versionDeCodigo(codigo) {
   try {
     const acceso = await getDoc(doc(db, 'accesos', codigo));
     const version = acceso.exists() ? Number(acceso.data().version) : 1;

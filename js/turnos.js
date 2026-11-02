@@ -74,8 +74,10 @@ function nuevoResumen(fondo) {
     devoluciones: 0,
     articulos: 0,
     brutoCentavos: 0,
+    brutoVentasCentavos: 0,
     descuentosCentavos: 0,
     devolucionesCentavos: 0,
+    devolucionesSinImpuestoCentavos: 0,
     baseGravadaCentavos: 0,
     baseTasaCeroCentavos: 0,
     impuestoCentavos: 0,
@@ -120,8 +122,10 @@ export function resumirTurno({ turno, ventas, movimientos = [], departamentos = 
     if (v.tipo === 'devolucion') {
       r.devoluciones += 1;
       r.devolucionesCentavos += -v.totalCentavos;
+      r.devolucionesSinImpuestoCentavos += -(v.baseGravadaCentavos + v.baseTasaCeroCentavos);
     } else {
       r.ventas += 1;
+      r.brutoVentasCentavos += v.brutoCentavos;
     }
     r.articulos += v.articulos ?? 0;
     r.brutoCentavos += v.brutoCentavos;
@@ -211,7 +215,7 @@ export function sumarResumenes(resumenes) {
   const sumarCampos = (destino, origen, campos) => { for (const c of campos) destino[c] += origen?.[c] ?? 0; };
   for (const r of resumenes) {
     if (!r) continue;
-    sumarCampos(total, r, ['ventas', 'devoluciones', 'articulos', 'brutoCentavos', 'descuentosCentavos', 'devolucionesCentavos', 'baseGravadaCentavos', 'baseTasaCeroCentavos', 'impuestoCentavos', 'totalCentavos', 'redondeoCentavos', 'lineasAnuladas', 'lineasAnuladasCentavos', 'cancelaciones', 'cancelacionesCentavos', 'aperturasCajon', 'cambiosPrecio', 'autorizadas', 'minutos']);
+    sumarCampos(total, r, ['ventas', 'devoluciones', 'articulos', 'brutoCentavos', 'brutoVentasCentavos', 'descuentosCentavos', 'devolucionesCentavos', 'devolucionesSinImpuestoCentavos', 'baseGravadaCentavos', 'baseTasaCeroCentavos', 'impuestoCentavos', 'totalCentavos', 'redondeoCentavos', 'lineasAnuladas', 'lineasAnuladasCentavos', 'cancelaciones', 'cancelacionesCentavos', 'aperturasCajon', 'cambiosPrecio', 'autorizadas', 'minutos']);
     sumarCampos(total.porMetodo, r.porMetodo, METODOS_PAGO);
     sumarCampos(total.efectivo, r.efectivo, ['fondoCentavos', 'ventasCentavos', 'devolucionesCentavos', 'retirosCentavos', 'entradasCentavos', 'pagosCentavos', 'esperadoCentavos']);
     for (const [hora, celda] of Object.entries(r.porHora ?? {})) {
