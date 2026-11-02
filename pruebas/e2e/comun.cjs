@@ -206,6 +206,54 @@ async function entrar(page, identificador, secreto, { esperarError = false } = {
   return page.url();
 }
 
+/**
+ * Entra a la consulta de precios (caja/consulta.html: su propia sesión, aparte del back office)
+ * con código y NIP. Espera la vista de consulta y devuelve el nombre que muestra, o el mensaje de
+ * error si `esperarError`.
+ */
+async function entrarConsulta(page, codigo, nip, { esperarError = false } = {}) {
+  if (!/\/caja\/consulta\.html/.test(page.url())) await page.goto(`${BASE}/caja/consulta.html`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#form-acceso:not([hidden])', { timeout: 20000 });
+  await page.fill('#codigo', codigo);
+  await page.fill('#nip', nip);
+  await page.click('#btn-entrar');
+  // Al entrar se oculta el formulario; si no, la consulta vacía el NIP y muestra el mensaje.
+  await page.waitForFunction(() => !document.getElementById('vista-consulta').hidden
+    || (document.getElementById('nip').value === '' && !document.getElementById('btn-entrar').disabled), null, { timeout: 20000 });
+  const entro = await page.isVisible('#vista-consulta');
+  const mensaje = entro ? '' : texto(await page.textContent('#mensaje-acceso'));
+  if (esperarError) {
+    if (entro) throw new Error(`${codigo} entró a la consulta de precios y se esperaba un error`);
+    return mensaje;
+  }
+  if (!entro) throw new Error(`no se pudo entrar a la consulta de precios como ${codigo} · mensaje: «${mensaje}»`);
+  return texto(await page.textContent('#usuario'));
+}
+
+/** Lo que muestra la consulta de precios: la tarjeta del producto, o el aviso de «no encontrado». */
+function tarjetaConsulta(page) {
+  return page.evaluate(() => {
+    const t = (id) => document.getElementById(id).textContent.replace(/\s+/g, ' ').trim();
+    const visible = (id) => !document.getElementById(id).hidden;
+    return visible('tarjeta')
+      ? { nombre: t('t-nombre'), sub: t('t-sub'), precio: t('t-precio'), unidad: t('t-unidad'), fiscal: t('t-fiscal'), datos: t('t-datos'), inactivo: visible('t-inactivo') }
+      : { noEncontrado: visible('no-encontrado') ? t('no-encontrado') : null };
+  });
+}
+
+/**
+ * Busca en la consulta de precios como el escáner USB (código o nombre, y Enter) una vez que el
+ * catálogo está al día; devuelve la tarjeta o el aviso (ver tarjetaConsulta). Para búsquedas que
+ * dan un solo producto o ninguno: con varios, la consulta solo lista los resultados.
+ */
+async function consultarPrecio(page, busqueda) {
+  await page.waitForFunction(() => /Catálogo al día/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
+  await page.fill('#buscar', busqueda); // al escribir se ocultan la tarjeta y el aviso anteriores
+  await page.press('#buscar', 'Enter');
+  await page.waitForFunction(() => !document.getElementById('tarjeta').hidden || !document.getElementById('no-encontrado').hidden, null, { timeout: 15000 });
+  return tarjetaConsulta(page);
+}
+
 // ------------------------------------------------------------- resultados
 function verificador(nombreEscenario) {
   const resultados = [];
@@ -230,5 +278,5 @@ module.exports = {
   BASE, SALIDA, ADMIN, EMPLEADA, DOMINIO_CODIGOS, correoDeCodigo,
   rest, campos, leerDoc, leerColeccion, borrarTodo, crearCuentaAuth, entrarAuthREST,
   ficha, sembrarAdmin, sembrarEmpleadaCodigo, sembrarTiendas, producto, sembrarProducto, sembrarCatalogoDemo, tokens,
-  abrirNavegador, nuevaPagina, entrar, verificador, texto,
+  abrirNavegador, nuevaPagina, entrar, entrarConsulta, tarjetaConsulta, consultarPrecio, verificador, texto,
 };

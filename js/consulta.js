@@ -22,6 +22,7 @@ let personal = null;
 let catalogo = new Map();
 let catalogoListo = false;
 let dejarCatalogo = null;
+let productoMostrado = null; // id del producto de la ficha en pantalla
 
 // ------------------------------------------------------------- sesión
 
@@ -60,7 +61,14 @@ function mostrarConsulta() {
     $('estado-catalogo').textContent = desdeCache
       ? `Sin conexión: ${activos.toLocaleString('en-CA')} productos guardados en este equipo`
       : `Catálogo al día · ${activos.toLocaleString('en-CA')} productos`;
-    if ($('buscar').value.trim()) pintarResultados();
+    // Si cambia el producto que está en pantalla (precio, nombre…), la ficha se
+    // actualiza sola; si no hay ficha, la lista de resultados se vuelve a pintar.
+    if (!$('tarjeta').hidden && productoMostrado) {
+      const actualizado = actual.get(productoMostrado);
+      if (actualizado) mostrarProducto(actualizado, { desplazar: false });
+    } else if ($('buscar').value.trim()) {
+      pintarResultados();
+    }
   }, (error) => {
     $('estado-catalogo').textContent = `No se pudo cargar el catálogo: ${mensajeError(error)}`;
   });
@@ -184,7 +192,8 @@ function pintarResultados() {
     h('strong', { text: precioDe(p) })))));
 }
 
-function mostrarProducto(p) {
+function mostrarProducto(p, { desplazar = true } = {}) {
+  productoMostrado = p.id ?? null;
   $('no-encontrado').hidden = true;
   const porPeso = p.unidadVenta === 'peso';
   $('t-nombre').textContent = [p.marca, p.nombre].filter(Boolean).join(' ');
@@ -208,10 +217,11 @@ function mostrarProducto(p) {
   $('t-datos').replaceChildren(...datos.flatMap(([dt, dd]) => [h('dt', { text: dt }), h('dd', { text: dd })]));
   $('tarjeta').hidden = false;
   $('resultados').replaceChildren();
-  $('tarjeta').scrollIntoView({ block: 'nearest' });
+  if (desplazar) $('tarjeta').scrollIntoView({ block: 'nearest' });
 }
 
 function noEncontrado(texto) {
+  productoMostrado = null;
   $('tarjeta').hidden = true;
   $('no-encontrado').hidden = false;
   $('no-encontrado').textContent = `No hay ningún producto con «${texto}». Avisa al administrador.`;

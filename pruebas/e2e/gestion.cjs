@@ -1,7 +1,9 @@
 /**
- * Gestión: alta de empleados con código y NIP (cuenta + ficha), entrada del
- * empleado con su código, firma de sus cambios, restablecer NIP, desactivar,
- * editar, alta por correo, tiendas e importación.
+ * Gestión de personal (back office, solo administradores): alta de empleados
+ * con código y NIP (cuenta + ficha); la empleada no entra al back office pero
+ * sí a la consulta de precios, que muestra lo que el admin cambia en el
+ * catálogo (con su firma e historial de precio); restablecer NIP, editar,
+ * desactivar y reactivar, alta por correo, tiendas e importación.
  */
 const c = require('./comun.cjs');
 
@@ -69,39 +71,17 @@ const c = require('./comun.cjs');
   v.ok('un código ya usado se rechaza antes de crear nada', /ya es de María López/.test(await admin.page.textContent('#editor-aviso')));
   await admin.page.click('#btn-cerrar');
 
-  // ---- la empleada entra con su código y firma sus cambios con él
+  // ---- la empleada nueva: el back office la rechaza; la consulta de precios (sesión aparte) la deja entrar
   const empleada = await c.nuevaPagina(browser);
-  await c.entrar(empleada.page, '100001', '482913');
-  v.ok('la empleada nueva entra con código y NIP', /María López · empleado/.test(c.texto(await empleada.page.textContent('#navegacion'))));
-  await empleada.page.goto(`${c.BASE}/productos.html`);
-  await empleada.page.waitForSelector('#contenido:not([hidden])');
-  await empleada.page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
-  await empleada.page.fill('#busqueda', 'tajin');
-  await empleada.page.press('#busqueda', 'Enter');
-  await empleada.page.waitForSelector('#editor[open]');
-  v.ok('la empleada ve el precio y la unidad en solo lectura, con la nota de que solo los cambia un administrador',
-    await empleada.page.$eval('#f-precio', (i) => i.readOnly) && await empleada.page.$eval('input[name="unidad"]', (i) => i.disabled) && await empleada.page.isVisible('#nota-precio'));
-  await empleada.page.fill('#f-presentacion', '142 g');
-  await empleada.page.click('#btn-guardar');
-  try {
-    await empleada.page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
-  } catch (e) {
-    console.log('  editor abierto aún; aviso:', await empleada.page.textContent('#editor-aviso'), '| avisos:', await empleada.page.evaluate(() => document.querySelector('.avisos')?.textContent ?? ''));
-    await empleada.page.screenshot({ path: `${c.SALIDA}/gestion-fallo-guardar.png` });
-    throw e;
-  }
-  let tajin = null;
-  for (let i = 0; i < 20 && tajin?.presentacion !== '142 g'; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.presentacion !== '142 g') await new Promise((r) => setTimeout(r, 300)); }
-  v.ok('la empleada guarda lo que no es precio, firmado con el código y sin tocar el precio', tajin?.presentacion === '142 g' && tajin.precioCentavos === 499 && tajin.actualizadoPor === '100001', JSON.stringify({ presentacion: tajin?.presentacion, precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
-  await empleada.page.fill('#busqueda', 'tajin');
-  await empleada.page.press('#busqueda', 'Enter');
-  await empleada.page.waitForSelector('#editor[open]');
-  await empleada.page.waitForFunction(() => /María López \(100001\)/.test(document.getElementById('meta').textContent), null, { timeout: 15000 }).catch(() => {});
-  const metaTexto = c.texto(await empleada.page.textContent('#meta'));
-  v.ok('el editor muestra quién actualizó con nombre y código', /por María López \(100001\)/.test(metaTexto), metaTexto);
-  await empleada.page.click('#btn-cerrar');
+  let msg = await c.entrar(empleada.page, '100001', '482913', { esperarError: true });
+  v.ok('la empleada nueva no entra al back office con su código y NIP: es solo para administradores', /solo para administradores/.test(msg) && await empleada.page.isVisible('a[href="caja/consulta.html"]'), msg);
+  let nombre = await c.entrarConsulta(empleada.page, '100001', '482913');
+  v.ok('con el mismo código y NIP entra a la consulta de precios', nombre === 'María López', nombre);
+  v.ok('en la computadora, el buscador de la consulta queda con el foco para el escáner USB', await empleada.page.evaluate(() => document.activeElement?.id === 'buscar'));
+  let tarjeta = await c.consultarPrecio(empleada.page, 'tajin');
+  v.ok('la consulta le muestra el precio de un producto (solo lectura)', tarjeta.nombre === 'TAJIN CLASICO' && tarjeta.precio === '$4.99' && /142g/.test(tarjeta.sub), JSON.stringify(tarjeta));
 
-  // ---- el precio lo cambia un admin desde el catálogo, con historial a su nombre
+  // ---- el catálogo lo cambia el admin: lo que no es precio, y el precio con historial a su nombre
   const jefe = await c.nuevaPagina(browser);
   await c.entrar(jefe.page, c.ADMIN.correo, c.ADMIN.contrasena);
   await jefe.page.goto(`${c.BASE}/productos.html`);
@@ -110,7 +90,25 @@ const c = require('./comun.cjs');
   await jefe.page.fill('#busqueda', 'tajin');
   await jefe.page.press('#busqueda', 'Enter');
   await jefe.page.waitForSelector('#editor[open]');
-  v.ok('el admin ve el precio editable y sin la nota', !(await jefe.page.$eval('#f-precio', (i) => i.readOnly)) && await jefe.page.isHidden('#nota-precio'));
+  v.ok('el admin ve el precio editable y sin la nota de solo lectura', !(await jefe.page.$eval('#f-precio', (i) => i.readOnly)) && await jefe.page.isHidden('#nota-precio'));
+  await jefe.page.fill('#f-presentacion', '142 g');
+  await jefe.page.click('#btn-guardar');
+  try {
+    await jefe.page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
+  } catch (e) {
+    console.log('  editor abierto aún; aviso:', await jefe.page.textContent('#editor-aviso'), '| avisos:', await jefe.page.evaluate(() => document.querySelector('.avisos')?.textContent ?? ''));
+    await jefe.page.screenshot({ path: `${c.SALIDA}/gestion-fallo-guardar.png` });
+    throw e;
+  }
+  let tajin = null;
+  for (let i = 0; i < 20 && tajin?.presentacion !== '142 g'; i += 1) { tajin = await c.leerDoc('products/p-tajin'); if (tajin?.presentacion !== '142 g') await new Promise((r) => setTimeout(r, 300)); }
+  v.ok('el admin guarda lo que no es precio, firmado a su nombre, sin tocar el precio ni el historial', tajin?.presentacion === '142 g' && tajin.precioCentavos === 499 && tajin.actualizadoPor === c.ADMIN.correo && (await c.leerColeccion('priceHistory')).size === 0, JSON.stringify({ presentacion: tajin?.presentacion, precio: tajin?.precioCentavos, por: tajin?.actualizadoPor }));
+  await jefe.page.fill('#busqueda', 'tajin');
+  await jefe.page.press('#busqueda', 'Enter');
+  await jefe.page.waitForSelector('#editor[open]');
+  await jefe.page.waitForFunction(() => /Alan \(admin\) \(admin@aguila\.test\)/.test(document.getElementById('meta').textContent), null, { timeout: 15000 }).catch(() => {});
+  const metaTexto = c.texto(await jefe.page.textContent('#meta'));
+  v.ok('el editor muestra quién actualizó con nombre y usuario', /por Alan \(admin\) \(admin@aguila\.test\)/.test(metaTexto), metaTexto);
   await jefe.page.fill('#f-precio', '5.49');
   await jefe.page.click('#btn-guardar');
   await jefe.page.waitForFunction(() => !document.getElementById('editor').open, null, { timeout: 20000 });
@@ -118,6 +116,9 @@ const c = require('./comun.cjs');
   const historial = await c.leerColeccion('priceHistory');
   v.ok('el cambio de precio del admin queda en el historial a su nombre', tajin?.precioCentavos === 549 && historial.size === 1 && [...historial.values()][0].usuario === c.ADMIN.correo, JSON.stringify([...historial.values()]));
   await jefe.ctx.close();
+  tarjeta = await c.consultarPrecio(empleada.page, 'tajin');
+  v.ok('la consulta de la empleada ya muestra el precio y la presentación nuevos', tarjeta.precio === '$5.49' && /142 g/.test(tarjeta.sub), JSON.stringify(tarjeta));
+  await empleada.page.screenshot({ path: `${c.SALIDA}/gestion-consulta-empleada.png` });
 
   // ---- restablecer NIP
   await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Restablecer NIP")');
@@ -132,12 +133,12 @@ const c = require('./comun.cjs');
   v.ok('la fila indica que el NIP se restableció', /NIP restablecido 1 vez/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("100001")'))));
   v.ok('accesos/100001 pasa a la versión 2', (await c.leerDoc('accesos/100001'))?.version === 2);
   await empleada.page.reload();
-  await empleada.page.waitForURL(/login\.html\?.*motivo=cuenta-renovada/, { timeout: 20000 });
-  v.ok('la sesión anterior de la empleada se cierra con el motivo cuenta-renovada', /Tu NIP fue restablecido/.test(await empleada.page.textContent('#mensaje')));
-  let msg = await c.entrar(empleada.page, '100001', '482913', { esperarError: true });
-  v.ok('el NIP anterior ya no entra', /NIP fue restablecido|Código o NIP incorrectos/.test(msg), msg);
-  await c.entrar(empleada.page, '100001', '739201');
-  v.ok('el NIP nuevo entra', /María López/.test(await empleada.page.textContent('#navegacion')));
+  await empleada.page.waitForFunction(() => !document.getElementById('mensaje-acceso').hidden && /NIP fue restablecido/.test(document.getElementById('mensaje-acceso').textContent), null, { timeout: 20000 });
+  v.ok('al recargar la consulta, la sesión anterior de la empleada se cierra: su NIP fue restablecido', await empleada.page.isVisible('#form-acceso') && await empleada.page.isHidden('#vista-consulta'));
+  msg = await c.entrarConsulta(empleada.page, '100001', '482913', { esperarError: true });
+  v.ok('el NIP anterior ya no entra', /Código o NIP incorrectos/.test(msg), msg);
+  nombre = await c.entrarConsulta(empleada.page, '100001', '739201');
+  v.ok('el NIP nuevo entra', nombre === 'María López', nombre);
 
   // ---- editar: nombre y tienda
   await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Editar")');
@@ -157,13 +158,14 @@ const c = require('./comun.cjs');
   await admin.page.check('#ver-inactivos');
   v.ok('con «Ver inactivos» aparece como inactiva', /Inactivo/.test(c.texto(await admin.page.textContent('#tabla-personal tbody tr:has-text("100001")'))));
   await empleada.page.reload();
-  await empleada.page.waitForURL(/login\.html\?.*motivo=desactivado/, { timeout: 20000 });
-  msg = await c.entrar(empleada.page, '100001', '739201', { esperarError: true });
+  await empleada.page.waitForFunction(() => !document.getElementById('mensaje-acceso').hidden && /desactivado/.test(document.getElementById('mensaje-acceso').textContent), null, { timeout: 20000 });
+  v.ok('al recargar la consulta, la sesión de la empleada desactivada se cierra con su motivo', await empleada.page.isVisible('#form-acceso') && await empleada.page.isHidden('#vista-consulta'));
+  msg = await c.entrarConsulta(empleada.page, '100001', '739201', { esperarError: true });
   v.ok('desactivada no puede volver a entrar', /desactivado/.test(msg), msg);
   await admin.page.click('#tabla-personal tbody tr:has-text("100001") button:has-text("Activar")');
   await admin.page.waitForFunction(() => /reactivado/.test(document.getElementById('mensaje').textContent), null, { timeout: 20000 });
-  await c.entrar(empleada.page, '100001', '739201');
-  v.ok('reactivada vuelve a entrar', /María López García/.test(await empleada.page.textContent('#navegacion')));
+  nombre = await c.entrarConsulta(empleada.page, '100001', '739201');
+  v.ok('reactivada vuelve a entrar', nombre === 'María López García', nombre);
   await admin.page.uncheck('#ver-inactivos');
   await empleada.ctx.close();
 
@@ -189,13 +191,14 @@ const c = require('./comun.cjs');
   await admin.page.click('#btn-guardar');
   await admin.page.waitForFunction(() => /Ana Pérez registrado/.test(document.getElementById('mensaje').textContent), null, { timeout: 30000 });
   const otra = await c.nuevaPagina(browser);
-  await c.entrar(otra.page, 'ana@aguila.test', 'Temporal2026');
-  v.ok('la cuenta por correo creada desde Gestión entra con su contraseña temporal', /Ana Pérez · empleado/.test(c.texto(await otra.page.textContent('#navegacion'))));
+  msg = await c.entrar(otra.page, 'ana@aguila.test', 'Temporal2026', { esperarError: true });
+  const cuentaAna = await c.entrarAuthREST('ana@aguila.test', 'Temporal2026');
+  v.ok('la cuenta por correo creada desde Gestión funciona con su contraseña temporal; como es empleada, el back office no la deja entrar', cuentaAna.ok && /solo para administradores/.test(msg), msg);
   erroresTotales.push(...otra.errores);
   await otra.ctx.close();
   const g2 = await c.nuevaPagina(browser);
   await c.entrar(g2.page, 'gerente2@aguila.test', 'Gerente2026!');
-  v.ok('el segundo gerente entra y ve Gestión', (await g2.page.$$('nav a[href$="gestion/index.html"]')).length === 1);
+  v.ok('el segundo gerente entra al back office y ve la Administración (Empleados)', await g2.page.isVisible('nav a[href$="gestion/empleados.html"]') && c.texto(await g2.page.textContent('.usuario__nombre strong')) === 'Gerente Dos', c.texto(await g2.page.textContent('.usuario__nombre')));
   erroresTotales.push(...g2.errores);
   await g2.ctx.close();
 
@@ -215,11 +218,11 @@ const c = require('./comun.cjs');
   await admin.page.waitForFunction(() => document.querySelectorAll('#tabla-tiendas tbody tr').length === 3, null, { timeout: 20000 });
   v.ok('la tienda nueva aparece en la tabla', /aguila-kingsville/.test(await admin.page.textContent('#tabla-tiendas')));
 
-  // ---- importar / exportar bajo Gestión
+  // ---- importar / exportar (gestion/datos.html, en el grupo Catálogo de la barra lateral)
   await admin.page.click('nav a[href$="gestion/datos.html"]');
   await admin.page.waitForSelector('#contenido:not([hidden])');
   await admin.page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
-  v.ok('Importar / exportar vive en Gestión y carga el catálogo', /gestion\/datos\.html/.test(admin.page.url()) && await admin.page.isVisible('#btn-exportar'));
+  v.ok('Importar / exportar abre desde la barra lateral y carga el catálogo', /gestion\/datos\.html/.test(admin.page.url()) && await admin.page.isVisible('#btn-exportar'));
 
   erroresTotales.push(...admin.errores, ...empleada.errores, ...jefe.errores);
   await admin.ctx.close();

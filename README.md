@@ -488,8 +488,11 @@ paper `62mm`, layout Landscape (set by the page), margins None, scale 100 %.
 58 mm (Configuración → Recibo). Physical sizes are CSS variables at the top of
 `css/recibo.css`. Print once from Chrome's dialog with the receipt printer,
 paper = the roll, margins None, headers and footers off; with
-`--kiosk-printing` every later receipt goes straight to it. Turn on "open cash
-drawer" in the printer driver so the drawer opens with each receipt.
+`--kiosk-printing` every later receipt goes straight to it. In the printer
+driver choose the roll paper size (e.g. 80 × 3276 mm) and turn on cutting at the
+end of the document / skipping blank space, so the paper is cut right after
+the receipt; and turn on "open cash drawer" so the drawer opens with each
+receipt.
 
 ### Direct printing, no dialog
 
