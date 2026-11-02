@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Reportes · Águila POS</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <script type="module" src="js/bo-reportes.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" class="reporte" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Reportes</h1>
+        <p class="nota" id="reporte-periodo"></p>
+      </div>
+      <div class="cabecera-pagina__acciones no-imprimir">
+        <button type="button" class="boton boton--claro" id="btn-exportar">Exportar CSV</button>
+        <button type="button" class="boton" id="btn-imprimir">Imprimir</button>
+      </div>
+    </div>
+
+    <form class="filtros no-imprimir" id="filtros" novalidate>
+      <div class="campo">
+        <label for="f-desde">Desde</label>
+        <input id="f-desde" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-hasta">Hasta</label>
+        <input id="f-hasta" type="date" required>
+      </div>
+      <div class="filtros__presets" role="group" aria-label="Periodo rápido">
+        <button type="button" class="boton boton--chip" data-periodo="hoy">Hoy</button>
+        <button type="button" class="boton boton--chip" data-periodo="ayer">Ayer</button>
+        <button type="button" class="boton boton--chip" data-periodo="semana">7 días</button>
+        <button type="button" class="boton boton--chip" data-periodo="mes">Este mes</button>
+        <button type="button" class="boton boton--chip" data-periodo="mes-pasado">Mes pasado</button>
+      </div>
+      <div class="campo">
+        <label for="f-tienda">Tienda</label>
+        <select id="f-tienda"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-caja">Caja</label>
+        <select id="f-caja"><option value="">Todas</option></select>
+      </div>
+    </form>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+    <p class="mensaje mensaje--info" id="nota-abiertos" hidden></p>
+
+    <section class="kpis" aria-label="Totales del periodo">
+      <article class="kpi kpi--heroe">
+        <span class="kpi__etiqueta">Vendido</span>
+        <strong class="kpi__valor" id="k-total">—</strong>
+        <span class="kpi__detalle" id="k-total-detalle"></span>
+      </article>
+      <article class="kpi"><span class="kpi__etiqueta">Ventas netas</span><strong class="kpi__valor" id="k-netas">—</strong><span class="kpi__detalle">Sin impuesto, menos devoluciones</span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Tickets</span><strong class="kpi__valor" id="k-tickets">—</strong><span class="kpi__detalle" id="k-tickets-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Ticket promedio</span><strong class="kpi__valor" id="k-promedio">—</strong><span class="kpi__detalle" id="k-promedio-detalle"></span></article>
+    </section>
+
+    <div class="paneles">
+      <section class="panel panel--8" aria-labelledby="t-dias">
+        <header class="panel__cabecera"><h2 id="t-dias">Ventas por día</h2><span class="panel__nota">Total con impuesto</span></header>
+        <div id="grafica-dias"></div>
+        <details class="tabla-vista">
+          <summary>Ver como tabla</summary>
+          <table class="tabla tabla--compacta" id="tabla-dias">
+            <thead><tr><th>Día</th><th class="num">Turnos</th><th class="num">Tickets</th><th class="num">Ventas netas</th><th class="num">Impuesto</th><th class="num">Total</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </details>
+      </section>
+
+      <section class="panel panel--4" aria-labelledby="t-pagos">
+        <header class="panel__cabecera"><h2 id="t-pagos">Formas de pago</h2></header>
+        <div id="barra-pagos"></div>
+        <ul class="lista-cifras" id="lista-pagos"></ul>
+      </section>
+
+      <section class="panel panel--8" aria-labelledby="t-personas">
+        <header class="panel__cabecera"><h2 id="t-personas">Por persona</h2><span class="panel__nota">Horas en caja y lo que vendió cada quien</span></header>
+        <div class="tabla-desplazable">
+          <table class="tabla tabla--compacta" id="tabla-personas">
+            <thead><tr><th>Persona</th><th class="num">Turnos</th><th class="num">Horas</th><th class="num">Tickets</th><th class="num">Vendido</th><th class="num">Promedio</th><th class="num">Diferencia de efectivo</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel--4" aria-labelledby="t-impuestos">
+        <header class="panel__cabecera"><h2 id="t-impuestos">Impuestos</h2><span class="panel__nota">Para la contabilidad</span></header>
+        <dl class="ficha ficha--compacta ficha--cifras" id="lista-impuestos"></dl>
+      </section>
+
+      <section class="panel panel--8" aria-labelledby="t-productos">
+        <header class="panel__cabecera"><h2 id="t-productos">Productos más vendidos</h2><span class="panel__nota">Por venta neta, sin impuesto</span></header>
+        <div class="tabla-desplazable">
+          <table class="tabla tabla--compacta" id="tabla-productos">
+            <thead><tr><th>#</th><th>Producto</th><th>Código</th><th class="num">Cantidad</th><th class="num">Venta neta</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel--4" aria-labelledby="t-cajas">
+        <header class="panel__cabecera"><h2 id="t-cajas">Por caja</h2></header>
+        <table class="tabla tabla--compacta" id="tabla-cajas">
+          <thead><tr><th>Caja</th><th class="num">Turnos</th><th class="num">Tickets</th><th class="num">Vendido</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3 class="subtitulo-bo">Venta libre por departamento</h3>
+        <table class="tabla tabla--compacta" id="tabla-deptos">
+          <thead><tr><th>Departamento</th><th class="num">Artículos</th><th class="num">Venta neta</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="panel panel--12" aria-labelledby="t-control">
+        <header class="panel__cabecera"><h2 id="t-control">Control</h2><span class="panel__nota">Lo que conviene revisar</span></header>
+        <div class="datos-bo" id="datos-control"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

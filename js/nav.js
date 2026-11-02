@@ -1,53 +1,101 @@
 /**
- * Barra de navegación (gris oscuro) de las dos apps: Catálogo y Gestión.
- * En pantallas angostas las secciones y el usuario se pliegan tras un botón de menú.
+ * Navegación del back office (solo administradores): barra lateral con las
+ * secciones agrupadas en pantallas anchas; en pantallas angostas, una barra
+ * superior con un botón de menú que despliega las mismas secciones.
  */
 import { cerrarSesion, RAIZ } from './auth.js';
 
-const SECCIONES = {
-  catalogo: [
-    { href: 'index.html', texto: 'Inicio' },
-    { href: 'productos.html', texto: 'Productos' },
-    { href: 'captura.html', texto: 'Captura rápida' },
-    { href: 'imprimir.html', texto: 'Imprimir etiquetas' },
-    { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas' },
-    { href: 'gestion/index.html', texto: 'Gestión', soloAdmin: true, destacada: true },
-  ],
-  gestion: [
-    { href: 'gestion/index.html', texto: 'Resumen' },
-    { href: 'gestion/empleados.html', texto: 'Empleados' },
-    { href: 'gestion/tiendas.html', texto: 'Tiendas' },
-    { href: 'gestion/datos.html', texto: 'Importar / exportar' },
-    { href: 'index.html', texto: 'Catálogo', destacada: true },
-  ],
+/** Trazos de los íconos (24 × 24, línea de 2 px). */
+const ICONOS = {
+  inicio: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  ventas: 'M4 4h2l2.4 11h9.2L20 7H7.2M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm7 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  turnos: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z',
+  reportes: 'M5 20V10M12 20V4M19 20v-7',
+  productos: 'M3 7l9-4 9 4-9 4zm0 0v10l9 4 9-4V7M12 11v10',
+  captura: 'M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8',
+  etiquetas: 'M3 12V4h8l10 10-8 8zM7.5 8.5h.01',
+  prueba: 'M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3',
+  datos: 'M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
+  empleados: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.87M15.5 4.13a3.5 3.5 0 0 1 0 6.75',
+  cajas: 'M3 10h18v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM6 10l2-6h8l2 6M9 15h6',
+  tiendas: 'M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6',
+  configuracion: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  caja: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
 };
 
-const MARCA = {
-  catalogo: { href: 'index.html', texto: 'Catálogo Águila' },
-  gestion: { href: 'gestion/index.html', texto: 'Águila Gestión' },
-};
+/** Secciones del back office, en grupos. */
+const GRUPOS = [
+  { titulo: null, secciones: [{ href: 'index.html', texto: 'Inicio', icono: 'inicio' }] },
+  {
+    titulo: 'Ventas',
+    secciones: [
+      { href: 'ventas.html', texto: 'Ventas', icono: 'ventas' },
+      { href: 'turnos.html', texto: 'Turnos', icono: 'turnos' },
+      { href: 'reportes.html', texto: 'Reportes', icono: 'reportes' },
+    ],
+  },
+  {
+    titulo: 'Catálogo',
+    secciones: [
+      { href: 'productos.html', texto: 'Productos', icono: 'productos' },
+      { href: 'captura.html', texto: 'Captura rápida', icono: 'captura' },
+      { href: 'imprimir.html', texto: 'Etiquetas', icono: 'etiquetas' },
+      { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas', icono: 'prueba' },
+      { href: 'gestion/datos.html', texto: 'Importar / exportar', icono: 'datos' },
+    ],
+  },
+  {
+    titulo: 'Administración',
+    secciones: [
+      { href: 'gestion/empleados.html', texto: 'Empleados', icono: 'empleados' },
+      { href: 'gestion/cajas.html', texto: 'Cajas', icono: 'cajas' },
+      { href: 'gestion/tiendas.html', texto: 'Tiendas', icono: 'tiendas' },
+      { href: 'gestion/configuracion.html', texto: 'Configuración', icono: 'configuracion' },
+    ],
+  },
+];
 
-const NOMBRE_ROL = { admin: 'administrador', empleado: 'empleado' };
+const NOMBRE_ROL = { admin: 'Administrador', empleado: 'Empleado' };
+const SVG = 'http://www.w3.org/2000/svg';
 
-function enlace(href, texto, clase) {
+function icono(nombre) {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'nav-icono');
+  svg.setAttribute('aria-hidden', 'true');
+  const trazo = document.createElementNS(SVG, 'path');
+  trazo.setAttribute('d', ICONOS[nombre] ?? '');
+  svg.append(trazo);
+  return svg;
+}
+
+function enlace(href, texto, clase, nombreIcono) {
   const a = document.createElement('a');
   a.href = RAIZ + href;
-  a.textContent = texto;
   if (clase) a.className = clase;
+  if (nombreIcono) a.append(icono(nombreIcono));
+  a.append(Object.assign(document.createElement('span'), { textContent: texto }));
   return a;
 }
 
 /**
- * @param {{ personal: {nombre: string, rol: string, usuario: string, tipo?: string}, activa: string, app?: 'catalogo'|'gestion' }} opciones
+ * @param {{ personal: {nombre: string, rol: string, usuario: string, tipo?: string}, activa: string }} opciones
  *   `activa` es la página relativa a la raíz ("productos.html", "gestion/empleados.html").
  */
-export function pintarNavegacion({ personal, activa, app = 'catalogo' }) {
+export function pintarNavegacion({ personal, activa }) {
   const encabezado = document.getElementById('navegacion');
   if (!encabezado) return;
+  document.body.classList.add('con-lateral');
   encabezado.replaceChildren();
-  encabezado.classList.toggle('encabezado--gestion', app === 'gestion');
 
-  const marca = enlace(MARCA[app].href, MARCA[app].texto, 'marca');
+  const marca = document.createElement('a');
+  marca.href = `${RAIZ}index.html`;
+  marca.className = 'marca';
+  marca.append(
+    Object.assign(document.createElement('span'), { className: 'marca__logo', textContent: 'Á' }),
+    Object.assign(document.createElement('span'), { className: 'marca__texto', textContent: 'Águila POS' }),
+    Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: 'Back office' }),
+  );
 
   const botonMenu = document.createElement('button');
   botonMenu.type = 'button';
@@ -63,17 +111,31 @@ export function pintarNavegacion({ personal, activa, app = 'catalogo' }) {
 
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Secciones');
-  for (const seccion of SECCIONES[app]) {
-    if (seccion.soloAdmin && personal.rol !== 'admin') continue;
-    const a = enlace(seccion.href, seccion.texto, seccion.destacada ? 'destacada' : '');
-    if (seccion.href === activa) a.setAttribute('aria-current', 'page');
-    nav.append(a);
+  for (const grupo of GRUPOS) {
+    const bloque = document.createElement('div');
+    bloque.className = 'nav-grupo';
+    if (grupo.titulo) bloque.append(Object.assign(document.createElement('div'), { className: 'nav-grupo__titulo', textContent: grupo.titulo }));
+    for (const seccion of grupo.secciones) {
+      const a = enlace(seccion.href, seccion.texto, '', seccion.icono);
+      if (seccion.href === activa) a.setAttribute('aria-current', 'page');
+      bloque.append(a);
+    }
+    nav.append(bloque);
   }
+
+  const caja = enlace('caja/', 'Abrir la caja', 'nav-caja', 'caja');
+  caja.title = 'La caja registradora (para vender)';
 
   const usuario = document.createElement('div');
   usuario.className = 'usuario';
-  const cuenta = enlace('cuenta.html', `${personal.nombre} · ${NOMBRE_ROL[personal.rol] ?? personal.rol}`, 'usuario__nombre');
-  cuenta.title = `${personal.tipo === 'codigo' ? 'Código ' : ''}${personal.usuario} · Mi cuenta`;
+  const cuenta = document.createElement('a');
+  cuenta.href = `${RAIZ}cuenta.html`;
+  cuenta.className = 'usuario__nombre';
+  cuenta.append(
+    Object.assign(document.createElement('strong'), { textContent: personal.nombre }),
+    Object.assign(document.createElement('span'), { textContent: `${NOMBRE_ROL[personal.rol] ?? personal.rol} · Mi cuenta` }),
+  );
+  cuenta.title = `${personal.tipo === 'codigo' ? 'Código ' : ''}${personal.usuario}`;
   if (activa === 'cuenta.html') cuenta.setAttribute('aria-current', 'page');
   const salir = document.createElement('button');
   salir.type = 'button';
@@ -82,7 +144,7 @@ export function pintarNavegacion({ personal, activa, app = 'catalogo' }) {
   salir.addEventListener('click', () => cerrarSesion());
   usuario.append(cuenta, salir);
 
-  panel.append(nav, usuario);
+  panel.append(nav, caja, usuario);
 
   const fijarAbierto = (abierto) => {
     encabezado.classList.toggle('encabezado--abierto', abierto);

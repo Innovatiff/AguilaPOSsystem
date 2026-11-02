@@ -1,5 +1,5 @@
 /**
- * Gestión · Importar / exportar el catálogo en CSV (solo administradores).
+ * Back office · Importar / exportar el catálogo en CSV (solo administradores).
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
@@ -9,7 +9,7 @@ import { exportarCatalogo, plantillaCSV, nombreArchivoExportacion, deCSV, planif
 import { formatearPrecio } from './precios.js';
 
 const { personal } = await requerirPersonal({ soloAdmin: true });
-pintarNavegacion({ personal, activa: 'gestion/datos.html', app: 'gestion' });
+pintarNavegacion({ personal, activa: 'gestion/datos.html' });
 
 const $ = (id) => document.getElementById(id);
 const archivo = $('archivo');

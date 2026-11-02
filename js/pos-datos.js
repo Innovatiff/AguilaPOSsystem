@@ -12,9 +12,11 @@ import {
   getDocs,
   getDocFromServer,
   setDoc,
+  updateDoc,
   collection,
   query,
   where,
+  orderBy,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -26,7 +28,7 @@ import {
   EmailAuthProvider,
 } from './firebase.js';
 import { versionDeCodigo } from './auth.js';
-import { configConDefectos } from './config-pos.js';
+import { configConDefectos, armarConfigPos } from './config-pos.js';
 import { correoDeAcceso, normalizarIdentificador, tipoDeIdentificador, usuarioDe } from './identidad.js';
 
 const conId = (instantanea) => ({ id: instantanea.id, ...instantanea.data() });
@@ -41,6 +43,39 @@ export async function leerConfigPos() {
 
 export function observarConfigPos(alCambiar, alFallar) {
   return onSnapshot(doc(db, 'config', 'pos'), (d) => alCambiar(configConDefectos(d.exists() ? d.data() : null), d.exists()), alFallar);
+}
+
+/** Guarda config/pos completo (solo administradores; las reglas exigen los campos exactos). */
+export function guardarConfigPos(datos, usuario) {
+  return setDoc(doc(db, 'config', 'pos'), armarConfigPos(datos, usuario, Timestamp.fromMillis(Date.now())));
+}
+
+/** Da de alta una caja libre (solo administradores). */
+export function crearCaja(id, { nombre, numero, tienda, activo = true }, usuario) {
+  return setDoc(doc(db, 'cajas', id), {
+    nombre: String(nombre).trim(),
+    numero,
+    tienda,
+    activo,
+    turnoActual: null,
+    turnoCajero: null,
+    turnoCajeroNombre: null,
+    turnoDesde: null,
+    actualizadoEn: Timestamp.fromMillis(Date.now()),
+    actualizadoPor: usuario,
+  });
+}
+
+/** Cambia nombre, número, tienda o estado de una caja; los campos del turno no se tocan. */
+export function editarCaja(id, { nombre, numero, tienda, activo }, usuario) {
+  return updateDoc(doc(db, 'cajas', id), {
+    nombre: String(nombre).trim(),
+    numero,
+    tienda,
+    activo,
+    actualizadoEn: Timestamp.fromMillis(Date.now()),
+    actualizadoPor: usuario,
+  });
 }
 
 /** Una caja; con `servidor` exige leerla del servidor (falla sin conexión). */
@@ -98,6 +133,20 @@ export async function hayServidor(cajaId) {
 /** Turnos abiertos de una persona (en cualquier caja). */
 export async function turnosAbiertosDe(usuario) {
   const r = await getDocs(query(collection(db, 'turnos'), where('cajero', '==', usuario), where('estado', '==', 'abierto')));
+  return r.docs.map(conId);
+}
+
+/** Turnos abiertos en este momento (en todas las cajas). */
+export function observarTurnosAbiertos(alCambiar, alFallar) {
+  return onSnapshot(query(collection(db, 'turnos'), where('estado', '==', 'abierto')), (r) => {
+    alCambiar(r.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })));
+  }, alFallar);
+}
+
+/** Turnos que se abrieron entre dos fechas (Date; `hasta` excluida), del más antiguo al más reciente. */
+export async function leerTurnosEntre(desde, hasta) {
+  const r = await getDocs(query(collection(db, 'turnos'),
+    where('abiertoEn', '>=', Timestamp.fromDate(desde)), where('abiertoEn', '<', Timestamp.fromDate(hasta)), orderBy('abiertoEn')));
   return r.docs.map(conId);
 }
 
@@ -187,6 +236,19 @@ export function observarMovimientosDeTurno(turnoId, cajero, alCambiar, alFallar)
   return onSnapshot(query(collection(db, 'movimientosCaja'), ...filtros), (r) => {
     alCambiar(r.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })));
   }, alFallar);
+}
+
+/** Todas las ventas de un día ("AAAA-MM-DD"), de todas las cajas (solo administradores). */
+export function observarVentasDelDia(dia, alCambiar, alFallar) {
+  return onSnapshot(query(collection(db, 'ventas'), where('dia', '==', dia)), { includeMetadataChanges: true }, (r) => {
+    alCambiar(r.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) })), { desdeCache: r.metadata.fromCache });
+  }, alFallar);
+}
+
+/** Ventas con ese folio (normalmente una; dos si dos cajas repitieran consecutivo). */
+export async function buscarVentasPorFolio(folio) {
+  const r = await getDocs(query(collection(db, 'ventas'), where('folio', '==', folio)));
+  return r.docs.map(conId);
 }
 
 /** Ventas y movimientos de un turno leídos del servidor (back office, cierres forzados). */

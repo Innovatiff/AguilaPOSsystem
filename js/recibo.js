@@ -145,7 +145,7 @@ export function reciboTurno(turno, resumen, { tienda = null, config = {}, tipo =
   r.append(fila('Devoluciones', String(resumen.devoluciones)));
   r.append(fila('Artículos', String(resumen.articulos)));
   r.append(fila('Ventas brutas', importe(resumen.brutoVentasCentavos)));
-  r.append(fila('Descuentos', `-${importe(resumen.descuentosCentavos)}`));
+  r.append(fila('Descuentos', resumen.descuentosCentavos ? `-${importe(resumen.descuentosCentavos)}` : importe(0)));
   if (resumen.devoluciones) r.append(fila('Devoluciones', `-${importe(resumen.devolucionesSinImpuestoCentavos)}`));
   r.append(fila('Ventas netas (sin imp.)', importe(ventasNetas(resumen))));
   r.append(fila(`  Con ${config.impuestoNombre ?? 'HST'}`, importe(resumen.baseGravadaCentavos), 'recibo__fila--suave'));

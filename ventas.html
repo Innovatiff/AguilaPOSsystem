@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Ventas · Águila POS</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/recibo.css">
+  <script type="module" src="js/bo-ventas.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Ventas</h1>
+        <p class="nota" id="ventas-fecha">Todos los tickets del día, de todas las cajas.</p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <button type="button" class="boton boton--claro" id="btn-exportar">Exportar CSV</button>
+      </div>
+    </div>
+
+    <form class="filtros" id="filtros" novalidate>
+      <div class="campo">
+        <label for="f-dia">Día</label>
+        <input id="f-dia" type="date" required>
+      </div>
+      <div class="filtros__presets" role="group" aria-label="Día rápido">
+        <button type="button" class="boton boton--chip" data-dia="0">Hoy</button>
+        <button type="button" class="boton boton--chip" data-dia="-1">Ayer</button>
+      </div>
+      <div class="campo">
+        <label for="f-caja">Caja</label>
+        <select id="f-caja"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-cajero">Atendió</label>
+        <select id="f-cajero"><option value="">Todas las personas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-tipo">Tipo</label>
+        <select id="f-tipo">
+          <option value="">Todos</option>
+          <option value="venta">Ventas</option>
+          <option value="devolucion">Devoluciones</option>
+          <option value="autorizada">Con autorización</option>
+          <option value="descuento">Con descuento</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="f-pago">Pago</label>
+        <select id="f-pago">
+          <option value="">Todos</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="debito">Débito</option>
+          <option value="credito">Crédito</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="filtros__espacio"></div>
+      <div class="campo">
+        <label for="f-folio">Buscar ticket</label>
+        <input id="f-folio" type="search" inputmode="numeric" autocomplete="off" placeholder="Folio o escanea el recibo">
+      </div>
+    </form>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="kpis kpis--compactos" aria-label="Totales del día">
+      <article class="kpi"><span class="kpi__etiqueta">Total</span><strong class="kpi__valor" id="k-total">—</strong><span class="kpi__detalle" id="k-total-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Tickets</span><strong class="kpi__valor" id="k-tickets">—</strong><span class="kpi__detalle" id="k-tickets-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Efectivo</span><strong class="kpi__valor" id="k-efectivo">—</strong><span class="kpi__detalle" id="k-efectivo-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Tarjetas y otros</span><strong class="kpi__valor" id="k-tarjetas">—</strong><span class="kpi__detalle" id="k-tarjetas-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta" id="k-impuesto-etiqueta">HST</span><strong class="kpi__valor" id="k-impuesto">—</strong><span class="kpi__detalle" id="k-impuesto-detalle"></span></article>
+    </section>
+
+    <section class="panel panel--12" aria-labelledby="titulo-tickets">
+      <header class="panel__cabecera">
+        <h2 id="titulo-tickets">Tickets</h2>
+        <span class="panel__nota" id="contador"></span>
+      </header>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic" id="tabla-ventas">
+          <thead>
+            <tr><th>Hora</th><th>Ticket</th><th>Caja</th><th>Atendió</th><th class="num">Artículos</th><th>Pago</th><th class="num">Descuento</th><th class="num">Total</th></tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <p class="nota" id="vacio" hidden>No hay tickets con esos filtros.</p>
+    </section>
+  </main>
+</body>
+</html>

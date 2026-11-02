@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cajas · Águila POS</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/gestion-cajas.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Cajas</h1>
+        <p class="nota">Las cajas registradoras de cada tienda. Cada computadora de caja se asigna a una de ellas desde la propia caja. Las cajas se desactivan, no se borran.</p>
+      </div>
+    </div>
+
+    <form id="form-caja" class="formulario formulario--fila" novalidate>
+      <div class="campo">
+        <label for="c-nombre">Nombre</label>
+        <input id="c-nombre" type="text" required maxlength="40" autocomplete="off" placeholder="p. ej. Caja 1">
+      </div>
+      <div class="campo">
+        <label for="c-numero">Número</label>
+        <input id="c-numero" type="number" required min="1" max="99" step="1" inputmode="numeric" placeholder="1 a 99">
+      </div>
+      <div class="campo">
+        <label for="c-tienda">Tienda</label>
+        <select id="c-tienda" required></select>
+      </div>
+      <div class="campo campo--casilla">
+        <label><input id="c-activo" type="checkbox" checked> Activa</label>
+      </div>
+      <div class="acciones">
+        <button id="c-guardar" class="boton" type="submit">Agregar caja</button>
+        <button id="c-cancelar" class="boton boton--enlace" type="button" hidden>Cancelar</button>
+      </div>
+    </form>
+    <p id="c-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <table class="tabla" id="tabla-cajas">
+      <thead>
+        <tr><th class="num">Número</th><th>Caja</th><th>Tienda</th><th>Estado</th><th>Turno actual</th><th>Acciones</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p class="nota" id="cajas-vacio" hidden>Todavía no hay cajas. Agrega la primera con el formulario de arriba.</p>
+
+    <section class="panel panel--12 panel--ayuda" aria-labelledby="titulo-instalar">
+      <header class="panel__cabecera"><h2 id="titulo-instalar">Poner una computadora como caja</h2></header>
+      <ol class="pasos">
+        <li>En la computadora de la caja, abre <a id="enlace-caja" href="../caja/"></a> con Google Chrome (también funciona sin conexión una vez abierta).</li>
+        <li>Un administrador escribe su código y NIP, y elige qué caja es esa computadora. Solo se hace una vez.</li>
+        <li>Desde entonces, cada cajera entra con su código y NIP, abre su turno con el fondo y vende. Al terminar cuenta el efectivo y se imprime su corte.</li>
+        <li><strong>Recibos sin diálogo de impresión:</strong> pon la impresora de recibos como predeterminada de Windows y abre Chrome con la opción <code>--kiosk-printing</code> (en el acceso directo). Para que el cajón abra solo, activa en el controlador de la impresora «abrir cajón al imprimir» (Cash drawer / Peripheral device).</li>
+        <li>El ancho del rollo (80 o 58 mm) y el pie del recibo se cambian en <a href="configuracion.html">Configuración</a>; el encabezado (dirección, teléfono, número de HST), en <a href="tiendas.html">Tiendas</a>.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

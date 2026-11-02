@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Tiendas · Águila Gestión</title>
+  <title>Tiendas · Águila POS</title>
   <link rel="icon" href="../icons/icono-192.png" type="image/png">
   <link rel="apple-touch-icon" href="../icons/icono-180.png">
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#2b2b2b">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Gestión">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
   <script type="module" src="../js/pwa.js"></script>
   <link rel="stylesheet" href="../css/base.css">
   <script type="module" src="../js/gestion-tiendas.js"></script>
@@ -19,7 +19,8 @@
   <header id="navegacion" class="encabezado"></header>
   <main id="contenido" hidden>
     <h1>Tiendas</h1>
-    <p class="nota">El identificador se usa en los productos (campo <code>tiendas</code>) y no cambia después. Las tiendas se
+    <p class="nota">El identificador se usa en los productos (campo <code>tiendas</code>) y en las cajas, y no cambia después.
+      El nombre, la dirección, el teléfono, el correo y el número de HST salen en el encabezado de los recibos. Las tiendas se
       desactivan, no se borran.</p>
 
     <form id="form-tienda" class="formulario formulario--fila" novalidate>
@@ -34,7 +35,19 @@
       </div>
       <div class="campo campo--ancho">
         <label for="t-direccion">Dirección</label>
-        <input id="t-direccion" type="text" maxlength="160" autocomplete="off">
+        <input id="t-direccion" type="text" maxlength="160" autocomplete="off" placeholder="p. ej. 42 Erie St S, Leamington ON N8H 3A9">
+      </div>
+      <div class="campo">
+        <label for="t-telefono">Teléfono</label>
+        <input id="t-telefono" type="tel" maxlength="30" autocomplete="off" placeholder="519-322-4222">
+      </div>
+      <div class="campo">
+        <label for="t-correo">Correo</label>
+        <input id="t-correo" type="email" maxlength="80" autocomplete="off">
+      </div>
+      <div class="campo">
+        <label for="t-impuesto">Número de HST</label>
+        <input id="t-impuesto" type="text" maxlength="30" autocomplete="off" placeholder="12345 6789 RT0001">
       </div>
       <div class="campo campo--casilla">
         <label><input id="t-activo" type="checkbox" checked> Activa</label>
@@ -48,7 +61,7 @@
 
     <table class="tabla" id="tabla-tiendas">
       <thead>
-        <tr><th>Identificador</th><th>Nombre</th><th>Dirección</th><th>Estado</th><th>Acciones</th></tr>
+        <tr><th>Identificador</th><th>Nombre</th><th>Dirección</th><th>Contacto</th><th>Estado</th><th>Acciones</th></tr>
       </thead>
       <tbody></tbody>
     </table>

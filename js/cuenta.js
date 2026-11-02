@@ -40,7 +40,7 @@ if (personal.tienda) {
 
 $('titulo-secreto').textContent = esCodigo ? 'Cambiar NIP' : 'Cambiar contraseña';
 $('nota-secreto').textContent = esCodigo
-  ? 'El NIP son de 6 a 10 dígitos, solo números. Si lo olvidas, el gerente lo restablece desde Gestión.'
+  ? 'El NIP son de 6 a 10 dígitos, solo números. Si lo olvidas, un administrador lo restablece desde Empleados.'
   : 'La contraseña debe tener al menos 8 caracteres. Si la olvidas, usa «Olvidé mi contraseña» al entrar.';
 $('et-actual').textContent = `${palabra[0].toUpperCase()}${palabra.slice(1)} actual`;
 $('et-nuevo').textContent = `${palabra[0].toUpperCase()}${palabra.slice(1)} nueva`.replace('NIP nueva', 'NIP nuevo');

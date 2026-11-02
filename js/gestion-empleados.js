@@ -1,5 +1,5 @@
 /**
- * Gestión · Empleados (solo administradores): alta con código y NIP (o correo
+ * Back office · Empleados (solo administradores): alta con código y NIP (o correo
  * y contraseña), edición, restablecer NIP, activar/desactivar.
  *
  * Cada alta crea la cuenta de Firebase Authentication (js/cuentas.js) y la
@@ -18,7 +18,7 @@ import { normalizarTexto } from './esquema.js';
 import { db, doc, runTransaction, writeBatch, collection, onSnapshot, Timestamp } from './firebase.js';
 
 const { personal: yo } = await requerirPersonal({ soloAdmin: true });
-pintarNavegacion({ personal: yo, activa: 'gestion/empleados.html', app: 'gestion' });
+pintarNavegacion({ personal: yo, activa: 'gestion/empleados.html' });
 
 const $ = (id) => document.getElementById(id);
 const ahora = () => Timestamp.fromMillis(Date.now());

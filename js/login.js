@@ -15,11 +15,13 @@ const mensaje = document.getElementById('mensaje');
 const MOTIVOS = {
   'sesion-cerrada': ['ok', 'Sesión cerrada.'],
   'desactivado': ['error', 'Tu acceso está desactivado. Habla con el gerente.'],
-  'sin-registro': ['error', 'Esta cuenta no está registrada. Pide al gerente que te dé de alta en Gestión.'],
+  'sin-registro': ['error', 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).'],
   'cuenta-renovada': ['error', 'Tu NIP fue restablecido. Entra con el NIP nuevo.'],
   'sin-conexion': ['error', 'No se pudo comprobar tu acceso. Revisa la conexión e inténtalo de nuevo.'],
+  'solo-admin': ['error', 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios.'],
 };
-const MOTIVOS_SIN_REINGRESO = new Set(['desactivado', 'sin-registro', 'cuenta-renovada']);
+const MOTIVOS_SIN_REINGRESO = new Set(['desactivado', 'sin-registro', 'cuenta-renovada', 'solo-admin']);
+const SOLO_ADMIN = MOTIVOS['solo-admin'][1];
 
 function mostrar(tipo, texto) {
   mensaje.textContent = texto;
@@ -52,7 +54,11 @@ if (motivo) mostrar(...motivo);
 usuarioActual().then(async (usuario) => {
   if (!usuario || MOTIVOS_SIN_REINGRESO.has(parametros.get('motivo'))) return;
   try {
-    await fichaEfectiva(usuario);
+    const personal = await fichaEfectiva(usuario);
+    if (personal.rol !== 'admin') {
+      await cerrarSesionSilenciosa();
+      return;
+    }
     window.location.replace(destino);
   } catch (error) {
     if (String(error?.code ?? '').startsWith('catalogo/')) await cerrarSesionSilenciosa();
@@ -66,7 +72,14 @@ formulario.addEventListener('submit', async (evento) => {
   mostrar('', '');
   ocupado(true);
   try {
-    await iniciarSesion(identificador.value, secreto.value);
+    const { personal } = await iniciarSesion(identificador.value, secreto.value);
+    if (personal.rol !== 'admin') {
+      await cerrarSesionSilenciosa();
+      mostrar('error', SOLO_ADMIN);
+      ocupado(false);
+      secreto.value = '';
+      return;
+    }
     window.location.replace(destino);
   } catch (error) {
     const codigo = error?.code ?? '';

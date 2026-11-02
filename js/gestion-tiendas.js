@@ -1,6 +1,7 @@
 /**
- * Gestión · Tiendas (solo administradores). Documentos completos con setDoc:
- * las reglas exigen los campos exactos del esquema.
+ * Back office · Tiendas. Documentos completos con setDoc: las reglas exigen
+ * los campos del esquema. Teléfono, correo y número de impuesto son los datos
+ * del encabezado de los recibos de la caja.
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
@@ -8,7 +9,7 @@ import { db, doc, setDoc, collection, query, orderBy, onSnapshot } from './fireb
 import { normalizarTexto } from './esquema.js';
 
 const { personal } = await requerirPersonal({ soloAdmin: true });
-pintarNavegacion({ personal, activa: 'gestion/tiendas.html', app: 'gestion' });
+pintarNavegacion({ personal, activa: 'gestion/tiendas.html' });
 document.getElementById('contenido').hidden = false;
 
 const $ = (id) => document.getElementById(id);
@@ -38,6 +39,9 @@ const formTienda = $('form-tienda');
 const tNombre = $('t-nombre');
 const tId = $('t-id');
 const tDireccion = $('t-direccion');
+const tTelefono = $('t-telefono');
+const tCorreo = $('t-correo');
+const tImpuesto = $('t-impuesto');
 const tActivo = $('t-activo');
 const tGuardar = $('t-guardar');
 const tCancelar = $('t-cancelar');
@@ -74,7 +78,14 @@ formTienda.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   if (!formTienda.reportValidity()) return;
   const id = tId.value.trim();
-  const tienda = { nombre: tNombre.value.trim(), direccion: tDireccion.value.trim(), activo: tActivo.checked };
+  const tienda = {
+    nombre: tNombre.value.trim(),
+    direccion: tDireccion.value.trim(),
+    activo: tActivo.checked,
+    telefono: tTelefono.value.trim(),
+    correo: tCorreo.value.trim(),
+    numeroImpuesto: tImpuesto.value.trim(),
+  };
   tGuardar.disabled = true;
   mostrar(tMensaje, '', '');
   try {
@@ -96,7 +107,8 @@ onSnapshot(query(collection(db, 'stores'), orderBy('nombre')), (resultado) => {
     const tienda = documento.data();
     const fila = document.createElement('tr');
     if (!tienda.activo) fila.className = 'inactivo';
-    fila.append(celda(documento.id), celda(tienda.nombre), celda(tienda.direccion), celda(tienda.activo ? 'Activa' : 'Inactiva'));
+    const contacto = [tienda.telefono, tienda.correo, tienda.numeroImpuesto ? `HST ${tienda.numeroImpuesto}` : ''].filter(Boolean).join(' · ');
+    fila.append(celda(documento.id), celda(tienda.nombre), celda(tienda.direccion), celda(contacto || '—'), celda(tienda.activo ? 'Activa' : 'Inactiva'));
     const acciones = document.createElement('td');
     acciones.className = 'acciones-fila';
     acciones.append(
@@ -105,6 +117,9 @@ onSnapshot(query(collection(db, 'stores'), orderBy('nombre')), (resultado) => {
         tId.value = documento.id;
         tNombre.value = tienda.nombre;
         tDireccion.value = tienda.direccion;
+        tTelefono.value = tienda.telefono ?? '';
+        tCorreo.value = tienda.correo ?? '';
+        tImpuesto.value = tienda.numeroImpuesto ?? '';
         tActivo.checked = tienda.activo;
         tNombre.focus();
       }),

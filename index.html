@@ -3,45 +3,114 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Inicio · Catálogo Águila</title>
+  <title>Inicio · Águila POS</title>
   <link rel="icon" href="icons/icono-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icono-180.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#2b2b2b">
+  <meta name="theme-color" content="#1c1f24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Catálogo Águila">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
   <script type="module" src="js/pwa.js"></script>
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/recibo.css">
   <script type="module" src="js/inicio.js"></script>
 </head>
 <body>
   <header id="navegacion" class="encabezado"></header>
   <main id="contenido" hidden>
-    <p id="aviso" class="mensaje" role="status" hidden></p>
-    <h1 id="saludo"></h1>
-    <section class="tarjetas" aria-label="Secciones disponibles">
-      <a class="tarjeta" href="productos.html">
-        <strong>Productos</strong>
-        <span>Buscar por nombre o UPC, crear, editar y desactivar. El escáner abre el producto.</span>
-      </a>
-      <a class="tarjeta" href="captura.html">
-        <strong>Captura rápida</strong>
-        <span>Recorre los anaqueles: escanea, teclea nombre, marca, presentación, precio y clase fiscal, guarda, siguiente.</span>
-      </a>
-      <a class="tarjeta" href="imprimir.html">
-        <strong>Imprimir etiquetas</strong>
-        <span>Etiquetas pendientes por tienda, selección y una sola impresión.</span>
-      </a>
-      <a class="tarjeta" href="prueba-etiquetas.html">
-        <strong>Prueba de etiquetas</strong>
-        <span>Las dos plantillas a tamaño real, para imprimir y escanear.</span>
-      </a>
-      <a id="tarjeta-gestion" class="tarjeta tarjeta--gestion" href="gestion/index.html" hidden>
-        <strong>Gestión</strong>
-        <span>Empleados y sus códigos, tiendas e importación del catálogo. Solo administradores.</span>
-      </a>
+    <div class="cabecera-pagina">
+      <div>
+        <h1 id="saludo">Inicio</h1>
+        <p class="nota" id="fecha-hoy"></p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <a class="boton boton--claro" href="reportes.html">Reportes</a>
+        <a class="boton" href="ventas.html">Ventas del día</a>
+      </div>
+    </div>
+
+    <section class="kpis" aria-label="Ventas de hoy">
+      <article class="kpi kpi--heroe">
+        <span class="kpi__etiqueta">Vendido hoy</span>
+        <strong class="kpi__valor" id="kpi-total">—</strong>
+        <span class="kpi__detalle" id="kpi-total-detalle">Todas las cajas, con impuesto</span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__etiqueta">Tickets</span>
+        <strong class="kpi__valor" id="kpi-tickets">—</strong>
+        <span class="kpi__detalle" id="kpi-devoluciones"></span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__etiqueta">Ticket promedio</span>
+        <strong class="kpi__valor" id="kpi-promedio">—</strong>
+        <span class="kpi__detalle" id="kpi-articulos"></span>
+      </article>
+      <article class="kpi">
+        <span class="kpi__etiqueta" id="kpi-impuesto-etiqueta">HST cobrado</span>
+        <strong class="kpi__valor" id="kpi-impuesto">—</strong>
+        <span class="kpi__detalle" id="kpi-netas"></span>
+      </article>
     </section>
+
+    <div class="paneles">
+      <section class="panel panel--8" aria-labelledby="titulo-horas">
+        <header class="panel__cabecera">
+          <h2 id="titulo-horas">Ventas por hora</h2>
+          <span class="panel__nota">Hoy · total con impuesto</span>
+        </header>
+        <div id="grafica-horas"></div>
+        <details class="tabla-vista">
+          <summary>Ver como tabla</summary>
+          <table class="tabla tabla--compacta" id="tabla-horas">
+            <thead><tr><th>Hora</th><th class="num">Tickets</th><th class="num">Vendido</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </details>
+      </section>
+
+      <section class="panel panel--4" aria-labelledby="titulo-pagos">
+        <header class="panel__cabecera">
+          <h2 id="titulo-pagos">Formas de pago</h2>
+          <span class="panel__nota">Hoy</span>
+        </header>
+        <div id="barra-pagos"></div>
+        <ul class="lista-cifras" id="lista-pagos"></ul>
+      </section>
+
+      <section class="panel panel--4" aria-labelledby="titulo-cajas">
+        <header class="panel__cabecera">
+          <h2 id="titulo-cajas">Cajas</h2>
+          <a class="panel__enlace" href="turnos.html">Turnos</a>
+        </header>
+        <ul class="lista-estado" id="lista-cajas"></ul>
+        <p class="nota" id="cajas-vacio" hidden>No hay cajas dadas de alta. <a href="gestion/cajas.html">Crea la primera caja</a>.</p>
+      </section>
+
+      <section class="panel panel--8" aria-labelledby="titulo-ultimos">
+        <header class="panel__cabecera">
+          <h2 id="titulo-ultimos">Últimos tickets</h2>
+          <a class="panel__enlace" href="ventas.html">Ver todas las ventas de hoy</a>
+        </header>
+        <table class="tabla tabla--compacta tabla--clic" id="tabla-ultimos">
+          <thead><tr><th>Hora</th><th>Ticket</th><th>Caja</th><th>Atendió</th><th>Pago</th><th class="num">Total</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="nota" id="ultimos-vacio" hidden>Todavía no hay ventas hoy.</p>
+      </section>
+
+      <section class="panel panel--12" aria-labelledby="titulo-catalogo">
+        <header class="panel__cabecera">
+          <h2 id="titulo-catalogo">Catálogo y personal</h2>
+        </header>
+        <div class="indicadores indicadores--panel">
+          <a class="indicador" href="productos.html"><strong id="ind-productos">—</strong><span>productos activos</span></a>
+          <a class="indicador" href="imprimir.html"><strong id="ind-pendientes">—</strong><span>etiquetas por imprimir</span></a>
+          <a class="indicador" href="gestion/empleados.html"><strong id="ind-empleados">—</strong><span>personas con acceso</span></a>
+          <a class="indicador" href="gestion/tiendas.html"><strong id="ind-tiendas">—</strong><span>tiendas activas</span></a>
+        </div>
+      </section>
+    </div>
   </main>
 </body>
 </html>

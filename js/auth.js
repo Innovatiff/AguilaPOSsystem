@@ -1,8 +1,8 @@
 /**
  * Acceso del personal: inicio y cierre de sesión, ficha staff/{usuario} y
- * guardia para las páginas del catálogo y de Gestión.
+ * guardia para las páginas del back office (solo administradores).
  *
- * Entra solo el personal registrado por el gerente en Gestión: la cuenta de
+ * Entra solo el personal registrado en el back office (Empleados): la cuenta de
  * Firebase Authentication necesita su ficha activa y vigente. El usuario es el
  * código de empleado (cuenta "<código>@<dominio sintético>" con NIP) o el
  * correo real (con contraseña). Ver js/identidad.js.
@@ -37,7 +37,7 @@ const MENSAJES = {
   'auth/requires-recent-login': 'Por seguridad, cierra sesión, vuelve a entrar y repite la operación.',
   'auth/operation-not-allowed': 'Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.',
   'auth/admin-restricted-operation': 'Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.',
-  'catalogo/sin-registro': 'Esta cuenta no está registrada. Pide al gerente que te dé de alta en Gestión.',
+  'catalogo/sin-registro': 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).',
   'catalogo/desactivado': 'Tu acceso está desactivado. Habla con el gerente.',
   'catalogo/cuenta-renovada': 'Tu NIP fue restablecido. Entra con el NIP nuevo.',
   'catalogo/sin-version-libre': 'No se pudo crear la cuenta de este código. Usa otro código.',
@@ -145,7 +145,7 @@ export function enviarRestablecimiento(correo) {
   return sendPasswordResetEmail(auth, limpio);
 }
 
-/** Solo se permite volver a páginas de esta misma app (raíz o gestion/). */
+/** Solo se permite volver a páginas del back office (raíz o gestion/). */
 export function destinoSeguro(valor, porDefecto = 'index.html') {
   const texto = String(valor ?? '');
   return /^(gestion\/)?[a-z0-9-]+\.html(\?[^#/\\]*)?$/.test(texto) ? texto : porDefecto;
@@ -166,10 +166,11 @@ function irALogin(motivo) {
 }
 
 /**
- * Guardia de página: exige sesión de personal registrado y activo (y rol admin
- * si se pide). Redirige a login.html cuando no se cumple.
+ * Guardia de página del back office: exige sesión de personal registrado y
+ * activo, con rol admin (el back office es solo para administradores; el
+ * resto del personal usa la caja). Redirige a login.html cuando no se cumple.
  */
-export async function requerirPersonal({ soloAdmin = false } = {}) {
+export async function requerirPersonal({ soloAdmin = true } = {}) {
   const usuario = await usuarioActual();
   if (!usuario) return irALogin();
 
@@ -185,8 +186,8 @@ export async function requerirPersonal({ soloAdmin = false } = {}) {
     return irALogin('sin-conexion');
   }
   if (soloAdmin && personal.rol !== 'admin') {
-    window.location.replace(`${RAIZ}index.html?aviso=solo-admin`);
-    return new Promise(() => {});
+    await signOut(auth);
+    return irALogin('solo-admin');
   }
   return { usuario, personal };
 }

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Turnos · Águila POS</title>
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/recibo.css">
+  <script type="module" src="js/bo-turnos.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Turnos</h1>
+        <p class="nota">Quién abrió cada caja, cuánto tiempo estuvo, cuánto vendió y cómo cuadró el efectivo.</p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <button type="button" class="boton boton--claro" id="btn-exportar">Exportar horas (CSV)</button>
+      </div>
+    </div>
+
+    <section class="panel panel--12 panel--separado" aria-labelledby="titulo-abiertos">
+      <header class="panel__cabecera">
+        <h2 id="titulo-abiertos">Abiertos ahora</h2>
+        <span class="panel__nota" id="abiertos-nota"></span>
+      </header>
+      <table class="tabla tabla--compacta tabla--clic" id="tabla-abiertos">
+        <thead><tr><th>Persona</th><th>Caja</th><th>Desde</th><th class="num">Horas</th><th class="num">Fondo</th><th class="num">Vendido hoy</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="nota" id="abiertos-vacio" hidden>No hay turnos abiertos.</p>
+    </section>
+
+    <form class="filtros" id="filtros" novalidate>
+      <div class="campo">
+        <label for="f-desde">Desde</label>
+        <input id="f-desde" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-hasta">Hasta</label>
+        <input id="f-hasta" type="date" required>
+      </div>
+      <div class="filtros__presets" role="group" aria-label="Periodo rápido">
+        <button type="button" class="boton boton--chip" data-periodo="hoy">Hoy</button>
+        <button type="button" class="boton boton--chip" data-periodo="ayer">Ayer</button>
+        <button type="button" class="boton boton--chip" data-periodo="semana">7 días</button>
+        <button type="button" class="boton boton--chip" data-periodo="mes">Este mes</button>
+      </div>
+      <div class="campo">
+        <label for="f-caja">Caja</label>
+        <select id="f-caja"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-persona">Persona</label>
+        <select id="f-persona"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-estado">Estado</label>
+        <select id="f-estado">
+          <option value="">Todos</option>
+          <option value="cerrado">Cerrados</option>
+          <option value="abierto">Abiertos</option>
+          <option value="diferencia">Con diferencia de efectivo</option>
+          <option value="forzado">Cerrados por un administrador</option>
+        </select>
+      </div>
+    </form>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="kpis kpis--compactos" aria-label="Totales del periodo">
+      <article class="kpi"><span class="kpi__etiqueta">Turnos</span><strong class="kpi__valor" id="k-turnos">—</strong><span class="kpi__detalle" id="k-turnos-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Horas en caja</span><strong class="kpi__valor" id="k-horas">—</strong><span class="kpi__detalle" id="k-horas-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Vendido</span><strong class="kpi__valor" id="k-vendido">—</strong><span class="kpi__detalle">Turnos cerrados, con impuesto</span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Faltantes</span><strong class="kpi__valor" id="k-faltantes">—</strong><span class="kpi__detalle" id="k-faltantes-detalle"></span></article>
+      <article class="kpi"><span class="kpi__etiqueta">Sobrantes</span><strong class="kpi__valor" id="k-sobrantes">—</strong><span class="kpi__detalle" id="k-sobrantes-detalle"></span></article>
+    </section>
+
+    <section class="panel panel--12" aria-labelledby="titulo-turnos">
+      <header class="panel__cabecera">
+        <h2 id="titulo-turnos">Turnos del periodo</h2>
+        <span class="panel__nota" id="contador"></span>
+      </header>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic" id="tabla-turnos">
+          <thead>
+            <tr><th>Persona</th><th>Caja</th><th>Apertura</th><th>Cierre</th><th class="num">Horas</th><th class="num">Tickets</th><th class="num">Vendido</th><th class="num">Esperado</th><th class="num">Contado</th><th class="num">Diferencia</th><th>Estado</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio" hidden>No hay turnos en ese periodo.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Configuración · Águila POS</title>
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/recibo.css">
+  <script type="module" src="../js/gestion-configuracion.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Configuración</h1>
+        <p class="nota">Cómo cobran todas las cajas: impuesto, turnos, recibo y teclas de departamento. Los cambios llegan a las cajas al momento.</p>
+      </div>
+    </div>
+
+    <form id="form-config" class="config" novalidate>
+      <div class="config__columnas">
+        <div class="config__principal">
+          <section class="panel" aria-labelledby="t-impuesto">
+            <header class="panel__cabecera"><h2 id="t-impuesto">Impuesto</h2></header>
+            <div class="rejilla">
+              <div class="campo">
+                <label for="k-impuesto-nombre">Nombre en el recibo</label>
+                <input id="k-impuesto-nombre" type="text" maxlength="20" required autocomplete="off">
+              </div>
+              <div class="campo">
+                <label for="k-tasa">Tasa (%)</label>
+                <input id="k-tasa" type="text" inputmode="decimal" maxlength="6" required autocomplete="off">
+              </div>
+            </div>
+            <p class="nota nota--campo">Los precios del catálogo son sin impuesto. El impuesto se calcula una vez por ticket sobre lo gravado (+Tx), ya con descuentos.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="t-turnos">
+            <header class="panel__cabecera"><h2 id="t-turnos">Turnos y efectivo</h2></header>
+            <div class="rejilla">
+              <div class="campo">
+                <label for="k-fondo">Fondo inicial sugerido ($)</label>
+                <input id="k-fondo" type="text" inputmode="decimal" maxlength="10" required autocomplete="off">
+              </div>
+              <div class="campo">
+                <label for="k-limite">Venta libre sin autorización hasta ($)</label>
+                <input id="k-limite" type="text" inputmode="decimal" maxlength="10" required autocomplete="off">
+                <span class="ayuda-campo">Una venta por departamento más cara pide autorización. 0 = sin límite.</span>
+              </div>
+              <div class="campo campo--ancho campo--casilla">
+                <label><input id="k-ciego" type="checkbox"> Conteo a ciegas: al cerrar, la cajera cuenta el efectivo sin ver cuánto debería haber</label>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="t-recibo">
+            <header class="panel__cabecera"><h2 id="t-recibo">Recibo</h2></header>
+            <fieldset class="campo">
+              <legend>Ancho del rollo</legend>
+              <label><input type="radio" name="papel" value="80"> 80 mm</label>
+              <label><input type="radio" name="papel" value="58"> 58 mm</label>
+            </fieldset>
+            <div class="campo">
+              <label for="k-pie">Mensaje al pie del recibo</label>
+              <textarea id="k-pie" rows="3" maxlength="300"></textarea>
+            </div>
+            <p class="nota nota--campo">El nombre, la dirección, el teléfono, el correo y el número de HST del encabezado se cambian en <a href="tiendas.html">Tiendas</a>.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="t-deptos">
+            <header class="panel__cabecera">
+              <h2 id="t-deptos">Teclas de departamento</h2>
+              <span class="panel__nota" id="deptos-contador"></span>
+            </header>
+            <p class="nota nota--campo">Para vender lo que no tiene código o no está en el catálogo: la cajera escribe el precio y toca la tecla.</p>
+            <table class="tabla tabla--compacta tabla--editable" id="tabla-deptos">
+              <thead><tr><th>Orden</th><th>Nombre</th><th>Impuesto</th><th>Color</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <button type="button" class="boton boton--claro" id="btn-agregar-depto">Agregar departamento</button>
+          </section>
+        </div>
+
+        <aside class="config__lateral" aria-label="Vista previa">
+          <h2 class="subtitulo-bo">Así se verá el recibo</h2>
+          <div class="vista-recibo-bo" id="vista-recibo"></div>
+          <h2 class="subtitulo-bo">Teclas en la caja</h2>
+          <div class="vista-deptos" id="vista-deptos"></div>
+        </aside>
+      </div>
+
+      <div class="barra-guardar">
+        <p id="k-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+        <span class="barra-guardar__estado" id="k-estado"></span>
+        <button type="button" class="boton boton--claro" id="k-descartar">Descartar cambios</button>
+        <button type="submit" class="boton" id="k-guardar">Guardar configuración</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
