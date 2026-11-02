@@ -1,40 +1,42 @@
-# Catálogo Águila
+# Águila POS
 
-Product catalog and shelf-tag printing for Águila Marketplace (Leamington, ON),
-and the source of truth for the coming POS. Plain HTML, CSS and JavaScript with
-native ES modules. No framework, no bundler, no build step: the repo root is the
-site. Firebase (Firestore + Auth) for data and staff login. UI in Spanish,
-prices in CAD cents.
+Point of sale, back office and product catalog for Águila Marketplace
+(Leamington, ON). Plain HTML, CSS and JavaScript with native ES modules. No
+framework, no bundler, no build step: the repo root is the site. Firebase
+(Firestore + Auth) for data and staff login. UI in Spanish, money in CAD
+integer cents, never floats.
 
-Two apps share the site, the data and the service worker:
+Three apps share the site, the data and the service worker:
 
-- **Catálogo** (root): what staff use on the cart laptops and on their phones.
-  Products, scan-and-add, tag printing. Staff sign in with their employee
-  **code + NIP**; managers can also sign in with email + password.
-- **Gestión** (`/gestion/`, admins only): employees and their codes, stores,
-  CSV import/export, and a summary.
+| app | where | who | what |
+|---|---|---|---|
+| **Back office** | site root (`index.html`, `ventas.html`, `turnos.html`, `reportes.html`, catalog pages, `gestion/`) | **admins only** | today's sales live, sales journal and reprints, shifts with hours and cash over/short, reports, products and tags, employees, registers, stores, POS settings |
+| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with their PIN**, and the close prints their Z report with what they sold and their hours |
+| **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner); change one's own PIN |
 
 ## Layout
 
 | path | what |
 |---|---|
-| `index.html`, `login.html`, `productos.html`, `cuenta.html` | catalog pages (staff login required); `cuenta.html` lets each person change their own NIP |
-| `gestion/index.html`, `gestion/empleados.html`, `gestion/tiendas.html`, `gestion/datos.html` | Gestión: summary, employee registry, stores, CSV (admins) |
-| `js/identidad.js`, `js/cuentas.js`, `js/personal.js` | code ↔ account mapping and NIP rules (pure), account creation from the app, staff names for display |
-| `js/gestion-*.js` | scripts of the Gestión pages |
-| `prueba-etiquetas.html` | step 1: both tag templates at physical size, print test |
-| `css/etiquetas.css` | the tag: every physical size is a `:root` variable in mm |
-| `js/upca.js`, `js/precios.js`, `js/etiquetas.js` | UPC-A → SVG, cents formatting, tag rendering |
-| `js/esquema.js` | schema constants, `tokensBusqueda`, validation (pure, shared with tests) |
-| `js/firebase.js`, `js/auth.js`, `js/nav.js` | SDK init with offline cache, login guard, nav bar |
-| `js/productos.js`, `js/pantalla-productos.js` | product data layer (batched price history) and the product screen |
-| `imprimir.html`, `js/pantalla-imprimir.js` | pending tags by store, preview, one print, mark as printed |
-| `captura.html`, `js/pantalla-captura.js` | scan-and-add loop for loading the catalog shelf by shelf |
-| `gestion/datos.html`, `js/gestion-datos.js`, `js/csv.js` | CSV export and validated import of the full catalog |
-| `js/escaner.js`, `vendor/zxing/<version>/` | camera barcode scanner for phones (native BarcodeDetector, ZXing fallback vendored) |
-| `sw.js`, `manifest.webmanifest`, `icons/` | installable PWA; app shell cached, versioned per deploy |
-| `vendor/firebase/<version>/` | Firebase SDK vendored as ESM (no CDN at runtime) |
-| `firestore.rules`, `firestore.indexes.json` | security rules and composite indexes |
+| `index.html`, `js/inicio.js` | back office home: sold today, tickets, average ticket, HST, sales by hour, payment methods, registers with an open shift, latest tickets |
+| `ventas.html`, `js/bo-ventas.js` | sales journal of a day: filters, search by receipt number (or scan the receipt), ticket detail with reprint, CSV |
+| `turnos.html`, `js/bo-turnos.js` | open shifts now and shifts of a period: hours, sales, expected/counted cash, over/short; shift detail with its Z (or X) report, verification against the sales, admin close |
+| `reportes.html`, `js/bo-reportes.js` | reports of a period from the shift summaries: totals, tax, by day, payment methods, by person (hours), by register, top products, department sales, control counters; print and CSV |
+| `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees and their codes, CSV import/export |
+| `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
+| `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
+| `caja/consulta.html`, `js/consulta.js` | staff price check and PIN change |
+| `js/ticket.js` | ticket math in integer cents: lines, discounts, HST once per ticket, Canadian cash rounding, payments, receipt number (pure, unit tested) |
+| `js/turnos.js` | shift summary (X/Z), cash count, summing shifts for reports (pure, unit tested) |
+| `js/recibo.js`, `css/recibo.css`, `js/code128.js` | thermal receipts (80/58 mm) and reports printed through the browser; Code 128 barcode of the receipt number |
+| `js/pos-datos.js`, `js/config-pos.js`, `js/verificador.js` | POS data in Firestore, POS settings with defaults, offline PIN verifier (PBKDF2 hash) |
+| `js/bo.js`, `js/grafica.js`, `js/dom.js`, `js/nav.js` | back office helpers, SVG charts, DOM builder, sidebar navigation |
+| `js/identidad.js`, `js/cuentas.js`, `js/personal.js`, `js/auth.js` | code ↔ account mapping and PIN rules, account creation, staff names, login guard |
+| `js/esquema.js`, `js/productos.js`, `js/upca.js`, `js/precios.js`, `js/etiquetas.js`, `js/csv.js`, `js/escaner.js` | catalog schema, product data, barcodes, prices, tags, CSV, camera scanner |
+| `css/etiquetas.css` | the shelf tag: every physical size is a `:root` variable in mm |
+| `sw.js`, `manifest.webmanifest`, `caja/*.webmanifest`, `icons/` | installable PWAs; app shell cached, versioned per deploy |
+| `vendor/` | Firebase SDK and ZXing decoder vendored as ESM (no CDN at runtime) |
+| `firestore.rules`, `firestore.indexes.json` | security rules and indexes |
 | `pruebas/` | unit tests, rules tests (emulator) and browser end-to-end tests (`pruebas/e2e/`) |
 | `docs/esquema.md` | data model and invariants |
 
@@ -43,8 +45,9 @@ Two apps share the site, the data and the service worker:
 1. `npm install` (dev tooling only: emulator, test runner, esbuild).
 2. Copy `js/config.example.js` to `js/config.js` and paste the web app config
    from the Firebase console. `js/config.js` is git-ignored.
-3. `npm run servir` and open <http://localhost:5500/>. ES modules need HTTP; a
-   `file://` URL will not work.
+3. `npm run servir` and open <http://localhost:5500/> (back office) or
+   <http://localhost:5500/caja/> (register). ES modules need HTTP; a `file://`
+   URL will not work.
 
 Against the emulators instead of the real project: `npm run emuladores`, and in
 `js/config.js` set `export const emuladores = { host: '127.0.0.1' };`.
@@ -52,91 +55,197 @@ Against the emulators instead of the real project: `npm run emuladores`, and in
 ## Tests
 
 - `npm test` starts the Firestore emulator and runs the unit and rules tests
-  (Java 21 required for the emulator).
-- `npm run test:unitarias` runs only the pure unit tests.
-- `npm run test:e2e` runs the browser scenarios in `pruebas/e2e/` (access,
-  Gestión, products, capture, printing, phone with camera) against the Auth and
-  Firestore emulators. It serves a temporary copy of the site with
-  `js/config.js` pointing at the emulators, so your real config is untouched.
-  Needs `npx playwright install chromium` once. `npm run test:e2e -- movil`
-  runs a single scenario. Screenshots land in `pruebas/e2e/salida/`.
+  (Java 21 required for the emulator). `pruebas/reglas/holgura.test.mjs`
+  measures how much evaluation budget each POS rule has left (Firestore stops
+  evaluating a request after a fixed number of expressions); keep it green
+  when touching the rules.
+- `npm run test:unitarias` runs only the pure unit tests (ticket math, cash
+  rounding, shift summary, Code 128 decoded back with ZXing, barcodes, CSV…).
+- `npm run test:e2e` runs the browser scenarios in `pruebas/e2e/` against the
+  Auth and Firestore emulators: `caja` (assign a computer, open a shift, sell,
+  approvals, return, cash drop, lock, close with Z), `backoffice` (dashboard,
+  journal, shifts, reports, registers, settings), plus access, employees,
+  products, capture, printing and phone. It serves a temporary copy of the site
+  with `js/config.js` pointing at the emulators, so your real config is
+  untouched. `npm run test:e2e -- caja` runs a single scenario. Screenshots land
+  in `pruebas/e2e/salida/`. Needs `npx playwright install chromium` once (or
+  set `CHROMIUM_E2E` to a Chromium binary).
 
-## Access model and bootstrap
+## Access model
 
 **Only registered staff can sign in.** A Firebase Authentication account gets
 in only if `staff/{usuario}` exists, is `activo`, and points at that account.
-Managers register everyone from **Gestión → Empleados**, which creates the
+Admins register everyone in **Back office → Empleados**, which creates the
 Authentication account and the record together. Nobody is deleted: people are
 deactivated, and access ends the moment that happens.
 
-Two kinds of access:
+- **Back office: admins only.** An employee who signs in at `login.html` is told
+  to use the register or the price check instead, and is signed out.
+- **Register and price check: every active staff member**, with their
+  **employee code + PIN**. The code is exactly 6 digits (Empleados proposes the
+  next free one); the PIN is 6–10 digits chosen by the admin and handed over in
+  person. Behind it is an Authentication account with the synthetic email
+  `<code>@codigo.aguilapos.firebaseapp.com` (`DOMINIO_CODIGOS` in
+  `js/identidad.js`, mirrored in `firestore.rules`). People change their own PIN
+  in the price check (**Mi NIP**); if they forget it, an admin uses **Restablecer
+  NIP**, which creates a fresh account for the same code (`<code>.2@…`) and cuts
+  the old one off at once. The login screens learn which version is current from
+  the tiny public document `accesos/<code>` (`{ version }`).
+- **Email + password** (admins who prefer it). Password recovery is by email.
 
-- **Employee code + NIP** (the normal case). The code is exactly 6 digits
-  (Gestión proposes the next free one, e.g. `100001`); the NIP is 6–10 digits chosen by
-  the manager and handed over in person. Behind it is an Authentication
-  account with the synthetic email `<code>@codigo.aguilapos.firebaseapp.com`
-  (the constant `DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in
-  `firestore.rules`). The person can change their NIP in **Mi cuenta**; if they
-  forget it, the manager uses **Restablecer NIP**, which creates a fresh account
-  for the same code (`<code>.2@…`) and cuts the old one off at once. The login
-  screen learns which version is current from the tiny public document
-  `accesos/<code>` (`{ version }`), written in the same batch as the record.
-- **Email + password** (managers, or anyone who prefers it). Gestión can create
-  the account with a temporary password or just register an account that
-  already exists in the console. Password recovery is by email.
+Every write is signed with the person's stable **usuario** (the code, or the
+email); the rules verify it. The register, the price check and the back office
+each keep their own Firebase session, so on one computer a cashier can have
+their shift open while an admin uses the back office in another window.
 
-Whatever the kind, every write is signed with the person's stable **usuario**
-(the code, or the email): that is what `actualizadoPor` and the price history
-store, and the rules verify it.
+**The catalog belongs to the admins.** Only an admin creates or edits products
+and prices; the rules reject it for everyone else. Price changes are written
+together with their `priceHistory` entry.
 
-**Prices belong to the manager.** Only an `admin` can change the price of an
-existing product (`precioCentavos`, `precioPorKgCentavos`, and the unit of
-sale that decides which one applies). The rules reject it for everyone else,
-so it holds whatever client is used; the product editor and Captura rápida
-show those fields read-only to employees and say why. Employees still create
-products with their initial price, edit names, brands, sizes and the tax
-class, and print tags. Price history entries are therefore always written by
-an admin.
+## First-time setup
 
-First-time setup (once per Firebase project):
+Once per Firebase project:
 
 1. Firebase console → Authentication → Sign-in method → enable **Email/Password**.
 2. Authentication → Settings → **User actions** → keep **Enable create (sign-up)**
-   ON. Gestión needs it to create accounts from the browser. It is safe: an
+   ON. Empleados needs it to create accounts from the browser. It is safe: an
    account without an active record cannot read or write anything.
-3. Create your own manager account: Authentication → Users → **Add user**
+3. Create your own admin account: Authentication → Users → **Add user**
    (email + password). Then Firestore → collection `staff` → document ID = your
    email in lowercase with `nombre` (string), `rol` = `admin` (string),
-   `activo` = `true` (boolean). Gestión completes the rest of the record the
-   first time you open it.
+   `activo` = `true` (boolean). The back office completes the rest of the record
+   the first time you open it.
 4. Publish the rules: paste `firestore.rules` into the console's Rules tab, or
    `npx firebase login` and `npm run reglas:desplegar`.
-5. Sign in at `login.html`, open **Gestión**, add the stores, then the employees.
+5. Sign in at `login.html` and, in this order:
+   - **Tiendas**: each store with its name, address, phone, email and HST number
+     (they print at the top of every receipt).
+   - **Empleados**: everyone, with their code and PIN (admins too, if they will
+     use the register).
+   - **Cajas**: one per register (number 1–99; it appears in receipt numbers).
+   - **Configuración**: tax name and rate (HST 13 %), suggested opening float,
+     open-price limit, blind count, receipt width (80/58 mm) and footer, and the
+     department keys of the register.
+6. On each register computer, open `https://<site>/caja/` in Chrome: an admin
+   signs in with their code and PIN and picks which register that computer is.
+   Done once per computer (stored on that computer).
 
-Records created before Gestión (only `nombre`, `rol`, `activo`) keep working and
-are completed on their next edit. To remove someone's access, deactivate them
-in Gestión; disabling the account in Authentication also works.
+## Back office
 
-## Gestión (manager app)
+A sidebar (folding into a menu button on narrow screens) groups the pages:
 
-`/gestion/` is a separate installable app (its own manifest) for `admin`
-accounts, with the same look and the same login page.
+- **Inicio**: sold today (all registers, with tax), tickets and returns, average
+  ticket, HST collected, sales by hour (chart with its table), payment methods,
+  which registers have a shift open and how much they sold, the latest tickets.
+  Live, and it rolls over to the new day at midnight.
+- **Ventas**: every ticket of a day, live, with totals; filters by register,
+  person, type (sales, returns, approved, discounted) and payment method. Search
+  by receipt number, or scan the barcode printed on the receipt, to open any
+  ticket of any day: lines, payments, change, who approved, the receipt as it
+  printed, **Reimprimir** (marked COPIA). CSV export of the day.
+- **Turnos**: shifts open right now, and the shifts of a period with hours at
+  the register, tickets, sales, expected cash, counted cash and the difference
+  (over/short). The detail shows the Z report (X if still open), the tickets and
+  cash movements of the shift, **Imprimir corte**, **Verificar contra las
+  ventas** (recomputes the stored summary from the tickets), and for a shift left
+  open, **Cerrar este turno** (an admin closes it, optionally with the counted
+  cash; it is recorded as closed by that admin). Hours per person as CSV.
+- **Reportes**: any date range, from the summary every shift stores when it
+  closes: total, net sales, tax base and HST for the accountant, sales by day,
+  payment methods, per person (shifts, hours, tickets, sales, average, cash
+  over/short), per register, top products, department (open-price) sales and
+  control counters (voided lines, cancelled tickets, discounts, price changes,
+  approvals, drawer openings, cash drops, payouts). Print or CSV. Shifts still
+  open are listed and join the report when they close.
+- **Catálogo**: Productos, Captura rápida, Etiquetas, Prueba de etiquetas,
+  Importar / exportar (unchanged, see below).
+- **Empleados**, **Cajas**, **Tiendas**, **Configuración** (see setup).
 
-- **Resumen**: active products, products with a pending tag, people with
-  access, active stores.
-- **Empleados**: list with search and "Ver inactivos"; `Alt+N` registers a
-  person (code + NIP or email + password, name, role, store). Actions per row:
-  Editar (name, role, store), Restablecer NIP (code accounts), Enviar enlace de
-  contraseña (email accounts), Desactivar / Activar. An admin cannot deactivate,
-  demote or reset themselves; another admin must.
-- **Tiendas** and **Importar / exportar** moved here from the catalog.
+## The register (`/caja/`)
 
-How an employee registration works, so failures are understandable: Gestión
-first creates the Authentication account through a throw-away secondary
-Firebase app (the web SDK can only create an account by signing in with it),
-then writes `staff/{code}` in a transaction that refuses to overwrite an
-existing code. If the first step succeeds and the second fails, retrying is
-safe: an orphan account for that code is skipped by using the next version.
+Designed for a 1024 × 768 touch screen and up, with keyboard and USB scanner.
+
+**Hardware per register**
+
+- Windows PC with Google Chrome, the store's network, a touch screen or mouse.
+- **USB barcode scanner** in keyboard mode (it types the code and Enter). No
+  driver or API: the register listens to the keyboard.
+- **Thermal receipt printer** (80 mm, or 58 mm in Configuración) set as the
+  Windows default printer. Receipts print through Chrome's normal print
+  pipeline (`@media print`, `css/recibo.css`); no ESC/POS. For receipts without
+  a dialog, launch Chrome with `--kiosk-printing` (see *Direct printing* below)
+  and print once from the dialog with the receipt printer, margins None.
+- **Cash drawer** connected to the receipt printer: enable "open cash drawer"
+  (Cash drawer / Peripheral device) in the printer driver, so every printed
+  receipt or slip opens it. "Abrir cajón" prints a small slip for that reason.
+- Card terminal (Moneris or similar) stand-alone: the cashier charges on the
+  terminal and records the approved payment in the register.
+- Scales are not integrated: weighed items ask for the weight (kg), and
+  price-embedded scale labels (UPC starting with 2) are read automatically.
+
+**A cashier's day**
+
+1. **Open the shift**: code + PIN on the register's start screen, then the
+   opening float (suggested amount from Configuración). An opening slip prints.
+2. **Sell**: scan; or type a PLU (4–5 digits; weighed items ask for kilos); or
+   type letters to search by name; `3×` (or `3*`) then scan adds three; type a
+   price and touch a department key for items without a code (`499` = $4.99).
+   An unknown barcode offers to sell it by department. Lines can be changed:
+   quantity, weight, price, discount, void. **Cobrar** (F10): cash with quick
+   bills and the change in big digits (cash totals round to 5 ¢, Canada has no
+   pennies), debit, credit or other, split payments. The receipt prints by
+   itself.
+3. **Needs an admin**: discounts (line or ticket), price changes, returns, and
+   open-price sales above the limit. An admin types their own code and PIN on
+   the register (a separate session; the cashier stays signed in). One approval
+   covers the ticket. Admins selling at the register need no approval.
+4. **Returns** (F8): scan the original receipt (or type its number, or "Sin
+   recibo"), get the approval, scan the items, refund in cash or to the card.
+5. **Other functions** (F9): reprint, tickets of the shift, open drawer, cash
+   drop to the safe, cash in, payout from the drawer, X report (mid-shift),
+   lock, close shift, full screen, keyboard shortcuts. **En espera** (F6) holds
+   up to 6 tickets. Cancelled tickets and voided lines are recorded.
+6. **Lock** when stepping away (button or Ctrl+B); the PIN unlocks it.
+   Reloading the page or a power cut keeps the shift and the ticket in progress,
+   and the register comes back locked.
+7. **Close the shift**: count the drawer by bills and coins (blind count: the
+   expected amount is not shown), confirm with the PIN. The **Z report** prints:
+   tickets, gross/net sales, discounts, returns, HST, payment methods, opening
+   float, cash sales, drops, expected vs counted and the difference, voids,
+   cancellations, drawer openings, approvals, first/last receipt and the
+   **hours at the register**. The register returns to its start screen.
+
+Keyboard: F1 shortcuts, F2 price check, F3 search, F4/Supr void line, F5
+quantity, F6 hold, F7 ticket discount, F8 return, F9 more, F10 pay, ↑/↓ select
+a line, +/− one more/less, Esc clear.
+
+**Rules that keep the money right** (`js/ticket.js`, `firestore.rules`):
+integer cents everywhere; catalog prices are before tax; HST is computed once
+per ticket on the taxable base after discounts, rounded half up; cash totals
+round to 5 ¢ and the rounding is stored; a ticket is either a sale or a return
+(all negative); sales and cash movements are immutable; the rules check that
+the totals add up, that the payments cover the total, that the ticket belongs
+to the cashier's own shift, the server time of each ticket, and that discounts,
+price changes and returns carry an admin approval for that shift.
+
+**Receipt numbers** look like `261102-01-0042`: date, register number and the
+day's sequence on that register. The receipt prints it with a Code 128 barcode,
+so scanning a receipt finds it in the back office or in a return.
+
+**Without internet** the register keeps selling: tickets queue on the computer
+and are sent when the connection comes back (the status pill in the top bar
+shows how many are pending), the PIN unlocks against a local hash (never the
+PIN itself), and the shift can be closed. Opening a shift, admin approvals and
+signing in need the internet.
+
+## Price check (`/caja/consulta.html`)
+
+For every staff member, on a phone or at a PC. Sign in with code and PIN;
+search by name, type a code or PLU, scan with the USB scanner, or tap
+**Escanear** to use the phone camera (native `BarcodeDetector` or the vendored
+ZXing). Shows the price, per kg for weighed items, the tax mark and the codes.
+Read-only. **Mi NIP** changes one's own PIN. Installable on the phone's home
+screen.
 
 ## Deploy (Netlify)
 
@@ -180,12 +289,12 @@ its 12 digits. Check digits are verified everywhere a code enters: the USB
 scanner, the phone camera, the editor and the CSV import. Tags render both
 symbols with the same 95-module width; the encoder lives in `js/upca.js` and
 its output is verified against an independent decoder in the phone scenario.
-Eight-digit codes (EAN-8, UPC-E) are not supported yet and are refused with a
-clear message.
+UPC-E (8 digits starting with 0 or 1) is expanded to its UPC-A; EAN-8 is not
+supported yet and is refused with a clear message.
 
 ## CSV import and export (step 6)
 
-`gestion/datos.html` (admins, inside Gestión) exports the whole catalog and imports a CSV back.
+`gestion/datos.html` (back office → Importar / exportar) exports the whole catalog and imports a CSV back.
 
 **Export**: UTF-8 with BOM, comma separated, CRLF, one row per product, the
 columns in this order: `id, upc, plu, nombre, marca, descriptor, presentacion,
@@ -215,14 +324,14 @@ rule read and Firestore allows 20 per batch, see
 
 `herramientas/convertir-bestpos.mjs` turns the BestPOS "Inventory List"
 report (open it in Excel, save as CSV: fields separated by `;`) into the CSV
-that Gestión → Importar / exportar accepts, plus a review file with every
+that Back office → Importar / exportar accepts, plus a review file with every
 decision. No dependencies: it reuses `js/upca.js` and `js/csv.js`.
 
 ```
 node herramientas/convertir-bestpos.mjs Rapport.csv --tienda=<store id> --salida=migracion
 ```
 
-`--tienda` is the store identifier as shown in Gestión → Tiendas (without it
+`--tienda` is the store identifier as shown in Back office → Tiendas (without it
 the products are imported with no store). The output folder `migracion/` is
 gitignored because it holds real store data. It writes:
 
@@ -278,7 +387,7 @@ splits the new conversion into what is safe to import:
 node herramientas/actualizar-desde-bestpos.mjs --anterior=<catalog csv> --nuevo=migracion/importar-bestpos-<store>.csv --salida=migracion --nombre=<store>
 ```
 
-`--anterior` is what the catalog holds today: the export from Gestión →
+`--anterior` is what the catalog holds today: the export from Back office →
 Importar / exportar (it carries `id`, so products are recognised by UPC, by
 PLU and by name, and updated by id), or, failing that, the CSV that was
 imported last time (no ids: only UPC matches count). It writes
@@ -327,24 +436,20 @@ another station during printing leaves that product pending, as it should.
 The print marker is per product, not per store, which is what the schema
 allows.
 
-## Phones: installable app and camera scanning
+## Phones: installable apps and camera scanning
 
-The catalog is responsive and installs on phones (Add to Home Screen on iOS,
-Install app in Chrome). On narrow or touch screens:
-
-- the navigation folds behind a menu button, results render as cards, dialogs
-  take the whole screen, and the search box does not grab the keyboard on load;
-- tapping a product opens a **ficha de consulta** (big price, tax indicator,
-  UPC, stores, the tag as it prints, pending-tag status, price history) with an
-  **Editar** button that opens the usual editor;
-- **Escanear** opens the camera. Detection uses the browser's native
-  `BarcodeDetector` when it supports UPC/EAN (Chrome on Android) and otherwise
-  the vendored ZXing decoder (`vendor/zxing/`), loaded only when the scanner
-  opens, which is the path iPhones use. A known UPC opens its ficha; an unknown
-  one offers to create the product with the UPC prefilled. The camera needs
-  HTTPS (Netlify) or localhost, and the person must allow it once.
-
-The USB scanners on the carts are untouched: they still type into the search box.
+Staff use **Consulta de precios** (`caja/consulta.html`) on their phones: it
+installs on the home screen and scans with the camera. Admins can also run the
+back office on a phone or tablet: the sidebar folds behind a menu button,
+product results render as cards, dialogs take the whole screen, and tapping a
+product opens a **ficha de consulta** (big price, tax indicator, UPC, stores,
+the tag as it prints, pending-tag status, price history) with an **Editar**
+button. **Escanear** opens the camera: detection uses the browser's native
+`BarcodeDetector` when it supports UPC/EAN (Chrome on Android) and otherwise
+the vendored ZXing decoder (`vendor/zxing/`), loaded only when the scanner
+opens, which is the path iPhones use. The camera needs HTTPS (Netlify) or
+localhost, and the person must allow it once. USB scanners always work: they
+type into whatever field has the focus.
 
 ## Offline and the service worker
 
@@ -375,9 +480,16 @@ deleted once nothing references it.
 
 ## Printing
 
-Brother QL-820NWB on 62 mm continuous tape, driver length 32 mm. The tag is
-designed for the printable area (59 × 29 mm). In Chrome: paper `62mm`, layout
-Landscape (set by the page), margins None, scale 100 %.
+**Shelf tags**: Brother QL-820NWB on 62 mm continuous tape, driver length
+32 mm. The tag is designed for the printable area (59 × 29 mm). In Chrome:
+paper `62mm`, layout Landscape (set by the page), margins None, scale 100 %.
+
+**Receipts**: thermal roll printer, 80 mm by default (72 mm printable) or
+58 mm (Configuración → Recibo). Physical sizes are CSS variables at the top of
+`css/recibo.css`. Print once from Chrome's dialog with the receipt printer,
+paper = the roll, margins None, headers and footers off; with
+`--kiosk-printing` every later receipt goes straight to it. Turn on "open cash
+drawer" in the printer driver so the drawer opens with each receipt.
 
 ### Direct printing, no dialog
 
@@ -401,7 +513,7 @@ Per laptop:
 4. Relaunch and check `chrome://version`: "Command Line" must include the flag.
 
 Caveats: with the flag, any website that calls print goes straight to the
-default printer, so use it only on the cart laptops. To change printer or
+default printer, so use it only on the cart laptops and the registers. To change printer or
 settings later, launch Chrome once without the flag, print from the dialog,
 then relaunch with it. To leave normal browsing untouched, a separate user
 data directory runs as its own Chrome process with its own flags:
