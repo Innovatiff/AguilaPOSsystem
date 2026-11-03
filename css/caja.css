@@ -119,15 +119,13 @@ kbd {
   color: var(--pos-marca);
 }
 
+/* Logo: águila blanca sobre naranja (icons/aguila.svg), decorativo. */
 .logo {
-  display: inline-grid;
-  place-items: center;
+  display: inline-block;
+  flex: none;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
-  background: var(--pos-marca);
-  color: #fff;
-  font: 700 18px/1 var(--pos-cifras);
+  background: url("../icons/aguila.svg") center / contain no-repeat;
 }
 
 .barra__caja,

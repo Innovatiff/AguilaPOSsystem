@@ -92,7 +92,7 @@ export function pintarNavegacion({ personal, activa }) {
   marca.href = `${RAIZ}index.html`;
   marca.className = 'marca';
   marca.append(
-    Object.assign(document.createElement('span'), { className: 'marca__logo', textContent: 'Á' }),
+    Object.assign(document.createElement('span'), { className: 'marca__logo' }),
     Object.assign(document.createElement('span'), { className: 'marca__texto', textContent: 'Águila POS' }),
     Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: 'Back office' }),
   );

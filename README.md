@@ -34,7 +34,7 @@ Three apps share the site, the data and the service worker:
 | `js/identidad.js`, `js/cuentas.js`, `js/personal.js`, `js/auth.js` | code ↔ account mapping and PIN rules, account creation, staff names, login guard |
 | `js/esquema.js`, `js/productos.js`, `js/upca.js`, `js/precios.js`, `js/etiquetas.js`, `js/csv.js`, `js/escaner.js` | catalog schema, product data, barcodes, prices, tags, CSV, camera scanner |
 | `css/etiquetas.css` | the shelf tag: every physical size is a `:root` variable in mm |
-| `sw.js`, `manifest.webmanifest`, `caja/*.webmanifest`, `icons/` | installable PWAs; app shell cached, versioned per deploy |
+| `sw.js`, `manifest.webmanifest`, `caja/*.webmanifest`, `icons/` | installable PWAs; app shell cached, versioned per deploy. `icons/aguila.svg` is the logo (white eagle on orange); the `icono-*.png` files are rendered from it |
 | `vendor/` | Firebase SDK and ZXing decoder vendored as ESM (no CDN at runtime) |
 | `firestore.rules`, `firestore.indexes.json` | security rules and indexes |
 | `pruebas/` | unit tests, rules tests (emulator) and browser end-to-end tests (`pruebas/e2e/`) |

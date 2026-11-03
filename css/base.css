@@ -1825,7 +1825,7 @@ dialog.escaner[open] {
    Back office: barra lateral (pantallas anchas) o barra superior con menú
    ===================================================================== */
 :root {
-  --lateral-ancho: 244px;
+  --lateral-ancho: 268px;      /* ancho total de la barra lateral, relleno incluido */
   --color-lateral: #1c1f24;
   --color-lateral-2: #2a2f36;
   --bo-linea: #e3e6ea;
@@ -1863,17 +1863,15 @@ dialog.escaner[open] {
   text-decoration: none;
 }
 
+/* Logo: águila blanca sobre naranja (icons/aguila.svg). Es decorativo: el
+   nombre de la marca siempre va escrito al lado. */
 .marca__logo {
   grid-row: 1 / span 2;
-  display: grid;
-  place-items: center;
+  display: inline-block;
+  flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
-  background: var(--color-marca);
-  color: #fff;
-  font-size: 19px;
-  font-weight: 800;
+  background: url("../icons/aguila.svg") center / contain no-repeat;
 }
 
 .marca__texto {
@@ -1993,6 +1991,7 @@ dialog.escaner[open] {
     top: 0;
     bottom: 0;
     left: 0;
+    box-sizing: border-box;
     width: var(--lateral-ancho);
     flex-direction: column;
     flex-wrap: nowrap;
@@ -2025,8 +2024,8 @@ dialog.escaner[open] {
     white-space: normal;
   }
 
+  /* El contenido usa todo el ancho que deja la barra lateral, sin tope. */
   .con-lateral main {
-    max-width: 1440px;
     padding: 26px 34px 48px;
   }
 }
@@ -2067,11 +2066,10 @@ dialog.escaner[open] {
 }
 
 .marca__logo--login {
-  display: inline-grid;
-  width: 36px;
-  height: 36px;
-  margin-right: 6px;
-  vertical-align: -6px;
+  width: 38px;
+  height: 38px;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 .login__otras {
@@ -2880,7 +2878,6 @@ body.consulta {
 .consulta__marca .marca__logo {
   width: 30px;
   height: 30px;
-  font-size: 17px;
 }
 
 .consulta__usuario {

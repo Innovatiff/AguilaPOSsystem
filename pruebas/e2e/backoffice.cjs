@@ -257,7 +257,43 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   await page.waitForFunction(() => /guardada/.test(document.getElementById('t-mensaje').textContent), null, { timeout: 15000 });
   v.ok('la tienda guarda los datos del encabezado del recibo', (await c.leerDoc('stores/talbot')).telefono === '519-555-0100');
 
-  // ---- 9) pantalla angosta: menú plegado
+  // ---- 9) pantalla ancha: el contenido llena todo el ancho junto a la barra lateral
+  await page.setViewportSize({ width: 2048, height: 1100 });
+  const paginasAnchas = [
+    ['index.html', 'inicio'], ['ventas.html', 'ventas'], ['turnos.html', 'turnos'],
+    [`reportes.html?desde=${m.ticket.claveDia(en(1, 0))}&hasta=${m.ticket.claveDia(hoy)}`, 'reportes'],
+    ['productos.html', 'productos'], ['captura.html', 'captura'], ['imprimir.html', 'imprimir'],
+    ['gestion/empleados.html', 'empleados'], ['gestion/cajas.html', 'cajas'], ['gestion/configuracion.html', 'configuracion'],
+    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'],
+    ['cuenta.html', 'cuenta', { angosta: true }], // formulario corto: columna de lectura a propósito
+  ];
+  const fueraDeAncho = [];
+  for (const [ruta, nombre, { angosta = false } = {}] of paginasAnchas) {
+    await page.goto(`${c.BASE}/${ruta}`);
+    await page.waitForSelector('#contenido:not([hidden])');
+    await page.waitForTimeout(700); // que pinte sus datos antes de medir y capturar
+    const medida = await page.evaluate(() => {
+      const contenido = document.getElementById('contenido').getBoundingClientRect();
+      return {
+        izquierda: Math.round(contenido.left), derecha: Math.round(contenido.right),
+        lateral: Math.round(document.getElementById('navegacion').getBoundingClientRect().right),
+        ventana: innerWidth, desborde: document.documentElement.scrollWidth - innerWidth,
+      };
+    });
+    const llena = angosta || medida.derecha >= medida.ventana - 1;
+    if (Math.abs(medida.izquierda - medida.lateral) > 1 || !llena || medida.desborde > 0) fueraDeAncho.push(`${nombre} ${JSON.stringify(medida)}`);
+    await page.screenshot({ path: `${c.SALIDA}/bo-ancho-${nombre}.png` });
+  }
+  v.ok('a 2048 px cada página llena el ancho junto a la barra lateral, sin desbordar', fueraDeAncho.length === 0, fueraDeAncho.join(' | '));
+  const logo = await page.evaluate(async () => {
+    const fondo = getComputedStyle(document.querySelector('#navegacion .marca__logo')).backgroundImage;
+    const imagen = new Image();
+    imagen.src = /url\("?([^")]+)"?\)/.exec(fondo)?.[1] ?? '';
+    try { await imagen.decode(); return { fondo, carga: true }; } catch { return { fondo, carga: false }; }
+  });
+  v.ok('el logo de la barra lateral es el águila (icons/aguila.svg) y carga', /\/icons\/aguila\.svg/.test(logo.fondo) && logo.carga, JSON.stringify(logo));
+
+  // ---- 10) pantalla angosta: menú plegado
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto(`${c.BASE}/index.html`);
   await page.waitForSelector('#contenido:not([hidden])');

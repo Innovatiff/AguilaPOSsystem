@@ -50,6 +50,7 @@ const CASCARA = [
   'css/etiquetas.css',
   'css/recibo.css',
   'fonts/Oswald-Variable.woff2',
+  'icons/aguila.svg',
   'icons/icono-180.png',
   'icons/icono-192.png',
   'icons/icono-512.png',

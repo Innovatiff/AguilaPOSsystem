@@ -63,7 +63,9 @@ export function hora(valor) {
 export function saludo(nombre, ahora = new Date()) {
   const horaDia = ahora.getHours();
   const parte = horaDia < 12 ? 'Buenos días' : horaDia < 19 ? 'Buenas tardes' : 'Buenas noches';
-  return `${parte}, ${String(nombre ?? '').split(' ')[0]}`;
+  // Un correo no es un nombre: quien no tiene nombre puesto recibe solo el saludo.
+  const primero = String(nombre ?? '').trim().split(/\s+/)[0];
+  return primero && !primero.includes('@') ? `${parte}, ${primero}` : parte;
 }
 
 // ------------------------------------------------------------- textos y piezas
