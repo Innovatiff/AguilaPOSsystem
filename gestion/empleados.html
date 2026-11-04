@@ -23,19 +23,21 @@
       <h1>Empleados</h1>
       <button id="btn-nuevo" class="boton" type="button">Nuevo empleado <kbd>Alt+N</kbd></button>
     </div>
-    <p class="nota">Quien no aparezca aquí como activo no puede entrar. Los empleados entran con su <b>código</b> y un
-      <b>NIP</b>; los gerentes pueden entrar también con correo y contraseña. Nadie se borra: se desactiva.</p>
+    <p class="nota">Cada colaborador se registra con su <b>correo</b> y un <b>NIP de 6 dígitos</b> que nadie más tiene.
+      En la caja entra solo con el NIP; en la consulta de precios y en la app Catálogo, con su correo y el NIP.
+      El Catálogo solo lo usa quien tenga el permiso. Nadie se borra: se desactiva.</p>
+    <p id="aviso-migracion" class="mensaje mensaje--aviso" hidden></p>
 
     <div class="barra-busqueda barra-busqueda--compacta">
       <label for="filtro" class="visualmente-oculto">Buscar personal</label>
-      <input id="filtro" type="search" autocomplete="off" placeholder="Buscar por nombre, código o correo">
+      <input id="filtro" type="search" autocomplete="off" placeholder="Buscar por nombre o correo">
       <label class="casilla"><input id="ver-inactivos" type="checkbox"> Ver inactivos</label>
     </div>
     <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
 
     <table class="tabla tabla--personal" id="tabla-personal" aria-label="Personal registrado">
       <thead>
-        <tr><th>Código / correo</th><th>Nombre</th><th>Rol</th><th>Tienda</th><th>Acceso</th><th>Estado</th><th>Acciones</th></tr>
+        <tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Tienda</th><th>Acceso</th><th>Catálogo</th><th>Estado</th><th>Acciones</th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -51,25 +53,14 @@
       <p id="editor-aviso" class="mensaje editor__aviso" role="alert" hidden></p>
 
       <div class="editor__cuerpo editor__cuerpo--simple">
-        <fieldset class="campo" id="grupo-tipo">
-          <legend>Tipo de acceso</legend>
-          <label><input type="radio" name="tipo" value="codigo" checked> Código de empleado + NIP</label>
-          <label><input type="radio" name="tipo" value="correo"> Correo + contraseña</label>
-        </fieldset>
-
         <div class="rejilla" id="grupo-datos">
-          <div class="campo" id="campo-codigo">
-            <label for="e-codigo">Código de empleado *</label>
-            <input id="e-codigo" inputmode="numeric" autocomplete="off" maxlength="6">
-            <span class="ayuda-campo">6 dígitos. Se propone el siguiente libre.</span>
-          </div>
-          <div class="campo" id="campo-correo" hidden>
-            <label for="e-correo">Correo *</label>
-            <input id="e-correo" type="email" autocomplete="off" autocapitalize="off" spellcheck="false">
-          </div>
           <div class="campo">
             <label for="e-nombre">Nombre *</label>
             <input id="e-nombre" maxlength="80" autocomplete="off">
+          </div>
+          <div class="campo">
+            <label for="e-correo">Correo *</label>
+            <input id="e-correo" type="email" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120">
           </div>
           <div class="campo">
             <label for="e-rol">Rol</label>
@@ -82,24 +73,28 @@
             <label for="e-tienda">Tienda</label>
             <select id="e-tienda"><option value="">Sin asignar</option></select>
           </div>
+          <label class="casilla casilla--bloque campo--ancho" id="campo-catalogo">
+            <input id="e-catalogo" type="checkbox">
+            <span><b>Puede usar la app Catálogo</b><br>
+              <small>Buscar y escanear productos, editar sus datos (nunca el precio), imprimir etiquetas y pedir altas y bajas al administrador.</small></span>
+          </label>
+          <p class="nota campo--ancho" id="e-numero" hidden></p>
         </div>
-
-        <fieldset class="campo" id="grupo-cuenta-correo" hidden>
-          <legend>Cuenta de Firebase</legend>
-          <label><input type="radio" name="cuenta" value="crear" checked> Crear la cuenta ahora, con una contraseña temporal</label>
-          <label><input type="radio" name="cuenta" value="existe"> La cuenta ya existe en Firebase: solo registrar el acceso</label>
-        </fieldset>
 
         <div class="rejilla" id="grupo-secreto">
           <div class="campo">
             <label for="e-secreto" id="et-secreto">NIP *</label>
-            <input id="e-secreto" type="password" autocomplete="new-password" inputmode="numeric" maxlength="10" spellcheck="false">
+            <input id="e-secreto" type="password" autocomplete="new-password" inputmode="numeric" maxlength="6" spellcheck="false">
           </div>
           <div class="campo">
             <label for="e-secreto2" id="et-secreto2">Repite el NIP *</label>
-            <input id="e-secreto2" type="password" autocomplete="new-password" inputmode="numeric" maxlength="10" spellcheck="false">
+            <input id="e-secreto2" type="password" autocomplete="new-password" inputmode="numeric" maxlength="6" spellcheck="false">
           </div>
-          <p class="nota campo--ancho" id="nota-secreto">De 6 a 10 dígitos. Anótalo y entrégaselo en persona: después no se puede consultar, solo restablecer.</p>
+          <div class="campo--ancho fila-nip">
+            <button id="btn-generar" class="boton boton--secundario boton--pequeno" type="button">Generar un NIP</button>
+            <output id="nip-generado" class="nip-generado" hidden></output>
+          </div>
+          <p class="nota campo--ancho" id="nota-secreto">6 dígitos, distinto al de cualquier otra persona: en la caja es lo único que se escribe. Anótalo y entrégaselo en persona; después no se puede consultar, solo cambiar.</p>
         </div>
       </div>
 

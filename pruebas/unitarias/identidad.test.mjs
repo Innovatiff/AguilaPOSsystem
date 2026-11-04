@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   DOMINIO_CODIGOS, normalizarIdentificador, esCodigo, esCorreo, tipoDeIdentificador, correoDeAcceso, usuarioDe, versionDe,
   esCorreoDeCodigo, validarCodigo, validarNIP, validarContrasena, siguienteCodigo, etiquetaUsuario, armarFichaPersonal, validarFichaPersonal,
+  esNIP,
 } from '../../js/identidad.js';
 
 describe('identidad · códigos y correos', () => {
@@ -47,16 +48,16 @@ describe('identidad · validación', () => {
     assert.match(validarCodigo('1234567'), /6 dígitos/);
     assert.match(validarCodigo('a12345'), /6 dígitos/);
   });
-  it('NIP: 6 a 10 dígitos, ni repetido ni secuencia', () => {
+  it('NIP de colaborador: exactamente 6 dígitos, ni repetido ni secuencia', () => {
     assert.equal(validarNIP('482913'), null);
-    assert.equal(validarNIP('4829130071'), null);
-    assert.match(validarNIP('12345'), /6 a 10/);
-    assert.match(validarNIP('12345678901'), /6 a 10/);
-    assert.match(validarNIP('12a456'), /6 a 10/);
+    assert.equal(validarNIP(' 482913 '), null);
+    assert.match(validarNIP('12345'), /6 dígitos/);
+    assert.match(validarNIP('4829130'), /6 dígitos/, 'en la caja solo se escriben 6');
+    assert.match(validarNIP('12a456'), /6 dígitos/);
     assert.match(validarNIP('111111'), /repetido/);
     assert.match(validarNIP('123456'), /secuencia/);
     assert.match(validarNIP('654321'), /secuencia/);
-    assert.match(validarNIP('0123456'), /secuencia/);
+    assert.ok(esNIP('482913') && !esNIP('48291') && !esNIP('4829130') && !esNIP('alan@x.com'));
   });
   it('contraseñas de al menos 8 caracteres', () => {
     assert.equal(validarContrasena('abcdefgh'), null);
@@ -81,9 +82,20 @@ describe('identidad · ficha de personal', () => {
     const ficha = armarFichaPersonal({ usuario: ' 100123 ', nombre: ' María ', rol: 'empleado', tienda: 'talbot' }, 'admin@aguila.test');
     assert.deepEqual(ficha, {
       usuario: '100123', tipo: 'codigo', correoAuth: `100123@${DOMINIO_CODIGOS}`, nombre: 'María', rol: 'empleado', activo: true, tienda: 'talbot',
-      actualizadoPor: 'admin@aguila.test', cuentaVersion: 1,
+      actualizadoPor: 'admin@aguila.test', cuentaVersion: 1, correo: null, catalogo: false,
     });
     assert.deepEqual(validarFichaPersonal(ficha), []);
+  });
+  it('un colaborador lleva su correo real (en minúsculas) y el permiso del Catálogo', () => {
+    const ficha = armarFichaPersonal({ usuario: '100123', nombre: 'María', rol: 'empleado', correo: ' Maria@Ejemplo.COM ', catalogo: true }, 'admin@aguila.test');
+    assert.equal(ficha.correo, 'maria@ejemplo.com');
+    assert.equal(ficha.catalogo, true);
+    assert.deepEqual(validarFichaPersonal(ficha), []);
+    assert.ok(validarFichaPersonal({ ...ficha, correo: 'no-es-correo' }).some((e) => /correo/.test(e)));
+    assert.ok(validarFichaPersonal({ ...ficha, correo: `100123@${DOMINIO_CODIGOS}` }).some((e) => /correo/.test(e)), 'nunca el sintético');
+    assert.ok(validarFichaPersonal({ ...ficha, catalogo: 'sí' }).some((e) => /Catálogo/.test(e)));
+    const porCorreo = armarFichaPersonal({ usuario: 'gerente@aguila.test', nombre: 'G', rol: 'admin', correo: 'otro@aguila.test' }, '100001');
+    assert.equal(porCorreo.correo, 'gerente@aguila.test', 'una cuenta por correo usa su propio correo');
   });
   it('arma una ficha de correo y una de código con versión', () => {
     const correo = armarFichaPersonal({ usuario: 'Gerente@Aguila.test', nombre: 'Gerente', rol: 'admin', tienda: '' }, '100001');

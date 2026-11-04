@@ -1,17 +1,17 @@
 /**
  * Acceso al back office, solo para administradores: correo + contraseña,
- * código + NIP, la barra lateral, el personal que no es administrador (se le
- * manda a la caja o a la consulta de precios, donde cambia su NIP), cuentas
- * no registradas, desactivadas, fichas anteriores a Gestión y modo sin conexión.
+ * correo + NIP (y el código antiguo + NIP), la barra lateral, el personal que
+ * no es administrador (se le manda a la caja, a la consulta de precios o a la
+ * app Catálogo; el NIP lo cambia un administrador), cuentas no registradas,
+ * desactivadas, fichas anteriores a Gestión y modo sin conexión.
  */
 const c = require('./comun.cjs');
 
-const SOLO_ADMIN = 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios.';
+const SOLO_ADMIN = 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios; para el catálogo, la app Catálogo.';
 const SIN_REGISTRO = 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).';
-const NIP_NUEVO = '246813';
 const SECCIONES = [
   'index.html', 'ventas.html', 'turnos.html', 'reportes.html',
-  'productos.html', 'captura.html', 'imprimir.html', 'prueba-etiquetas.html', 'gestion/datos.html',
+  'productos.html', 'solicitudes.html', 'captura.html', 'imprimir.html', 'prueba-etiquetas.html', 'gestion/datos.html',
   'gestion/empleados.html', 'gestion/cajas.html', 'gestion/tiendas.html', 'gestion/configuracion.html',
 ];
 
@@ -47,9 +47,9 @@ async function sesionGuardadaDeEmpleada(page) {
   let { ctx, page, errores } = await c.nuevaPagina(browser);
   await page.goto(`${c.BASE}/login.html`, { waitUntil: 'networkidle' });
   await page.fill('#identificador', c.ADMIN.correo);
-  v.ok('con un correo, el segundo campo se llama Contraseña y aparece «Olvidé mi contraseña»', (await page.textContent('#secreto-etiqueta')) === 'Contraseña' && await page.isVisible('#btn-olvide'));
+  v.ok('con un correo, el segundo campo se llama «NIP o contraseña» y aparece «Olvidé mi contraseña»', (await page.textContent('#secreto-etiqueta')) === 'NIP o contraseña' && await page.isVisible('#btn-olvide'));
   let mensaje = await c.entrar(page, c.ADMIN.correo, 'incorrecta', { esperarError: true });
-  v.ok('contraseña incorrecta muestra mensaje claro', /Correo o contraseña incorrectos/.test(mensaje), mensaje);
+  v.ok('contraseña incorrecta muestra mensaje claro', /Correo, NIP o contraseña incorrectos/.test(mensaje), mensaje);
   await page.screenshot({ path: `${c.SALIDA}/acceso-login-error.png` });
   await c.entrar(page, c.ADMIN.correo, c.ADMIN.contrasena);
   v.ok('el admin llega al inicio del back office («Inicio · Águila POS»)', /\/index\.html$/.test(page.url()) && (await page.title()) === 'Inicio · Águila POS', `${page.url()} · ${await page.title()}`);
@@ -74,18 +74,21 @@ async function sesionGuardadaDeEmpleada(page) {
   erroresTotales.push(...errores);
   await ctx.close();
 
-  // 2) empleada por código: el back office la rechaza y la manda a la caja o a la consulta de precios
+  // 2) empleada con correo + NIP: el back office la rechaza y la manda a la caja, la consulta o el Catálogo
   ({ ctx, page, errores } = await c.nuevaPagina(browser));
   await page.goto(`${c.BASE}/login.html`, { waitUntil: 'networkidle' });
   await page.fill('#identificador', c.EMPLEADA.codigo);
-  v.ok('con un código, el segundo campo se llama NIP, es numérico y no hay «Olvidé mi contraseña»', (await page.textContent('#secreto-etiqueta')) === 'NIP' && (await page.getAttribute('#secreto', 'inputmode')) === 'numeric' && !(await page.isVisible('#btn-olvide')));
-  mensaje = await c.entrar(page, c.EMPLEADA.codigo, '000000', { esperarError: true });
-  v.ok('NIP incorrecto muestra mensaje propio', /Código o NIP incorrectos/.test(mensaje), mensaje);
+  v.ok('con un código antiguo, el segundo campo se llama NIP, es numérico y no hay «Olvidé mi contraseña»', (await page.textContent('#secreto-etiqueta')) === 'NIP' && (await page.getAttribute('#secreto', 'inputmode')) === 'numeric' && !(await page.isVisible('#btn-olvide')));
+  mensaje = await c.entrar(page, c.EMPLEADA.correo, '000000', { esperarError: true });
+  v.ok('correo con NIP incorrecto muestra mensaje propio', /Correo, NIP o contraseña incorrectos/.test(mensaje), mensaje);
   await page.goto(`${c.BASE}/login.html`, { waitUntil: 'networkidle' }); // sin el mensaje anterior
-  mensaje = await c.entrar(page, ` ${c.EMPLEADA.codigo} `, c.EMPLEADA.nip, { esperarError: true });
-  v.ok('con su código (con espacios alrededor) y NIP correctos, la empleada no entra: el back office es solo para administradores',
+  mensaje = await c.entrar(page, ` ${c.EMPLEADA.correo.toUpperCase()} `, c.EMPLEADA.nip, { esperarError: true });
+  v.ok('con su correo (en mayúsculas y con espacios) y NIP correctos, la empleada no entra: el back office es solo para administradores',
     mensaje === SOLO_ADMIN && /\/login\.html$/.test(page.url()), mensaje);
-  v.ok('login le ofrece ir a la caja y a la consulta de precios', await page.isVisible('a[href="caja/"]') && await page.isVisible('a[href="caja/consulta.html"]'));
+  await page.goto(`${c.BASE}/login.html`, { waitUntil: 'networkidle' });
+  mensaje = await c.entrar(page, c.EMPLEADA.codigo, c.EMPLEADA.nip, { esperarError: true });
+  v.ok('con el código antiguo y el NIP tampoco entra (compatibilidad)', mensaje === SOLO_ADMIN, mensaje);
+  v.ok('login le ofrece ir a la caja, a la consulta de precios y al Catálogo', await page.isVisible('a[href="caja/"]') && await page.isVisible('a[href="caja/consulta.html"]') && await page.isVisible('a[href="catalogo/"]'));
   await page.screenshot({ path: `${c.SALIDA}/acceso-solo-admin.png` });
   await page.goto(`${c.BASE}/index.html`);
   await page.waitForURL(/login\.html/, { timeout: 20000 });
@@ -103,23 +106,15 @@ async function sesionGuardadaDeEmpleada(page) {
   await page.waitForURL(/login\.html\?.*motivo=/, { timeout: 20000 });
   v.ok('Mi cuenta también es solo para administradores', /\/login\.html\?volver=cuenta\.html&motivo=solo-admin$/.test(page.url()), page.url());
 
-  // la empleada sigue el enlace a la consulta de precios (sesión aparte) y ahí cambia su NIP
+  // la empleada sigue el enlace a la consulta de precios (sesión aparte) y entra con su correo y su NIP
   await page.click('a[href="caja/consulta.html"]');
   await page.waitForURL(/\/caja\/consulta\.html$/);
-  const nombreConsulta = await c.entrarConsulta(page, c.EMPLEADA.codigo, c.EMPLEADA.nip);
-  v.ok('en la consulta de precios la empleada entra con su código y NIP y puede cambiar su NIP', nombreConsulta === c.EMPLEADA.nombre && await page.isVisible('#btn-nip'), nombreConsulta);
-  await page.click('#btn-nip');
-  await page.waitForSelector('#dialogo-nip[open]');
-  await page.fill('#nip-actual', '111111'); await page.fill('#nip-nuevo', NIP_NUEVO); await page.fill('#nip-repetir', NIP_NUEVO); await page.click('#nip-guardar');
-  await page.waitForSelector('#mensaje-nip.mensaje--error:not([hidden])', { timeout: 20000 });
-  v.ok('cambiar NIP con el actual incorrecto se rechaza', /actual no es correcto/.test(await page.textContent('#mensaje-nip')), c.texto(await page.textContent('#mensaje-nip')));
-  await page.fill('#nip-actual', c.EMPLEADA.nip); await page.fill('#nip-nuevo', NIP_NUEVO); await page.fill('#nip-repetir', NIP_NUEVO); await page.click('#nip-guardar');
-  await page.waitForSelector('#mensaje-nip.mensaje--ok', { timeout: 20000 });
+  const errorConsulta = await c.entrarConsulta(page, c.EMPLEADA.correo, '000000', { esperarError: true });
+  v.ok('en la consulta, un NIP equivocado no entra', /Correo o NIP incorrectos/.test(errorConsulta), errorConsulta);
+  const nombreConsulta = await c.entrarConsulta(page, c.EMPLEADA.correo, c.EMPLEADA.nip);
+  v.ok('en la consulta de precios la empleada entra con su correo y NIP; el NIP ya no se cambia ahí (lo cambia un administrador)',
+    nombreConsulta === c.EMPLEADA.nombre && (await page.$$('#btn-nip, #dialogo-nip')).length === 0, nombreConsulta);
   await page.screenshot({ path: `${c.SALIDA}/acceso-consulta-nip.png` });
-  const cambio = c.texto(await page.textContent('#mensaje-nip'));
-  const reingreso = await c.entrarAuthREST(c.correoDeCodigo(c.EMPLEADA.codigo), NIP_NUEVO);
-  const anterior = await c.entrarAuthREST(c.correoDeCodigo(c.EMPLEADA.codigo), c.EMPLEADA.nip);
-  v.ok('la empleada cambia su propio NIP: el nuevo sirve y el anterior ya no', /NIP cambiado/.test(cambio) && reingreso.ok && !anterior.ok, `${cambio} · nuevo: ${JSON.stringify(reingreso.error ?? 'ok')}`);
   erroresTotales.push(...errores);
   await ctx.close();
 

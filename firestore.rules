@@ -16,9 +16,18 @@ rules_version = '2';
 //  - Todo cambio de precioCentavos exige su entrada en priceHistory dentro
 //    del mismo lote (batch), con el precio anterior real y el nuevo.
 //  - Nada se borra: productos y personal se desactivan; el historial es inmutable.
-//  - Dos apps: el back office (catálogo, precios, personal, reportes) es solo
-//    para administradores; la caja (POS) es para todo el personal registrado.
-//    Por eso el catálogo solo lo escribe un admin.
+//  - Apps: el back office (catálogo, precios, personal, reportes) es solo
+//    para administradores; la caja (POS) y la consulta de precios, para todo
+//    el personal registrado; la app Catálogo, para quien tenga permiso de
+//    catálogo (staff.catalogo). Ese personal edita los datos de un producto
+//    pero NUNCA su precio, unidad de venta, clase fiscal ni si está activo:
+//    las altas (sin precio) y las bajas las pide en solicitudes/{id} y las
+//    resuelve un admin, en el mismo lote que escribe el producto.
+//  - Cada colaborador se registra con su correo y un NIP de 6 dígitos único.
+//    correos/{correo} = { codigo } deja entrar con correo + NIP; nips/{huella}
+//    = { codigo, version } deja entrar solo con el NIP en una caja configurada
+//    (la huella es un HMAC del NIP con la clave de secretos/caja, que solo leen
+//    los administradores y las cajas que ellos configuran).
 //  - POS: una caja tiene a lo sumo un turno abierto; abrir y cerrar turno se
 //    hace en un lote junto con la caja. Cada venta y cada movimiento de
 //    efectivo pertenece al turno de quien lo registra, y es inmutable.
@@ -144,10 +153,42 @@ service cloud.firestore {
       return productId + '_' + string(d.actualizadoEn.toMillis());
     }
 
+    // Lo que el personal con permiso de catálogo puede cambiar de un producto.
+    // Nunca precioCentavos, precioPorKgCentavos, unidadVenta, claseFiscal ni
+    // activo: el precio lo pone y lo cambia un admin, y una baja se pide.
+    function camposEditablesCatalogo() {
+      return ['upc', 'plu', 'nombre', 'marca', 'descriptor', 'presentacion', 'tiendas', 'proveedor',
+              'tokensBusqueda', 'ultimoPrecioImpresoCentavos', 'fechaUltimaImpresion',
+              'actualizadoEn', 'actualizadoPor'];
+    }
+    // Una sola función con let (ver la nota de costo del POS, más abajo).
+    function actualizarProducto(productId) {
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let antes = resource.data;
+      let d = request.resource.data;
+      return vigente(ficha, email)
+        && productoValido(d)
+        && d.creadoEn == antes.creadoEn
+        && d.existencias == antes.existencias
+        && d.costoCentavos == antes.costoCentavos
+        && (ficha.rol == 'admin'
+              ? (d.precioCentavos == antes.precioCentavos
+                 || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, d))))
+              : (ficha.get('catalogo', false) == true
+                 && antes.activo == true
+                 && d.diff(antes).affectedKeys().hasOnly(camposEditablesCatalogo())
+                 // al imprimir etiquetas solo se anota el precio vigente
+                 && (d.ultimoPrecioImpresoCentavos == antes.ultimoPrecioImpresoCentavos
+                     || d.ultimoPrecioImpresoCentavos == antes.precioCentavos)));
+    }
+
     match /products/{productId} {
       allow read: if esPersonal();
 
-      // El catálogo se administra en el back office: solo administradores.
+      // Los productos nuevos los crea un admin: en el back office, o al aprobar
+      // la solicitud de alta de alguien del Catálogo (con el precio que él pone).
       allow create: if esAdmin()
         && productoValido(request.resource.data)
         && request.resource.data.creadoEn == request.resource.data.actualizadoEn
@@ -155,13 +196,7 @@ service cloud.firestore {
         && request.resource.data.existencias == null
         && request.resource.data.costoCentavos == null;
 
-      allow update: if esAdmin()
-        && productoValido(request.resource.data)
-        && request.resource.data.creadoEn == resource.data.creadoEn
-        && request.resource.data.existencias == resource.data.existencias
-        && request.resource.data.costoCentavos == resource.data.costoCentavos
-        && (request.resource.data.precioCentavos == resource.data.precioCentavos
-            || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, request.resource.data))));
+      allow update: if actualizarProducto(productId);
 
       // Los productos se desactivan (activo = false); nunca se borran.
       allow delete: if false;
@@ -204,6 +239,11 @@ service cloud.firestore {
       return ['usuario', 'tipo', 'correoAuth', 'nombre', 'rol', 'activo', 'tienda',
               'creadoEn', 'actualizadoEn', 'actualizadoPor', 'cuentaVersion'];
     }
+    // correo (el real de la persona) y catalogo (permiso para la app Catálogo)
+    // llegaron después: se aceptan fichas con o sin ellos.
+    function camposPersonalOpcionales() {
+      return ['correo', 'catalogo'];
+    }
     function regexCorreo() {
       return '^[a-z0-9._%+-]+@[a-z0-9.-]+[.][a-z]{2,}$';
     }
@@ -212,7 +252,10 @@ service cloud.firestore {
       return codigo + (version == 1 ? '' : '.' + string(version)) + '@' + dominioCodigos();
     }
     function personalValido(d, usuario) {
-      return exactamente(d, camposPersonal())
+      let base = camposPersonal();
+      let claves = d.keys();
+      return claves.hasAll(base)
+        && claves.hasOnly(base.concat(camposPersonalOpcionales()))
         && d.usuario == usuario
         && d.tipo in ['codigo', 'correo']
         && d.correoAuth is string
@@ -232,7 +275,17 @@ service cloud.firestore {
         && (d.tienda == null || (d.tienda is string && d.tienda.matches('^[a-z0-9-]{2,40}$')))
         && d.creadoEn is timestamp
         && d.actualizadoEn is timestamp
-        && d.actualizadoPor == usuarioActual();
+        && d.actualizadoPor == usuarioActual()
+        && correoPersonalValido(d.get('correo', null), d)
+        && d.get('catalogo', false) is bool;
+    }
+    function correoPersonalValido(correo, d) {
+      return correo == null
+        || (correo is string
+            && correo == correo.lower()
+            && correo.matches(regexCorreo())
+            && correo.split('@')[1] != dominioCodigos()
+            && (d.tipo != 'correo' || correo == d.usuario));
     }
 
     match /staff/{usuario} {
@@ -274,6 +327,153 @@ service cloud.firestore {
         && request.resource.data.version is int
         && request.resource.data.version >= 1
         && request.resource.data.version == getAfter(/databases/$(database)/documents/staff/$(codigo)).data.cuentaVersion;
+      allow delete: if false;
+    }
+
+    // ----- correos -------------------------------------------------------
+    // correos/{correo} = { codigo }: de qué colaborador es un correo, para
+    // entrar con correo + NIP. Lectura pública de UN documento (sin listar);
+    // lo escribe un admin en el mismo lote que la ficha que lleva ese correo.
+    match /correos/{correo} {
+      allow get: if true;
+      allow list: if esAdmin();
+      allow create: if esAdmin()
+        && correo == correo.lower()
+        && correo.matches(regexCorreo())
+        && request.resource.data.keys().hasOnly(['codigo'])
+        && request.resource.data.codigo is string
+        && request.resource.data.codigo.matches('^[0-9]{6}$')
+        && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data.correo == correo;
+      allow update: if false;
+      allow delete: if esAdmin();
+    }
+
+    // ----- nips ------------------------------------------------------------
+    // nips/{huella} = { codigo, version }: de quién es un NIP, para entrar en
+    // la caja solo con el NIP. La huella es HMAC-SHA-256(clave de caja, NIP):
+    // sin la clave no se puede calcular, así que leer un documento suelto es
+    // público y listar no. Crear falla si la huella ya existe: un NIP no se
+    // repite. Se escribe en el mismo lote que la ficha (misma versión).
+    match /nips/{huella} {
+      allow get: if true;
+      allow list: if esAdmin();
+      allow create: if esAdmin()
+        && huella.matches('^[0-9a-f]{64}$')
+        && request.resource.data.keys().hasOnly(['codigo', 'version'])
+        && request.resource.data.codigo is string
+        && request.resource.data.codigo.matches('^[0-9]{6}$')
+        && request.resource.data.version is int
+        && nipDeFicha(getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data, request.resource.data.version);
+      allow update: if false;
+      allow delete: if esAdmin();
+    }
+    function nipDeFicha(ficha, version) {
+      let f = ficha;
+      return f.tipo == 'codigo' && f.cuentaVersion == version;
+    }
+
+    // ----- secretos ----------------------------------------------------------
+    // secretos/caja = { clave, creadaEn, creadaPor }: la clave de las huellas
+    // de NIP. Solo la leen los administradores (y la guarda cada caja que un
+    // administrador configura). Se crea una vez y no cambia.
+    match /secretos/{id} {
+      allow get: if esAdmin();
+      allow list: if false;
+      allow create: if esAdmin()
+        && id == 'caja'
+        && exactamente(request.resource.data, ['clave', 'creadaEn', 'creadaPor'])
+        && request.resource.data.clave is string
+        && request.resource.data.clave.size() >= 40
+        && request.resource.data.clave.size() <= 100
+        && request.resource.data.creadaEn == request.time
+        && request.resource.data.creadaPor == usuarioActual();
+      allow update, delete: if false;
+    }
+
+    // ----- solicitudes -----------------------------------------------------
+    // Lo que el personal del Catálogo pide al administrador:
+    //  - alta: un producto nuevo SIN precio (producto = la propuesta). El
+    //    admin pone precio y clase fiscal, crea el producto y aprueba la
+    //    solicitud en el mismo lote (productoId = el producto creado).
+    //  - baja: quitar un producto activo del catálogo. El admin lo desactiva
+    //    y aprueba en el mismo lote, o rechaza.
+    // Nadie las borra; solo un admin las resuelve, una vez.
+    function camposSolicitud() {
+      return ['tipo', 'estado', 'producto', 'productoId', 'productoNombre', 'motivo',
+              'creadaPor', 'creadaPorNombre', 'creadaEn', 'resueltaPor', 'resueltaEn', 'nota'];
+    }
+    function camposPropuesta() {
+      return ['upc', 'plu', 'nombre', 'marca', 'descriptor', 'presentacion', 'unidadVenta', 'tiendas', 'proveedor'];
+    }
+    function propuestaValida(propuesta) {
+      let p = propuesta;
+      return p is map
+        && exactamente(p, camposPropuesta())
+        && (p.upc == null || (p.upc is string && p.upc.matches('^([0-9]{12}|[1-9][0-9]{12})$')))
+        && (p.plu == null || (p.plu is string && p.plu.matches('^[0-9]{4,5}$')))
+        && esTextoNoVacio(p.nombre, 80)
+        && esTextoONulo(p.marca, 60)
+        && esTextoONulo(p.descriptor, 80)
+        && esTexto(p.presentacion, 30)
+        && p.unidadVenta in ['pieza', 'peso']
+        && p.tiendas is list
+        && p.tiendas.size() <= 20
+        && esTextoONulo(p.proveedor, 80);
+    }
+    function puedeCatalogo(ficha, email) {
+      let f = ficha;
+      return vigente(f, email) && (f.rol == 'admin' || f.get('catalogo', false) == true);
+    }
+    function crearSolicitud(datos) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      return puedeCatalogo(fichaDe(yo), email)
+        && exactamente(d, camposSolicitud())
+        && d.estado == 'pendiente'
+        && d.creadaPor == yo
+        && esTextoNoVacio(d.creadaPorNombre, 80)
+        && d.creadaEn == request.time
+        && d.resueltaPor == null && d.resueltaEn == null && d.nota == null
+        && esTexto(d.motivo, 300)
+        && esTextoNoVacio(d.productoNombre, 120)
+        && (d.tipo == 'alta'
+              ? (d.productoId == null && propuestaValida(d.producto))
+              : (d.tipo == 'baja'
+                 && d.producto == null
+                 && d.productoId is string
+                 && get(/databases/$(database)/documents/products/$(d.productoId)).data.activo == true));
+    }
+    function resolverSolicitud() {
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      let antes = resource.data;
+      let d = request.resource.data;
+      return vigente(ficha, email)
+        && ficha.rol == 'admin'
+        && antes.estado == 'pendiente'
+        && d.diff(antes).affectedKeys().hasOnly(['estado', 'productoId', 'resueltaPor', 'resueltaEn', 'nota'])
+        && d.estado in ['aprobada', 'rechazada']
+        && d.resueltaPor == yo
+        && d.resueltaEn == request.time
+        && esTextoONulo(d.nota, 300)
+        && (d.estado == 'rechazada'
+              ? d.productoId == antes.productoId
+              // alta: el producto existe al terminar el lote (lo creó el admin con
+              // su precio, o ya existía y la solicitud se enlaza con él)
+              : (antes.tipo == 'alta'
+                 ? (d.productoId is string
+                    && existsAfter(/databases/$(database)/documents/products/$(d.productoId)))
+                 // baja: el producto queda desactivado en el mismo lote
+                 : (d.productoId == antes.productoId
+                    && getAfter(/databases/$(database)/documents/products/$(d.productoId)).data.activo == false)));
+    }
+
+    match /solicitudes/{solicitudId} {
+      allow read: if puedeCatalogo(fichaDe(usuarioActual()), emailActual());
+      allow create: if crearSolicitud(request.resource.data);
+      allow update: if resolverSolicitud();
       allow delete: if false;
     }
 

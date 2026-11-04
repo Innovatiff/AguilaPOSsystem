@@ -86,7 +86,11 @@ const ANCLA = {
   caja: 'allow update: if actualizarCaja(cajaId);',
   movimiento: 'allow create: if crearMovimiento(request.resource.data);',
   autorizacion: 'allow create: if crearAutorizacion(request.resource.data);',
-  producto: 'existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, request.resource.data))));',
+  producto: 'allow update: if actualizarProducto(productId);',
+  solicitud: 'allow create: if crearSolicitud(request.resource.data);',
+  resolver: 'allow update: if resolverSolicitud();',
+  nip: 'nipDeFicha(getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data, request.resource.data.version);',
+  correo: 'getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data.correo == correo;',
   historial: 'allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);',
 };
 
@@ -115,7 +119,73 @@ const ESCENARIOS = [
       return lote.commit();
     },
   },
+  {
+    nombre: 'edición de un producto por el personal del Catálogo',
+    ancla: ANCLA.producto,
+    datos: {
+      'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true },
+      'products/p1': { ...armarProducto({ ...TAJIN, tiendas: ['talbot'] }, '100150'), creadoEn: AHORA, actualizadoEn: AHORA },
+    },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'products/p1'), { ...armarProducto({ ...TAJIN, nombre: 'Clasico con limon', tiendas: ['talbot'], ultimoPrecioImpresoCentavos: 499, fechaUltimaImpresion: '2026-11-04' }, '100123'), creadoEn: AHORA, actualizadoEn: Timestamp.now() }),
+  },
+  {
+    nombre: 'solicitud de baja desde el Catálogo',
+    ancla: ANCLA.solicitud,
+    datos: {
+      'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true },
+      'products/p1': { ...armarProducto({ ...TAJIN, tiendas: ['talbot'] }, '100150'), creadoEn: AHORA, actualizadoEn: AHORA },
+    },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'solicitudes/s1'), {
+      tipo: 'baja', estado: 'pendiente', producto: null, productoId: 'p1', productoNombre: 'Tajin Clasico', motivo: 'Ya no llega',
+      creadaPor: '100123', creadaPorNombre: 'María', creadaEn: serverTimestamp(), resueltaPor: null, resueltaEn: null, nota: null,
+    }),
+  },
+  {
+    nombre: 'aprobar un alta: producto con precio y solicitud en un lote',
+    ancla: ANCLA.resolver,
+    datos: {
+      'solicitudes/s1': {
+        tipo: 'alta', estado: 'pendiente', productoId: null, productoNombre: 'Maseca', motivo: '',
+        producto: { upc: '074734040014', plu: null, nombre: 'Harina de maiz', marca: 'Maseca', descriptor: null, presentacion: '1.8kg', unidadVenta: 'pieza', tiendas: ['talbot'], proveedor: null },
+        creadaPor: '100123', creadaPorNombre: 'María', creadaEn: AHORA, resueltaPor: null, resueltaEn: null, nota: null,
+      },
+    },
+    quien: JEFA,
+    accion: (db) => {
+      const marca = Timestamp.fromMillis(Date.now());
+      const lote = writeBatch(db);
+      lote.set(doc(db, 'products/nuevo'), { ...armarProducto({ upc: '074734040014', nombre: 'Harina de maiz', marca: 'Maseca', presentacion: '1.8kg', precioCentavos: 549, unidadVenta: 'pieza', claseFiscal: 'tasaCero', tiendas: ['talbot'] }, '100150'), creadoEn: marca, actualizadoEn: marca });
+      lote.update(doc(db, 'solicitudes/s1'), { estado: 'aprobada', productoId: 'nuevo', resueltaPor: '100150', resueltaEn: serverTimestamp() });
+      return lote.commit();
+    },
+  },
+  {
+    nombre: 'registrar el NIP de un colaborador (huella y correo)',
+    ancla: ANCLA.nip,
+    datos: {},
+    quien: ADMIN,
+    accion: (db) => loteColaborador(db).commit(),
+  },
+  {
+    nombre: 'registrar el correo de un colaborador',
+    ancla: ANCLA.correo,
+    datos: {},
+    quien: ADMIN,
+    accion: (db) => loteColaborador(db).commit(),
+  },
 ];
+
+/** Alta completa de un colaborador: ficha, acceso, correo y huella del NIP, en un lote. */
+function loteColaborador(db) {
+  const lote = writeBatch(db);
+  lote.set(doc(db, 'staff/100160'), { ...armarFichaPersonal({ usuario: '100160', nombre: 'Pedro', rol: 'empleado', tienda: 'talbot', correo: 'pedro@aguila.test', catalogo: true }, ADMIN), creadoEn: AHORA, actualizadoEn: AHORA });
+  lote.set(doc(db, 'accesos/100160'), { version: 1 });
+  lote.set(doc(db, 'correos/pedro@aguila.test'), { codigo: '100160' });
+  lote.set(doc(db, `nips/${'c'.repeat(64)}`), { codigo: '100160', version: 1 });
+  return lote;
+}
 
 async function pasa(escenario, cantidad) {
   const entorno = await initializeTestEnvironment({ projectId: 'demo-holgura', firestore: { rules: reglasConRelleno(escenario.ancla, cantidad) } });

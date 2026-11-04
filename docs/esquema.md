@@ -22,16 +22,20 @@ Written by admins only. Never deleted. Stores created before the POS have no
 `telefono` / `correo` / `numeroImpuesto` and keep working.
 
 ### `staff/{usuario}`
-Document ID is the person's stable **usuario**: their employee code (exactly 6 digits)
-or, for email accounts, the email in lowercase. **Required for access**: a
+Document ID is the person's stable **usuario**: their internal number (exactly 6
+digits, assigned by Empleados; nobody types it) or, for email + password accounts,
+the email in lowercase. **Required for access**: a
 Firebase Authentication account with no active record cannot read or write
 anything. Records are created in Back office → Empleados, which also creates
 the Authentication account behind them.
 
-Code accounts are backed by a synthetic email `<code>@codigo.aguilapos.firebaseapp.com`
-(constant `DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in the rules) whose
-password is the employee's NIP. Resetting a NIP creates a new account
-`<code>.<n>@…` and points `correoAuth` at it; the old account loses access.
+Staff are registered with their **email** and a **6-digit NIP that nobody else
+has**. Number accounts are backed by a synthetic email
+`<number>@codigo.aguilapos.firebaseapp.com` (constant `DOMINIO_CODIGOS` in
+`js/identidad.js`, mirrored in the rules) whose password is the NIP. Changing a
+NIP creates a new account `<number>.<n>@…` and points `correoAuth` at it; the
+old account loses access. `correos/` and `nips/` (below) let people sign in with
+email + NIP, or with only the NIP at a register.
 
 | field | type | notes |
 |---|---|---|
@@ -39,13 +43,15 @@ password is the employee's NIP. Resetting a NIP creates a new account
 | tipo | `"codigo"` \| `"correo"` | |
 | correoAuth | string | the Authentication email currently allowed for this record; for `correo` it equals `usuario` |
 | nombre | string, 1–80 | |
-| rol | `"admin"` \| `"empleado"` | admin: back office and register; empleado: register and price check |
+| rol | `"admin"` \| `"empleado"` | admin: back office, register, price check and Catálogo; empleado: register, price check and, with `catalogo`, the Catálogo app |
 | activo | boolean | access is denied the moment this is false |
 | tienda | storeId \| null | informational |
 | creadoEn | timestamp | immutable |
 | actualizadoEn | timestamp | |
 | actualizadoPor | string | usuario of the admin who wrote it |
-| cuentaVersion | integer ≥ 1 | 1 for `correo`; increments on each NIP reset for `codigo` |
+| cuentaVersion | integer ≥ 1 | 1 for `correo`; increments on each NIP change for `codigo` |
+| correo | string \| null | the person's real email, lowercase; for `correo` it equals `usuario`. Optional for records from before email + NIP |
+| catalogo | boolean | may use the Catálogo app (admins always may). Optional; missing = false |
 
 Written by admins only. An admin cannot deactivate or demote their own record,
 nor change their own `correoAuth`. Each signed-in account may read its own
@@ -56,6 +62,47 @@ and are completed on their next update.
 **Identity in writes.** `products.actualizadoPor` and `priceHistory.usuario`
 must equal the writer's `usuario`, derived in the rules from the token email:
 the code for a synthetic email, the lowercase email otherwise.
+
+### `correos/{correo}`
+`{ codigo }`: which number account an email belongs to, so staff sign in with
+email + NIP. Public `get` of one document (no listing). Written by an admin in
+the same batch as the `staff` record whose `correo` it is (the rules check it
+with `getAfter`); never rewritten to point elsewhere, deleted when the email
+changes.
+
+### `nips/{huella}`
+`{ codigo, version }`: whose NIP this is, for NIP-only sign-in at a register.
+`huella = HMAC-SHA-256(register key, "nip:" + NIP)` in hex (`js/nip.js`).
+Public `get` (without the key nobody can compute a `huella`), listing only for
+admins. Create-only: an existing `huella` cannot be overwritten, so a NIP never
+repeats. Written by an admin with `version` equal to the record's
+`cuentaVersion`; old entries are deleted when the NIP changes.
+
+### `secretos/caja`
+`{ clave, creadaEn, creadaPor }`: the register key (base64 of 32 random bytes).
+Only admins read it; it is created once (the first time an admin registers a
+NIP or sets up a register) and never changes. Each register computer stores it
+when an admin sets it up.
+
+### `solicitudes/{id}`
+Requests from the Catálogo app to the admins.
+
+| field | type | notes |
+|---|---|---|
+| tipo | `"alta"` \| `"baja"` | add a new product, or remove an active one |
+| estado | `"pendiente"` \| `"aprobada"` \| `"rechazada"` | |
+| producto | map \| null | `alta`: the proposal, exactly `upc, plu, nombre, marca, descriptor, presentacion, unidadVenta, tiendas, proveedor` (same formats as `products`), **no price and no tax class**; `baja`: null |
+| productoId | string \| null | `baja`: the product; `alta`: set on approval to the product created |
+| productoNombre | string 1–120 | for display |
+| motivo | string ≤300 | reason or note from the requester |
+| creadaPor / creadaPorNombre | usuario / string | must be the writer |
+| creadaEn | timestamp | server time |
+| resueltaPor / resueltaEn / nota | usuario / server time / string ≤300 \| null | set once, by an admin |
+
+Created by admins and staff with `catalogo`; read by them; resolved only by an
+admin, once. Approving an `alta` must create the product in the same batch
+(`existsAfter`); approving a `baja` must leave the product inactive in the same
+batch. Never deleted.
 
 ### `accesos/{codigo}`
 Tiny public lookup written together with `staff/{codigo}`: `{ version: <int> }`,
@@ -104,10 +151,15 @@ Immutable. `entradaId` = `${productId}_${fecha.toMillis()}`.
 
 ## Invariants the rules enforce
 
-**Only admins write the catalog.** Creating or updating a product and writing
-`priceHistory` require the writer's `staff` record to have `rol = admin`. Every
-active staff member can read products (the register and the price check need
-them).
+**Only admins set prices.** Creating a product, writing `priceHistory`, and
+changing `precioCentavos`, `precioPorKgCentavos`, `unidadVenta`, `claseFiscal`
+or `activo` require the writer's `staff` record to have `rol = admin`. Staff with
+`catalogo = true` may update an **active** product's `upc`, `plu`, `nombre`,
+`marca`, `descriptor`, `presentacion`, `tiendas`, `proveedor`, `tokensBusqueda`,
+and mark its tag printed (`ultimoPrecioImpresoCentavos` only to the current
+price, `fechaUltimaImpresion`), signed as themselves; new products and removals
+go through `solicitudes`. Every active staff member can read products (the
+register and the price check need them).
 
 **Every price change carries its history entry, atomically.** A product update
 that changes `precioCentavos` is accepted only if a `priceHistory` document with

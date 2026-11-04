@@ -142,7 +142,7 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   const ultimaImpresion = async () => (await page.evaluate(() => window.__impresiones)).at(-1) ?? '';
 
   // ---- 1) una empleada no entra al back office
-  const mensaje = await c.entrar(page, c.EMPLEADA.codigo, c.EMPLEADA.nip, { esperarError: true });
+  const mensaje = await c.entrar(page, c.EMPLEADA.correo, c.EMPLEADA.nip, { esperarError: true });
   v.ok('una empleada no entra al back office y se le dice a dónde ir', /solo para administradores/.test(mensaje) && await page.isVisible('a[href="caja/"]'), mensaje);
 
   // ---- 2) inicio
@@ -264,7 +264,7 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
     [`reportes.html?desde=${m.ticket.claveDia(en(1, 0))}&hasta=${m.ticket.claveDia(hoy)}`, 'reportes'],
     ['productos.html', 'productos'], ['captura.html', 'captura'], ['imprimir.html', 'imprimir'],
     ['gestion/empleados.html', 'empleados'], ['gestion/cajas.html', 'cajas'], ['gestion/configuracion.html', 'configuracion'],
-    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'],
+    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'], ['solicitudes.html', 'solicitudes'],
     ['cuenta.html', 'cuenta', { angosta: true }], // formulario corto: columna de lectura a propósito
   ];
   const fueraDeAncho = [];

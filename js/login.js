@@ -1,4 +1,7 @@
-import { iniciarSesion, usuarioActual, fichaEfectiva, cerrarSesionSilenciosa, enviarRestablecimiento, mensajeError, destinoSeguro, RAIZ } from './auth.js';
+import {
+  iniciarSesion, usuarioActual, fichaEfectiva, cerrarSesionSilenciosa, enviarRestablecimiento, mensajeError, destinoSeguro, RAIZ,
+  EN_CATALOGO, puedeUsarCatalogo,
+} from './auth.js';
 import { tipoDeIdentificador, normalizarIdentificador } from './identidad.js';
 
 const parametros = new URLSearchParams(window.location.search);
@@ -9,7 +12,6 @@ const secreto = document.getElementById('secreto');
 const etiquetaSecreto = document.getElementById('secreto-etiqueta');
 const btnEntrar = document.getElementById('btn-entrar');
 const btnOlvide = document.getElementById('btn-olvide');
-const pistaNip = document.getElementById('pista-nip');
 const mensaje = document.getElementById('mensaje');
 
 const MOTIVOS = {
@@ -18,10 +20,13 @@ const MOTIVOS = {
   'sin-registro': ['error', 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).'],
   'cuenta-renovada': ['error', 'Tu NIP fue restablecido. Entra con el NIP nuevo.'],
   'sin-conexion': ['error', 'No se pudo comprobar tu acceso. Revisa la conexión e inténtalo de nuevo.'],
-  'solo-admin': ['error', 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios.'],
+  'solo-admin': ['error', 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios; para el catálogo, la app Catálogo.'],
+  'sin-permiso-catalogo': ['error', 'No tienes permiso para usar el Catálogo. Pide a un administrador que te lo active en Empleados.'],
 };
-const MOTIVOS_SIN_REINGRESO = new Set(['desactivado', 'sin-registro', 'cuenta-renovada', 'solo-admin']);
-const SOLO_ADMIN = MOTIVOS['solo-admin'][1];
+const MOTIVOS_SIN_REINGRESO = new Set(['desactivado', 'sin-registro', 'cuenta-renovada', 'solo-admin', 'sin-permiso-catalogo']);
+// Back office: solo administradores. App Catálogo: administradores y personal con permiso de catálogo.
+const puedeEntrar = (personal) => (EN_CATALOGO ? puedeUsarCatalogo(personal) : personal.rol === 'admin');
+const SIN_ACCESO = MOTIVOS[EN_CATALOGO ? 'sin-permiso-catalogo' : 'solo-admin'][1];
 
 function mostrar(tipo, texto) {
   mensaje.textContent = texto;
@@ -35,14 +40,17 @@ function ocupado(si) {
   btnEntrar.textContent = si ? 'Entrando…' : 'Entrar';
 }
 
-/** Ajusta el segundo campo a lo que se teclea: NIP numérico para códigos, contraseña para correos. */
+/**
+ * Ajusta el segundo campo: en el Catálogo siempre es el NIP; en el back office,
+ * NIP (colaboradores) o contraseña (cuentas por correo real). Un código de
+ * empleado antiguo (6 dígitos) también se acepta, con su NIP.
+ */
 function ajustarModo() {
   const tipo = tipoDeIdentificador(identificador.value);
-  const esCodigo = tipo === 'codigo' || (tipo === null && /^[0-9]*$/.test(normalizarIdentificador(identificador.value)));
-  secreto.inputMode = esCodigo ? 'numeric' : 'text';
-  etiquetaSecreto.textContent = esCodigo ? 'NIP' : tipo === 'correo' ? 'Contraseña' : 'NIP o contraseña';
-  btnOlvide.hidden = tipo !== 'correo';
-  pistaNip.hidden = tipo === 'correo';
+  const esCodigo = tipo === 'codigo' || (tipo === null && /^[0-9]+$/.test(normalizarIdentificador(identificador.value)));
+  secreto.inputMode = EN_CATALOGO || esCodigo ? 'numeric' : 'text';
+  etiquetaSecreto.textContent = EN_CATALOGO || esCodigo ? 'NIP' : 'NIP o contraseña';
+  btnOlvide.hidden = EN_CATALOGO || tipo !== 'correo';
 }
 identificador.addEventListener('input', ajustarModo);
 ajustarModo();
@@ -55,7 +63,7 @@ usuarioActual().then(async (usuario) => {
   if (!usuario || MOTIVOS_SIN_REINGRESO.has(parametros.get('motivo'))) return;
   try {
     const personal = await fichaEfectiva(usuario);
-    if (personal.rol !== 'admin') {
+    if (!puedeEntrar(personal)) {
       await cerrarSesionSilenciosa();
       return;
     }
@@ -73,9 +81,9 @@ formulario.addEventListener('submit', async (evento) => {
   ocupado(true);
   try {
     const { personal } = await iniciarSesion(identificador.value, secreto.value);
-    if (personal.rol !== 'admin') {
+    if (!puedeEntrar(personal)) {
       await cerrarSesionSilenciosa();
-      mostrar('error', SOLO_ADMIN);
+      mostrar('error', SIN_ACCESO);
       ocupado(false);
       secreto.value = '';
       return;
@@ -85,7 +93,7 @@ formulario.addEventListener('submit', async (evento) => {
     const codigo = error?.code ?? '';
     const credencialesMal = ['auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/user-not-found', 'auth/wrong-password'].includes(codigo);
     if (credencialesMal) {
-      mostrar('error', tipoDeIdentificador(identificador.value) === 'codigo' ? 'Código o NIP incorrectos.' : 'Correo o contraseña incorrectos.');
+      mostrar('error', EN_CATALOGO ? 'Correo o NIP incorrectos.' : tipoDeIdentificador(identificador.value) === 'codigo' ? 'Código o NIP incorrectos.' : 'Correo, NIP o contraseña incorrectos.');
     } else {
       mostrar('error', mensajeError(error));
     }
@@ -97,14 +105,14 @@ formulario.addEventListener('submit', async (evento) => {
 
 btnOlvide.addEventListener('click', async () => {
   if (tipoDeIdentificador(identificador.value) !== 'correo') {
-    mostrar('error', 'Escribe tu correo y vuelve a pulsar «Olvidé mi contraseña». Si entras con código, el gerente restablece tu NIP.');
+    mostrar('error', 'Escribe tu correo y vuelve a pulsar «Olvidé mi contraseña». Si entras con NIP, un administrador lo cambia en Empleados.');
     identificador.focus();
     return;
   }
   ocupado(true);
   try {
     await enviarRestablecimiento(identificador.value);
-    mostrar('ok', `Si ${normalizarIdentificador(identificador.value)} tiene cuenta, recibirá un correo para crear una contraseña nueva.`);
+    mostrar('ok', `Si ${normalizarIdentificador(identificador.value)} entra con contraseña, recibirá un correo para crear una nueva. Si entras con NIP, un administrador lo cambia en Empleados.`);
   } catch (error) {
     mostrar('error', mensajeError(error));
   } finally {

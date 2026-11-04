@@ -5,7 +5,9 @@
  *    o a recargar la página);
  *  - el consecutivo de tickets del día de esta caja (folio);
  *  - el verificador del NIP de la cajera para desbloquear sin conexión
- *    (hash PBKDF2, nunca el NIP; ver js/verificador.js).
+ *    (hash PBKDF2, nunca el NIP; ver js/verificador.js);
+ *  - la clave de caja (secretos/caja) que guarda el administrador al
+ *    configurar el equipo: con ella basta el NIP para entrar (js/nip.js).
  * Todo va envuelto en try/catch: sin almacenamiento la caja sigue vendiendo.
  */
 const PREFIJO = 'aguila.pos.';
@@ -55,6 +57,8 @@ function clavesCon(prefijo) {
 export const leerAsignacion = () => leer('caja');
 export const guardarAsignacion = (caja) => guardar('caja', caja);
 export const borrarAsignacion = () => borrar('caja');
+export const leerClaveCaja = () => leer('claveCaja');
+export const guardarClaveCaja = (clave) => guardar('claveCaja', clave);
 
 // ------------------------------------------------------------- folio del día
 

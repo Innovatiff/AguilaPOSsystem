@@ -13,7 +13,7 @@ const { generarVideoUPC, argumentosCamaraFalsa } = require('./camara-falsa.cjs')
 /** La empleada abre la consulta de precios en el teléfono y entra con su código y NIP. */
 async function abrirConsulta(browser) {
   const sesion = await c.nuevaPagina(browser, { movil: true, permissions: ['camera'] });
-  await c.entrarConsulta(sesion.page, c.EMPLEADA.codigo, c.EMPLEADA.nip);
+  await c.entrarConsulta(sesion.page, c.EMPLEADA.correo, c.EMPLEADA.nip);
   await sesion.page.waitForFunction(() => /Catálogo al día/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
   return sesion;
 }
@@ -63,8 +63,8 @@ async function abrirProductosAdmin(browser) {
   await empleada.page.goto(`${c.BASE}/caja/consulta.html`);
   await empleada.page.waitForSelector('#form-acceso:not([hidden])');
   await empleada.page.screenshot({ path: `${c.SALIDA}/movil-consulta-acceso.png` });
-  const nombre = await c.entrarConsulta(empleada.page, c.EMPLEADA.codigo, c.EMPLEADA.nip);
-  v.ok('la empleada entra a la consulta de precios con su código y NIP', nombre === c.EMPLEADA.nombre, nombre);
+  const nombre = await c.entrarConsulta(empleada.page, c.EMPLEADA.correo, c.EMPLEADA.nip);
+  v.ok('la empleada entra a la consulta de precios con su correo y NIP', nombre === c.EMPLEADA.nombre, nombre);
   await empleada.page.waitForFunction(() => /Catálogo al día/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
   v.ok('el buscador no roba el foco en el teléfono (no salta el teclado)', await empleada.page.evaluate(() => document.activeElement?.id !== 'buscar'));
   v.ok('el botón Escanear aparece porque hay cámara', await empleada.page.isVisible('#btn-camara'));

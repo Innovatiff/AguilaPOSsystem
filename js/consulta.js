@@ -2,7 +2,9 @@
  * Consulta de precios (/caja/consulta.html), para todo el personal: en el
  * teléfono con la cámara, o en una computadora con el escáner USB (escribe
  * como teclado). Solo lectura. Tiene su propia sesión de Firebase, aparte de
- * la caja y del back office.
+ * la caja y del back office. Se entra con el correo y el NIP de 6 dígitos; el
+ * NIP lo cambia un administrador (Empleados), porque en la caja identifica a
+ * la persona y no puede repetirse.
  */
 import { iniciarSesion, usuarioActual, fichaEfectiva, cerrarSesionSilenciosa, mensajeError } from './auth.js';
 import { observarCatalogo, buscarPorUPC } from './productos.js';
@@ -12,8 +14,6 @@ import { formatearPrecio, indicadorFiscal } from './precios.js';
 import { interpretarCodigoBalanza } from './ticket.js';
 import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
 import { h } from './dom.js';
-import { cambiarSecretoPropio } from './cuentas.js';
-import { validarNIP } from './identidad.js';
 
 const $ = (id) => document.getElementById(id);
 const MAXIMO_RESULTADOS = 40;
@@ -35,13 +35,12 @@ function mostrarAcceso(mensaje = null) {
   $('form-acceso').hidden = false;
   $('usuario').hidden = true;
   $('btn-salir').hidden = true;
-  $('btn-nip').hidden = true;
   const m = $('mensaje-acceso');
   m.hidden = !mensaje;
   m.textContent = mensaje ?? '';
   m.className = 'mensaje mensaje--error';
   $('nip').value = '';
-  $('codigo').focus();
+  $('correo').focus();
 }
 
 function mostrarConsulta() {
@@ -51,7 +50,6 @@ function mostrarConsulta() {
   $('usuario').hidden = false;
   $('usuario').textContent = personal.nombre;
   $('btn-salir').hidden = false;
-  $('btn-nip').hidden = personal.tipo !== 'codigo';
   $('btn-camara').hidden = !camaraDisponible();
   $('estado-catalogo').textContent = 'Cargando el catálogo…';
   dejarCatalogo = observarCatalogo(({ catalogo: actual, desdeCache }) => {
@@ -81,12 +79,12 @@ $('form-acceso').addEventListener('submit', async (e) => {
   boton.disabled = true;
   boton.textContent = 'Entrando…';
   try {
-    ({ personal } = await iniciarSesion($('codigo').value, $('nip').value));
+    ({ personal } = await iniciarSesion($('correo').value, $('nip').value));
     mostrarConsulta();
   } catch (error) {
     const codigo = String(error?.code ?? '');
     mostrarAcceso(['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(codigo)
-      ? 'Código o NIP incorrectos.'
+      ? 'Correo o NIP incorrectos.'
       : mensajeError(error));
   } finally {
     boton.disabled = false;
@@ -97,52 +95,6 @@ $('form-acceso').addEventListener('submit', async (e) => {
 $('btn-salir').addEventListener('click', async () => {
   await cerrarSesionSilenciosa().catch(() => {});
   mostrarAcceso();
-});
-
-// ------------------------------------------------------------- cambiar mi NIP
-
-const dialogoNip = $('dialogo-nip');
-function mensajeNip(tipo, texto) {
-  const m = $('mensaje-nip');
-  m.textContent = texto ?? '';
-  m.className = `mensaje mensaje--${tipo}`;
-  m.hidden = !texto;
-}
-$('btn-nip').addEventListener('click', () => {
-  $('form-nip').reset();
-  mensajeNip('', '');
-  dialogoNip.showModal();
-  $('nip-actual').focus();
-});
-$('nip-cancelar').addEventListener('click', () => dialogoNip.close());
-$('form-nip').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const actual = $('nip-actual').value;
-  const nuevo = $('nip-nuevo').value.trim();
-  const error = validarNIP(nuevo);
-  if (error) {
-    mensajeNip('error', error);
-    return;
-  }
-  if (nuevo !== $('nip-repetir').value.trim()) {
-    mensajeNip('error', 'Los dos NIP no coinciden.');
-    return;
-  }
-  if (nuevo === actual) {
-    mensajeNip('error', 'El NIP nuevo debe ser distinto del actual.');
-    return;
-  }
-  $('nip-guardar').disabled = true;
-  try {
-    await cambiarSecretoPropio(actual, nuevo);
-    $('form-nip').reset();
-    mensajeNip('ok', 'NIP cambiado. Úsalo desde ahora en la caja y aquí.');
-  } catch (error) {
-    const codigo = String(error?.code ?? '');
-    mensajeNip('error', ['auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials'].includes(codigo) ? 'El NIP actual no es correcto.' : mensajeError(error));
-  } finally {
-    $('nip-guardar').disabled = false;
-  }
 });
 
 // ------------------------------------------------------------- búsqueda

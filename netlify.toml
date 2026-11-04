@@ -62,6 +62,21 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/catalogo/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/catalogo/*.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/catalogo/*.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/*.webmanifest"
   [headers.values]
     Cache-Control = "no-cache"

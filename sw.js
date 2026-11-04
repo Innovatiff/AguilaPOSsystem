@@ -1,8 +1,9 @@
 /**
  * Service worker de Catálogo Águila.
  *
- * - Guarda la cáscara de las dos apps, el back office y la caja registradora
- *   (/caja/): páginas, CSS, JS, SDK y decodificador vendidos, fuente, iconos.
+ * - Guarda la cáscara de las apps, el back office, la caja registradora
+ *   (/caja/) y el Catálogo del personal (/catalogo/): páginas, CSS, JS, SDK y
+ *   decodificador vendidos, fuente, iconos.
  *   Sin red, la caja sigue abriendo y vendiendo desde la caché.
  * - NUNCA guarda js/config.js ni nada que no sea de este mismo origen: las
  *   llamadas a Firestore y Auth (googleapis.com) pasan de largo, sin caché.
@@ -33,6 +34,7 @@ const CASCARA = [
   'imprimir.html',
   'cuenta.html',
   'prueba-etiquetas.html',
+  'solicitudes.html',
   'gestion/index.html',
   'gestion/empleados.html',
   'gestion/cajas.html',
@@ -42,9 +44,16 @@ const CASCARA = [
   'caja/',
   'caja/index.html',
   'caja/consulta.html',
+  'catalogo/',
+  'catalogo/index.html',
+  'catalogo/entrar.html',
+  'catalogo/captura.html',
+  'catalogo/etiquetas.html',
+  'catalogo/solicitudes.html',
   'manifest.webmanifest',
   'caja/manifest.webmanifest',
   'caja/consulta.webmanifest',
+  'catalogo/manifest.webmanifest',
   'css/base.css',
   'css/caja.css',
   'css/etiquetas.css',
@@ -62,10 +71,12 @@ const CASCARA = [
   'js/bo-turnos.js',
   'js/bo-ventas.js',
   'js/caja.js',
+  'js/catalogo-solicitudes.js',
   'js/caja-local.js',
   'js/caja-pago.js',
   'js/caja-turno.js',
   'js/caja-ui.js',
+  'js/clave-caja.js',
   'js/code128.js',
   'js/config-pos.js',
   'js/consulta.js',
@@ -81,12 +92,14 @@ const CASCARA = [
   'js/gestion-configuracion.js',
   'js/gestion-datos.js',
   'js/gestion-empleados.js',
+  'js/gestion-solicitudes.js',
   'js/gestion-tiendas.js',
   'js/grafica.js',
   'js/identidad.js',
   'js/inicio.js',
   'js/login.js',
   'js/nav.js',
+  'js/nip.js',
   'js/paginacion.js',
   'js/pantalla-captura.js',
   'js/pantalla-imprimir.js',
@@ -96,6 +109,7 @@ const CASCARA = [
   'js/precios.js',
   'js/productos.js',
   'js/recibo.js',
+  'js/solicitudes.js',
   'js/ticket.js',
   'js/turnos.js',
   'js/prueba-etiquetas.js',

@@ -1,0 +1,18 @@
+{
+  "id": "/catalogo/",
+  "name": "Águila POS · Catálogo",
+  "short_name": "Catálogo",
+  "description": "Catálogo de Águila Marketplace para el personal: buscar y escanear productos, editarlos sin tocar precios, imprimir etiquetas y pedir altas y bajas al administrador.",
+  "lang": "es",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#1c1f24",
+  "icons": [
+    { "src": "../icons/icono-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "../icons/icono-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "../icons/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

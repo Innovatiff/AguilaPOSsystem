@@ -39,6 +39,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   query,
   where,
@@ -55,11 +56,13 @@ export const VERSION_SDK = '12.19.0';
 /**
  * Nombre de la instancia (cada una con su propia sesión y su caché local):
  * "caja" en la caja registradora (/caja/), "consulta" en la consulta de
- * precios (/caja/consulta.html) y la predeterminada en el back office.
+ * precios (/caja/consulta.html), "catalogo" en la app Catálogo del personal
+ * (/catalogo/) y la predeterminada en el back office.
  */
 function nombreDeApp(ruta) {
   if (/\/caja\/(index\.html)?$/.test(ruta)) return 'caja';
   if (/\/caja\/consulta\.html$/.test(ruta)) return 'consulta';
+  if (/\/catalogo\//.test(ruta)) return 'catalogo';
   return '[DEFAULT]';
 }
 export const NOMBRE_APP = typeof location !== 'undefined' ? nombreDeApp(location.pathname) : '[DEFAULT]';
@@ -112,6 +115,7 @@ export {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   collection,
   query,
   where,

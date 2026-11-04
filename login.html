@@ -25,9 +25,9 @@
 
     <form id="form-login" class="formulario" novalidate>
       <div class="campo">
-        <label for="identificador">Código de empleado o correo</label>
-        <input id="identificador" name="identificador" type="text" inputmode="text" autocomplete="username"
-          autocapitalize="off" spellcheck="false" required autofocus placeholder="p. ej. 100234">
+        <label for="identificador">Correo</label>
+        <input id="identificador" name="identificador" type="text" inputmode="email" autocomplete="username"
+          autocapitalize="off" spellcheck="false" required autofocus placeholder="tu@correo.com">
       </div>
       <div class="campo">
         <label for="secreto" id="secreto-etiqueta">NIP o contraseña</label>
@@ -37,11 +37,12 @@
         <button id="btn-entrar" class="boton" type="submit">Entrar</button>
         <button id="btn-olvide" class="boton boton--enlace" type="button" hidden>Olvidé mi contraseña</button>
       </div>
-      <p id="pista-nip" class="nota nota--login">Entra con tu código de administrador y tu NIP, o con tu correo y contraseña.</p>
+      <p id="pista-nip" class="nota nota--login">Entra con tu correo y tu NIP de 6 dígitos (o tu contraseña, si tu cuenta es por correo).</p>
     </form>
     <nav class="login__otras" aria-label="Otras opciones">
       <a href="caja/">Ir a la caja registradora</a>
       <a href="caja/consulta.html">Consultar precios</a>
+      <a href="catalogo/">App Catálogo</a>
     </nav>
   </main>
 </body>

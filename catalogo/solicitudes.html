@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mis solicitudes · Águila Catálogo</title>
+  <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/catalogo-solicitudes.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Mis solicitudes</h1>
+        <p class="nota">Las altas (productos nuevos, sin precio) y las bajas que pediste. Un administrador las revisa: el producto nuevo entra al catálogo cuando le pone precio.</p>
+      </div>
+    </div>
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+    <section class="panel panel--12 panel--separado" aria-label="Solicitudes">
+      <div class="tabla-desplazable">
+        <table class="tabla" id="tabla-mias">
+          <thead><tr><th>Fecha</th><th>Solicitud</th><th>Producto</th><th>Estado</th><th>Nota del administrador</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="sin-solicitudes" class="nota" hidden>Todavía no has pedido nada. Para pedir un producto nuevo, búscalo o escanéalo en Productos o en Captura rápida.</p>
+    </section>
+  </main>
+</body>
+</html>

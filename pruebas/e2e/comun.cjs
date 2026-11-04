@@ -7,6 +7,7 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHmac } = require('node:crypto');
 const { chromium } = require('playwright');
 
 const BASE = process.env.BASE_E2E ?? 'http://127.0.0.1:5500';
@@ -20,7 +21,11 @@ const DOMINIO_CODIGOS = 'codigo.aguilapos.firebaseapp.com'; // igual que js/iden
 const correoDeCodigo = (codigo, version = 1) => `${codigo}${version > 1 ? `.${version}` : ''}@${DOMINIO_CODIGOS}`;
 
 const ADMIN = { correo: 'admin@aguila.test', contrasena: 'Prueba1234', nombre: 'Alan (admin)' };
-const EMPLEADA = { codigo: '100123', nip: '482913', nombre: 'María López', tienda: 'talbot' };
+const EMPLEADA = { codigo: '100123', nip: '482913', nombre: 'María López', tienda: 'talbot', correo: 'maria@aguila.test' };
+
+/** Clave de caja fija de las pruebas (secretos/caja) y huella de un NIP con ella (igual que js/nip.js). */
+const CLAVE_CAJA = Buffer.alloc(32, 7).toString('base64');
+const huellaNip = (nip, clave = CLAVE_CAJA) => createHmac('sha256', Buffer.from(clave, 'base64')).update(`nip:${nip}`).digest('hex');
 
 // ------------------------------------------------------------- Firestore REST (propietario, sin reglas)
 function valor(v) {
@@ -99,12 +104,18 @@ async function entrarAuthREST(email, password) {
 const AHORA = new Date('2026-09-20T12:00:00Z');
 
 /** Ficha completa de staff/{usuario} (mismo esquema que js/identidad.js). */
-function ficha({ usuario, tipo, nombre, rol = 'empleado', activo = true, tienda = null, cuentaVersion = 1, por = ADMIN.correo }) {
+function ficha({ usuario, tipo, nombre, rol = 'empleado', activo = true, tienda = null, cuentaVersion = 1, por = ADMIN.correo, correo = null, catalogo = false }) {
   const tipoReal = tipo ?? (/^[0-9]+$/.test(usuario) ? 'codigo' : 'correo');
   return {
     usuario, tipo: tipoReal, correoAuth: tipoReal === 'codigo' ? correoDeCodigo(usuario, cuentaVersion) : usuario,
     nombre, rol, activo, tienda, creadoEn: AHORA, actualizadoEn: AHORA, actualizadoPor: por, cuentaVersion,
+    correo: tipoReal === 'correo' ? usuario : correo, catalogo,
   };
+}
+
+/** secretos/caja con la clave fija de las pruebas (la cajas configuradas la guardan). */
+async function sembrarClaveCaja() {
+  await rest('PATCH', 'secretos/caja', campos({ clave: CLAVE_CAJA, creadaEn: AHORA, creadaPor: ADMIN.correo }));
 }
 
 async function sembrarAdmin() {
@@ -112,10 +123,20 @@ async function sembrarAdmin() {
   await rest('PATCH', `staff/${encodeURIComponent(ADMIN.correo)}`, campos(ficha({ usuario: ADMIN.correo, nombre: ADMIN.nombre, rol: 'admin' })));
 }
 
-async function sembrarEmpleadaCodigo({ codigo = EMPLEADA.codigo, nip = EMPLEADA.nip, nombre = EMPLEADA.nombre, tienda = EMPLEADA.tienda, activo = true, cuentaVersion = 1 } = {}) {
+/**
+ * Colaborador completo, como lo deja Empleados: cuenta de su número con el NIP,
+ * ficha (correo y permiso de catálogo), accesos, correos/{correo} y la huella
+ * del NIP (nips/{huella}) para entrar solo con el NIP en la caja.
+ */
+async function sembrarEmpleadaCodigo({
+  codigo = EMPLEADA.codigo, nip = EMPLEADA.nip, nombre = EMPLEADA.nombre, tienda = EMPLEADA.tienda, activo = true, cuentaVersion = 1,
+  rol = 'empleado', correo = codigo === EMPLEADA.codigo ? EMPLEADA.correo : `${codigo}@aguila.test`, catalogo = false,
+} = {}) {
   await crearCuentaAuth(correoDeCodigo(codigo, cuentaVersion), nip);
-  await rest('PATCH', `staff/${codigo}`, campos(ficha({ usuario: codigo, nombre, tienda, activo, cuentaVersion })));
+  await rest('PATCH', `staff/${codigo}`, campos(ficha({ usuario: codigo, nombre, tienda, activo, cuentaVersion, rol, correo, catalogo })));
   await rest('PATCH', `accesos/${codigo}`, campos({ version: cuentaVersion }));
+  if (correo) await rest('PATCH', `correos/${encodeURIComponent(correo)}`, campos({ codigo }));
+  await rest('PATCH', `nips/${huellaNip(nip)}`, campos({ codigo, version: cuentaVersion }));
 }
 
 async function sembrarTiendas() {
@@ -182,7 +203,8 @@ async function nuevaPagina(browser, { movil = false, ...opciones } = {}) {
   const BENIGNOS = /Failed to load resource|Could not reach Cloud Firestore backend|ERR_INTERNET_DISCONNECTED/;
   page.on('pageerror', (e) => errores.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !BENIGNOS.test(m.text())) errores.push(`[console] ${m.text().slice(0, 200)}`); });
-  page.on('dialog', (d) => { console.log(`  [diálogo ${d.type()}] ${d.message()}`); d.accept(); });
+  // Se aceptan todos; un prompt recibe page.respuestaPrompt (si la prueba la fija) o vacío.
+  page.on('dialog', (d) => { console.log(`  [diálogo ${d.type()}] ${d.message()}`); d.accept(d.type() === 'prompt' ? (page.respuestaPrompt ?? '') : undefined); });
   return { ctx, page, errores };
 }
 
@@ -208,13 +230,14 @@ async function entrar(page, identificador, secreto, { esperarError = false } = {
 
 /**
  * Entra a la consulta de precios (caja/consulta.html: su propia sesión, aparte del back office)
- * con código y NIP. Espera la vista de consulta y devuelve el nombre que muestra, o el mensaje de
+ * con correo y NIP. Espera la vista de consulta y devuelve el nombre que muestra, o el mensaje de
  * error si `esperarError`.
  */
-async function entrarConsulta(page, codigo, nip, { esperarError = false } = {}) {
+async function entrarConsulta(page, correo, nip, { esperarError = false } = {}) {
+  const codigo = correo;
   if (!/\/caja\/consulta\.html/.test(page.url())) await page.goto(`${BASE}/caja/consulta.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#form-acceso:not([hidden])', { timeout: 20000 });
-  await page.fill('#codigo', codigo);
+  await page.fill('#correo', correo);
   await page.fill('#nip', nip);
   await page.click('#btn-entrar');
   // Al entrar se oculta el formulario; si no, la consulta vacía el NIP y muestra el mensaje.
@@ -275,7 +298,7 @@ function verificador(nombreEscenario) {
 const texto = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
 
 module.exports = {
-  BASE, SALIDA, ADMIN, EMPLEADA, DOMINIO_CODIGOS, correoDeCodigo,
+  BASE, SALIDA, ADMIN, EMPLEADA, DOMINIO_CODIGOS, correoDeCodigo, CLAVE_CAJA, huellaNip, sembrarClaveCaja,
   rest, campos, leerDoc, leerColeccion, borrarTodo, crearCuentaAuth, entrarAuthREST,
   ficha, sembrarAdmin, sembrarEmpleadaCodigo, sembrarTiendas, producto, sembrarProducto, sembrarCatalogoDemo, tokens,
   abrirNavegador, nuevaPagina, entrar, entrarConsulta, tarjetaConsulta, consultarPrecio, verificador, texto,

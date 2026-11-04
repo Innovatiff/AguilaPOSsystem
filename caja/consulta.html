@@ -20,7 +20,6 @@
   <header class="consulta__barra">
     <a class="consulta__marca" href="./"><span class="marca__logo" aria-hidden="true"></span><span>Consulta de precios</span></a>
     <span class="consulta__usuario" id="usuario" hidden></span>
-    <button id="btn-nip" class="boton boton--secundario" type="button" aria-label="Cambiar mi NIP" hidden>Mi NIP</button>
     <button id="btn-salir" class="boton boton--secundario" type="button" hidden>Salir</button>
   </header>
 
@@ -29,10 +28,10 @@
 
     <form id="form-acceso" class="tarjeta-login consulta__acceso" novalidate hidden>
       <h1>Consulta de precios</h1>
-      <p class="subtitulo">Entra con tu código de empleado y tu NIP.</p>
+      <p class="subtitulo">Entra con tu correo y tu NIP de 6 dígitos.</p>
       <div class="campo">
-        <label for="codigo">Código de empleado</label>
-        <input id="codigo" type="text" inputmode="numeric" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="80" required>
+        <label for="correo">Correo</label>
+        <input id="correo" type="text" inputmode="email" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="120" required>
       </div>
       <div class="campo">
         <label for="nip">NIP</label>
@@ -68,23 +67,6 @@
       <ul id="resultados" class="consulta__resultados" aria-label="Productos"></ul>
     </section>
   </main>
-
-  <dialog id="dialogo-nip" class="editor editor--angosto" aria-labelledby="titulo-nip">
-    <form id="form-nip" class="editor__form" novalidate>
-      <header class="editor__cabecera"><h2 id="titulo-nip">Cambiar mi NIP</h2></header>
-      <div class="editor__cuerpo editor__cuerpo--simple">
-        <p class="nota">El NIP son de 6 a 10 dígitos. Sirve para entrar a la caja y a esta consulta. Si lo olvidas, un administrador lo restablece.</p>
-        <div class="campo"><label for="nip-actual">NIP actual</label><input id="nip-actual" type="password" inputmode="numeric" autocomplete="current-password" maxlength="72" required></div>
-        <div class="campo"><label for="nip-nuevo">NIP nuevo</label><input id="nip-nuevo" type="password" inputmode="numeric" autocomplete="new-password" maxlength="10" required></div>
-        <div class="campo"><label for="nip-repetir">Repite el NIP nuevo</label><input id="nip-repetir" type="password" inputmode="numeric" autocomplete="new-password" maxlength="10" required></div>
-        <p id="mensaje-nip" class="mensaje" role="alert" hidden></p>
-      </div>
-      <footer class="editor__pie">
-        <button id="nip-guardar" class="boton" type="submit">Cambiar NIP</button>
-        <button id="nip-cancelar" class="boton boton--claro" type="button">Cancelar</button>
-      </footer>
-    </form>
-  </dialog>
 
   <dialog id="escaner" class="escaner" aria-labelledby="escaner-titulo">
     <header class="escaner__cabecera">

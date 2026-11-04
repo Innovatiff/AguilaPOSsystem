@@ -3040,11 +3040,154 @@ main.consulta__cuerpo {
     display: none;
   }
 
-  .consulta__barra #btn-nip {
+  .consulta__barra #btn-salir {
     margin-left: auto;
   }
 
   .consulta__marca span:last-child {
     font-size: 15px;
   }
+}
+
+/* =====================================================================
+   Empleados (correo + NIP), solicitudes del Catálogo e insignia del menú
+   ===================================================================== */
+.casilla--bloque {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.casilla--bloque input {
+  margin-top: 3px;
+}
+
+.casilla--bloque small {
+  color: var(--color-texto-suave);
+}
+
+.fila-nip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.nip-generado {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bo-aviso-claro);
+  color: var(--bo-aviso);
+  font: 700 15px/1.4 var(--bo-cifras);
+  letter-spacing: 0.06em;
+}
+
+.tabla--personal .chip {
+  margin: 0 4px 2px 0;
+}
+
+.tabla--personal .correo-celda {
+  overflow-wrap: anywhere;
+}
+
+.nav-insignia {
+  min-width: 20px;
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-marca);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.solicitudes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+}
+
+.solicitud {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--bo-linea);
+  border-left: 4px solid var(--bo-info);
+  border-radius: 10px;
+  background: var(--bo-panel);
+}
+
+.solicitud--baja {
+  border-left-color: var(--bo-peligro);
+}
+
+.solicitud__cabecera {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+
+.solicitud__cabecera h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.solicitud__quien {
+  grid-column: 1 / -1;
+  color: var(--bo-suave);
+  font-size: 13px;
+}
+
+.solicitud__datos {
+  margin: 0;
+}
+
+.solicitud__precio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.solicitud__precio .campo {
+  width: 150px;
+  margin: 0;
+}
+
+.solicitud__fiscal {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 14px;
+}
+
+.solicitud__fiscal legend {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.solicitud__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media screen and (max-width: 720px) {
+  .solicitudes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.con-lateral .encabezado nav a[aria-current="page"] .nav-insignia {
+  background: #fff;
+  color: var(--color-marca);
 }

@@ -6,13 +6,14 @@ framework, no bundler, no build step: the repo root is the site. Firebase
 (Firestore + Auth) for data and staff login. UI in Spanish, money in CAD
 integer cents, never floats.
 
-Three apps share the site, the data and the service worker:
+Four apps share the site, the data and the service worker:
 
 | app | where | who | what |
 |---|---|---|---|
-| **Back office** | site root (`index.html`, `ventas.html`, `turnos.html`, `reportes.html`, catalog pages, `gestion/`) | **admins only** | today's sales live, sales journal and reprints, shifts with hours and cash over/short, reports, products and tags, employees, registers, stores, POS settings |
-| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with their PIN**, and the close prints their Z report with what they sold and their hours |
-| **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner); change one's own PIN |
+| **Back office** | site root (`index.html`, `ventas.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `gestion/`) | **admins only** | today's sales live, sales journal and reprints, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, employees, registers, stores, POS settings |
+| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours |
+| **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
+| **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner) |
 
 ## Layout
 
@@ -22,7 +23,10 @@ Three apps share the site, the data and the service worker:
 | `ventas.html`, `js/bo-ventas.js` | sales journal of a day: filters, search by receipt number (or scan the receipt), ticket detail with reprint, CSV |
 | `turnos.html`, `js/bo-turnos.js` | open shifts now and shifts of a period: hours, sales, expected/counted cash, over/short; shift detail with its Z (or X) report, verification against the sales, admin close |
 | `reportes.html`, `js/bo-reportes.js` | reports of a period from the shift summaries: totals, tax, by day, payment methods, by person (hours), by register, top products, department sales, control counters; print and CSV |
-| `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees and their codes, CSV import/export |
+| `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees (email, PIN, Catálogo permission), CSV import/export |
+| `solicitudes.html`, `js/gestion-solicitudes.js`, `js/solicitudes.js` | requests from the Catálogo app: add a product (the admin sets price and tax class) or remove one; badge with the pending count in the sidebar |
+| `catalogo/`, `js/catalogo-solicitudes.js`, `herramientas/paginas-catalogo.mjs` | the staff Catálogo app: `entrar.html` (email + PIN), products, quick capture, tags, my requests. Its products, capture and tags pages are generated from the back office ones (`node herramientas/paginas-catalogo.mjs`; a unit test checks they are up to date); the shared screens switch to staff mode by app and role |
+| `js/nip.js`, `js/clave-caja.js` | PIN-only sign-in at the register: HMAC of the PIN with the register key (`secretos/caja`) |
 | `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
 | `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
 | `caja/consulta.html`, `js/consulta.js` | staff price check and PIN change |
@@ -79,28 +83,49 @@ Admins register everyone in **Back office → Empleados**, which creates the
 Authentication account and the record together. Nobody is deleted: people are
 deactivated, and access ends the moment that happens.
 
-- **Back office: admins only.** An employee who signs in at `login.html` is told
-  to use the register or the price check instead, and is signed out.
-- **Register and price check: every active staff member**, with their
-  **employee code + PIN**. The code is exactly 6 digits (Empleados proposes the
-  next free one); the PIN is 6–10 digits chosen by the admin and handed over in
-  person. Behind it is an Authentication account with the synthetic email
-  `<code>@codigo.aguilapos.firebaseapp.com` (`DOMINIO_CODIGOS` in
-  `js/identidad.js`, mirrored in `firestore.rules`). People change their own PIN
-  in the price check (**Mi NIP**); if they forget it, an admin uses **Restablecer
-  NIP**, which creates a fresh account for the same code (`<code>.2@…`) and cuts
-  the old one off at once. The login screens learn which version is current from
-  the tiny public document `accesos/<code>` (`{ version }`).
-- **Email + password** (admins who prefer it). Password recovery is by email.
+Every staff member is registered with their **email** and a **6-digit PIN
+(NIP de colaborador) that nobody else has**. Empleados assigns an internal
+number (6 digits, nobody types it) and creates the Authentication account
+behind it, with the synthetic email `<number>@codigo.aguilapos.firebaseapp.com`
+(`DOMINIO_CODIGOS` in `js/identidad.js`, mirrored in `firestore.rules`) and the
+PIN as its password.
+
+- **Register: only the PIN.** On a register computer that an admin set up, the
+  cashier types just the 6 digits. The register computes
+  `HMAC-SHA-256(register key, PIN)` and reads `nips/<that hash>` = `{ codigo,
+  version }` to know whose PIN it is, then signs in to that account with the
+  PIN. The register key lives in `secretos/caja` (only admins read it) and is
+  saved on each register when an admin sets it up; without it nobody can turn a
+  PIN into a lookup, so the index cannot be probed from outside a register.
+  Admin approvals at the register are the admin's PIN too.
+- **Price check, Catálogo and back office: email + PIN.** `correos/<email>` =
+  `{ codigo }` (one public document, no listing) tells which account the email
+  belongs to. Admins with an email + password account keep using their password
+  (a password has at least 8 characters, so it is never mistaken for a PIN).
+- **Back office: admins only.** Anyone else who signs in at `login.html` is told
+  to use the register, the price check or the Catálogo app, and is signed out.
+- **Catálogo: admins and staff with the Catálogo permission** (a checkbox in
+  Empleados). The Catálogo app has its own session and its own pages; nothing
+  in it links to the back office.
+- **PINs are set by admins** (Empleados → **Cambiar NIP**; an admin changes
+  their own in Mi cuenta). A PIN change creates a fresh account for the same
+  number (`<number>.2@…`), moves the `nips/` entry and cuts the old PIN off at
+  once. The login screens learn the current version from `accesos/<number>`.
+- Records from before email + PIN keep working where they can; Empleados lists
+  who still needs an email and a 6-digit PIN.
 
 Every write is signed with the person's stable **usuario** (the code, or the
 email); the rules verify it. The register, the price check and the back office
 each keep their own Firebase session, so on one computer a cashier can have
 their shift open while an admin uses the back office in another window.
 
-**The catalog belongs to the admins.** Only an admin creates or edits products
-and prices; the rules reject it for everyone else. Price changes are written
-together with their `priceHistory` entry.
+**Prices belong to the admins.** Only an admin creates products, changes a
+price, the unit, the tax class, or deactivates a product; price changes are
+written together with their `priceHistory` entry. Staff with the Catálogo
+permission may edit everything else (names, codes, size, stores, supplier) and
+mark tags as printed; a new product or a removal is a **request**
+(`solicitudes/`) that an admin resolves in the same batch that writes the
+product. The rules enforce all of it, not just the screens.
 
 ## First-time setup
 
@@ -120,15 +145,19 @@ Once per Firebase project:
 5. Sign in at `login.html` and, in this order:
    - **Tiendas**: each store with its name, address, phone, email and HST number
      (they print at the top of every receipt).
-   - **Empleados**: everyone, with their code and PIN (admins too, if they will
-     use the register).
+   - **Empleados**: everyone, with their email and a 6-digit PIN (admins too, if
+     they will use the register), and tick **Puede usar la app Catálogo** for
+     whoever may edit the catalog.
    - **Cajas**: one per register (number 1–99; it appears in receipt numbers).
    - **Configuración**: tax name and rate (HST 13 %), suggested opening float,
      open-price limit, blind count, receipt width (80/58 mm) and footer, and the
      department keys of the register.
 6. On each register computer, open `https://<site>/caja/` in Chrome: an admin
-   signs in with their code and PIN and picks which register that computer is.
-   Done once per computer (stored on that computer).
+   signs in with their email and PIN (or password) and picks which register
+   that computer is. Done once per computer: it stores the register and the
+   register key, and from then on cashiers type only their PIN.
+7. Staff with the Catálogo permission open `https://<site>/catalogo/` on their
+   phone or PC and sign in with their email and PIN (installable on the phone).
 
 ## Back office
 
@@ -185,7 +214,7 @@ Designed for a 1024 × 768 touch screen and up, with keyboard and USB scanner.
 
 **A cashier's day**
 
-1. **Open the shift**: code + PIN on the register's start screen, then the
+1. **Open the shift**: only the 6-digit PIN on the register's start screen, then the
    opening float (suggested amount from Configuración). An opening slip prints.
 2. **Sell**: scan; or type a PLU (4–5 digits; weighed items ask for kilos); or
    type letters to search by name; `3×` (or `3*`) then scan adds three; type a
@@ -196,7 +225,7 @@ Designed for a 1024 × 768 touch screen and up, with keyboard and USB scanner.
    pennies), debit, credit or other, split payments. The receipt prints by
    itself.
 3. **Needs an admin**: discounts (line or ticket), price changes, returns, and
-   open-price sales above the limit. An admin types their own code and PIN on
+   open-price sales above the limit. An admin types their own PIN on
    the register (a separate session; the cashier stays signed in). One approval
    covers the ticket. Admins selling at the register need no approval.
 4. **Returns** (F8): scan the original receipt (or type its number, or "Sin
@@ -240,12 +269,31 @@ signing in need the internet.
 
 ## Price check (`/caja/consulta.html`)
 
-For every staff member, on a phone or at a PC. Sign in with code and PIN;
+For every staff member, on a phone or at a PC. Sign in with email and PIN;
 search by name, type a code or PLU, scan with the USB scanner, or tap
 **Escanear** to use the phone camera (native `BarcodeDetector` or the vendored
 ZXing). Shows the price, per kg for weighed items, the tax mark and the codes.
-Read-only. **Mi NIP** changes one's own PIN. Installable on the phone's home
-screen.
+Read-only. Installable on the phone's home screen.
+
+## Catálogo (`/catalogo/`)
+
+For staff an admin allowed. Sign in with email and PIN. Same screens as the
+back office catalog, in staff mode:
+
+- **Productos**: search, scan, open a product and edit its data. Price, unit
+  and tax class are locked. **Pedir que se quite** sends a removal request.
+  An unknown barcode offers **Pedir alta con este UPC**: the form has no price;
+  the product enters the catalog when an admin sets its price.
+- **Captura rápida**: scan, name, brand, size, Enter: the request is sent.
+- **Etiquetas**: print pending shelf tags (the printed price is recorded).
+- **Mis solicitudes**: each request with its status and the admin's note.
+
+In the back office, **Solicitudes** (with a badge in the sidebar) lists the
+pending requests: for a new product the admin types the price (and price per
+kg for weighed items), picks the tax class and **Agregar al catálogo**; for a
+removal, **Quitar del catálogo** (the product becomes inactive: it disappears
+from the register, the price check, searches and tags; it can be reactivated in
+Productos) or **Rechazar** with a note.
 
 ## Deploy (Netlify)
 

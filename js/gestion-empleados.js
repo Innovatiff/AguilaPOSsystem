@@ -1,21 +1,29 @@
 /**
- * Back office · Empleados (solo administradores): alta con código y NIP (o correo
- * y contraseña), edición, restablecer NIP, activar/desactivar.
+ * Back office · Empleados (solo administradores).
  *
- * Cada alta crea la cuenta de Firebase Authentication (js/cuentas.js) y la
- * ficha staff/{usuario}; la ficha es lo que da acceso (reglas). Nadie se borra.
+ * Cada colaborador se registra con su CORREO y un NIP de 6 dígitos único:
+ *  - la cuenta de Firebase Authentication es la de su número interno de
+ *    colaborador ("<código>@<dominio sintético>", contraseña = NIP; js/cuentas.js);
+ *  - staff/{código} lleva su correo y si puede usar la app Catálogo;
+ *  - correos/{correo} = { codigo } le deja entrar con correo + NIP;
+ *  - nips/{huella} = { codigo, version } le deja entrar en la caja solo con el
+ *    NIP (la huella es un HMAC del NIP con la clave de caja; js/nip.js).
+ * Todo se escribe en un solo lote, que las reglas comprueban. Cambiar el NIP
+ * crea una cuenta nueva (sube la versión) y cambia la huella. Nadie se borra.
+ * Las fichas por correo + contraseña anteriores siguen funcionando (back office).
  */
 import { requerirPersonal, enviarRestablecimiento, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { avisar } from './avisos.js';
 import { observarTiendas } from './productos.js';
-import { crearCuenta, crearCuentaDeCodigo } from './cuentas.js';
-import {
-  armarFichaPersonal, validarFichaPersonal, validarCodigo, validarNIP, validarContrasena, siguienteCodigo,
-  normalizarIdentificador, esCorreo, etiquetaUsuario,
-} from './identidad.js';
+import { crearCuentaDeCodigo } from './cuentas.js';
+import { obtenerClaveCaja } from './clave-caja.js';
+import { huellaNip } from './nip.js';
+import { armarFichaPersonal, validarFichaPersonal, validarNIP, siguienteCodigo, esCorreo } from './identidad.js';
 import { normalizarTexto } from './esquema.js';
-import { db, doc, runTransaction, writeBatch, collection, onSnapshot, Timestamp } from './firebase.js';
+import {
+  db, doc, getDoc, getDocs, query, where, runTransaction, writeBatch, collection, onSnapshot, Timestamp,
+} from './firebase.js';
 
 const { personal: yo } = await requerirPersonal({ soloAdmin: true });
 pintarNavegacion({ personal: yo, activa: 'gestion/empleados.html' });
@@ -34,6 +42,7 @@ const avisoEditor = $('editor-aviso');
 const btnGuardar = $('btn-guardar');
 
 let fichas = new Map(); // usuario → ficha (con id)
+let conNip = new Map(); // código → versión registrada en nips/
 let tiendas = [];
 const estado = { modo: null, actual: null, guardando: false };
 
@@ -43,6 +52,7 @@ function mostrar(elemento, tipo, texto) {
   elemento.hidden = !texto;
 }
 const avisoEnEditor = (texto, tipo = 'error') => mostrar(avisoEditor, tipo, texto);
+const fallo = (texto, campo) => Object.assign(new Error(texto), { campo });
 
 function crear(etiqueta, clase, texto) {
   const el = document.createElement(etiqueta);
@@ -59,11 +69,16 @@ function boton(texto, alPulsar) {
 }
 
 const tipoDe = (ficha) => ficha.tipo ?? 'correo'; // las fichas anteriores a Gestión son por correo
+const correoDe = (ficha) => ficha.correo ?? (tipoDe(ficha) === 'correo' ? ficha.id : null);
 const nombreTienda = (id) => (id ? (tiendas.find((t) => t.id === id)?.nombre ?? id) : '—');
+/** ¿Tiene su NIP de caja registrado (huella con la versión de cuenta vigente)? */
+const nipRegistrado = (ficha) => conNip.get(ficha.id) === (ficha.cuentaVersion ?? 1);
+/** Colaborador por código al que todavía le falta el correo o el NIP de 6 dígitos registrado. */
+const pendienteDeMigrar = (ficha) => tipoDe(ficha) === 'codigo' && (!ficha.correo || !nipRegistrado(ficha));
 
 /**
  * Ficha completa (esquema actual) a partir de una guardada, con cambios.
- * Completa también las fichas anteriores a Gestión (solo nombre, rol, activo).
+ * Completa también las fichas anteriores (sin correo, sin permiso de catálogo).
  */
 function completar(ficha, cambios = {}) {
   const base = armarFichaPersonal({
@@ -75,6 +90,8 @@ function completar(ficha, cambios = {}) {
     activo: ficha.activo,
     tienda: ficha.tienda ?? null,
     cuentaVersion: ficha.cuentaVersion ?? 1,
+    correo: ficha.correo ?? null,
+    catalogo: ficha.catalogo === true,
     ...cambios,
   }, yo.usuario);
   return { ...base, creadoEn: ficha.creadoEn ?? ahora(), actualizadoEn: ahora() };
@@ -109,10 +126,21 @@ onSnapshot(
   },
 );
 
+onSnapshot(
+  collection(db, 'nips'),
+  (resultado) => {
+    const mapa = new Map();
+    resultado.forEach((d) => mapa.set(d.data().codigo, d.data().version));
+    conNip = mapa;
+    pintar();
+  },
+  () => {}, // sin las reglas nuevas publicadas no se puede listar: solo no se marcan los pendientes
+);
+
 // ------------------------------------------------------------- tabla
 function coincide(ficha, termino) {
   if (!termino) return true;
-  const texto = normalizarTexto(`${ficha.id} ${ficha.nombre ?? ''} ${nombreTienda(ficha.tienda)}`);
+  const texto = normalizarTexto(`${ficha.id} ${ficha.nombre ?? ''} ${correoDe(ficha) ?? ''} ${nombreTienda(ficha.tienda)}`);
   return termino.split(' ').every((palabra) => texto.includes(palabra));
 }
 
@@ -125,6 +153,15 @@ function pintar() {
   const sin = $('sin-resultados');
   sin.hidden = lista.length > 0;
   sin.textContent = fichas.size === 0 ? 'Todavía no hay personal registrado.' : `Sin resultados para «${filtro.value.trim()}».`;
+
+  const pendientes = [...fichas.values()].filter((f) => f.activo === true && pendienteDeMigrar(f));
+  const aviso = $('aviso-migracion');
+  aviso.hidden = pendientes.length === 0;
+  aviso.textContent = pendientes.length === 0 ? '' : `${pendientes.length === 1 ? '1 persona todavía no puede' : `${pendientes.length} personas todavía no pueden`} entrar con correo y NIP: ${pendientes.map((f) => f.nombre).join(', ')}. Edítala para poner su correo y usa «Cambiar NIP» para darle un NIP de 6 dígitos.`;
+}
+
+function chip(texto, tipo) {
+  return crear('span', `chip chip--${tipo}`, texto);
 }
 
 function fila(ficha) {
@@ -133,27 +170,34 @@ function fila(ficha) {
   const tipo = tipoDe(ficha);
   const esYo = ficha.id === yo.usuario;
 
-  const acceso = crear('td');
-  acceso.append(crear('span', '', tipo === 'codigo' ? 'Código + NIP' : 'Correo + contraseña'));
-  if (tipo === 'codigo' && (ficha.cuentaVersion ?? 1) > 1) acceso.append(crear('span', 'acceso-nota', `NIP restablecido ${ficha.cuentaVersion - 1} ${ficha.cuentaVersion - 1 === 1 ? 'vez' : 'veces'}`));
-  if (tipo === 'correo' && !ficha.correoAuth) acceso.append(crear('span', 'acceso-nota', 'Ficha anterior: se completa al editar'));
-
   const nombre = crear('td');
   nombre.append(crear('strong', '', ficha.nombre ?? ''));
   if (esYo) nombre.append(crear('span', 'secundario', 'tú'));
+  if (tipo === 'codigo') nombre.append(crear('span', 'secundario monoespaciada', `Nº ${ficha.id}`));
+
+  const acceso = crear('td');
+  if (tipo === 'codigo') {
+    if (!ficha.correo) acceso.append(chip('Falta el correo', 'aviso'));
+    if (!nipRegistrado(ficha)) acceso.append(chip('Falta el NIP de caja', 'aviso'));
+    if (ficha.correo && nipRegistrado(ficha)) acceso.append(crear('span', '', 'Correo + NIP'));
+  } else {
+    acceso.append(crear('span', '', 'Correo + contraseña'));
+    acceso.append(crear('span', 'acceso-nota', 'Solo back office: sin NIP de caja'));
+  }
 
   tr.append(
-    crear('td', 'monoespaciada', ficha.id),
     nombre,
+    crear('td', 'correo-celda', correoDe(ficha) ?? '—'),
     crear('td', '', NOMBRE_ROL[ficha.rol] ?? ficha.rol ?? ''),
     crear('td', '', nombreTienda(ficha.tienda)),
     acceso,
+    crear('td', '', ficha.rol === 'admin' ? 'Sí (admin)' : ficha.catalogo === true ? 'Sí' : 'No'),
     crear('td', '', ficha.activo === true ? 'Activo' : 'Inactivo'),
   );
 
   const acciones = crear('td', 'acciones-fila');
   acciones.append(boton('Editar', () => abrirEditar(ficha)));
-  if (tipo === 'codigo' && !esYo) acciones.append(boton('Restablecer NIP', () => abrirNip(ficha)));
+  if (tipo === 'codigo' && !esYo) acciones.append(boton('Cambiar NIP', () => abrirNip(ficha)));
   if (tipo === 'correo') acciones.append(boton('Enviar enlace de contraseña', () => enviarEnlace(ficha)));
   if (!esYo) acciones.append(boton(ficha.activo === true ? 'Desactivar' : 'Activar', () => cambiarActivo(ficha)));
   tr.append(acciones);
@@ -164,20 +208,20 @@ filtro.addEventListener('input', pintar);
 verInactivos.addEventListener('change', pintar);
 
 // ------------------------------------------------------------- acciones de fila
-/** Guarda la ficha completa y, si es de código, su accesos/{código}, en un solo lote. */
-async function guardarFicha(ficha) {
+/** Guarda la ficha completa y, si es de código, su accesos/{código}, en un lote (más lo que se añada). */
+function loteFicha(ficha) {
   const lote = writeBatch(db);
   lote.set(doc(db, 'staff', ficha.usuario), ficha);
   if (ficha.tipo === 'codigo') lote.set(doc(db, 'accesos', ficha.usuario), { version: ficha.cuentaVersion });
-  await lote.commit();
+  return lote;
 }
 
 async function cambiarActivo(ficha) {
   const activar = ficha.activo !== true;
-  const quien = etiquetaUsuario(ficha.id, ficha.nombre);
-  if (!activar && !window.confirm(`¿Desactivar a ${quien}? Dejará de poder entrar de inmediato. Se puede reactivar después.`)) return;
+  const quien = ficha.nombre ?? ficha.id;
+  if (!activar && !window.confirm(`¿Desactivar a ${quien}? Dejará de poder entrar de inmediato (caja, consulta y Catálogo). Se puede reactivar después.`)) return;
   try {
-    await guardarFicha(completar(ficha, { activo: activar }));
+    await loteFicha(completar(ficha, { activo: activar })).commit();
     mostrar(mensaje, 'ok', `${quien} ${activar ? 'reactivado: ya puede entrar' : 'desactivado: ya no puede entrar'}.`);
   } catch (error) {
     mostrar(mensaje, 'error', mensajeError(error));
@@ -193,39 +237,63 @@ async function enviarEnlace(ficha) {
   }
 }
 
-// ------------------------------------------------------------- editor
-const tipoElegido = () => form.tipo.value;
-const cuentaElegida = () => form.cuenta.value;
+// ------------------------------------------------------------- NIP y correo: unicidad
+let clave = null;
+async function claveCaja() {
+  clave ??= await obtenerClaveCaja(yo.usuario);
+  return clave;
+}
 
+/** Huella del NIP; falla si ese NIP ya es de otra persona (o ya es el suyo). */
+async function huellaLibre(nip, codigoPropio = null) {
+  const huella = await huellaNip(await claveCaja(), nip);
+  const existente = await getDoc(doc(db, 'nips', huella));
+  if (existente.exists()) {
+    const dueno = existente.data().codigo;
+    if (dueno === codigoPropio) throw fallo('Ese ya es su NIP. Escribe uno distinto.', $('e-secreto'));
+    throw fallo('Ese NIP ya lo tiene otra persona. Elige otro (o pulsa «Generar un NIP»).', $('e-secreto'));
+  }
+  return huella;
+}
+
+/** El correo no puede ser de otro colaborador. */
+async function correoLibre(correo, codigoPropio = null) {
+  const otro = [...fichas.values()].find((f) => f.id !== codigoPropio && tipoDe(f) === 'codigo' && f.correo === correo);
+  if (otro) throw fallo(`Ese correo ya es de ${otro.nombre}.`, $('e-correo'));
+  const registro = await getDoc(doc(db, 'correos', correo));
+  if (registro.exists() && registro.data().codigo !== codigoPropio) {
+    const dueno = fichas.get(registro.data().codigo);
+    throw fallo(`Ese correo ya es de ${dueno?.nombre ?? `el colaborador ${registro.data().codigo}`}.`, $('e-correo'));
+  }
+}
+
+function leerCorreo() {
+  const correo = $('e-correo').value.trim().toLowerCase();
+  if (correo === '') throw fallo('Escribe el correo.', $('e-correo'));
+  if (!esCorreo(correo)) throw fallo('Escribe un correo válido.', $('e-correo'));
+  return correo;
+}
+
+// ------------------------------------------------------------- editor
 function ajustarFormulario() {
   const modo = estado.modo;
-  const tipo = modo === 'crear' ? tipoElegido() : tipoDe(estado.actual ?? {});
-  const conSecreto = modo === 'nip' || (modo === 'crear' && (tipo === 'codigo' || cuentaElegida() === 'crear'));
-  $('grupo-tipo').hidden = modo !== 'crear';
+  const actual = estado.actual;
+  const porCorreo = actual && tipoDe(actual) === 'correo';
   $('grupo-datos').hidden = modo === 'nip';
-  $('campo-codigo').hidden = tipo !== 'codigo';
-  $('campo-correo').hidden = tipo !== 'correo';
-  $('grupo-cuenta-correo').hidden = !(modo === 'crear' && tipo === 'correo');
-  $('grupo-secreto').hidden = !conSecreto;
-  $('e-codigo').readOnly = modo !== 'crear';
-  $('e-correo').readOnly = modo !== 'crear';
-  $('e-rol').disabled = modo === 'editar' && estado.actual?.id === yo.usuario;
-  const nip = tipo === 'codigo';
-  $('et-secreto').textContent = nip ? (modo === 'nip' ? 'NIP nuevo *' : 'NIP *') : 'Contraseña temporal *';
-  $('et-secreto2').textContent = nip ? 'Repite el NIP *' : 'Repite la contraseña *';
-  $('nota-secreto').textContent = nip
-    ? (modo === 'nip'
-      ? 'Se crea una cuenta nueva para este código con el NIP nuevo; el anterior deja de servir de inmediato y la persona tendrá que volver a entrar.'
-      : 'De 6 a 10 dígitos. Anótalo y entrégaselo en persona: después no se puede consultar, solo restablecer.')
-    : 'Mínimo 8 caracteres. La persona puede cambiarla en «Mi cuenta» o con «Olvidé mi contraseña».';
-  for (const id of ['e-secreto', 'e-secreto2']) {
-    $(id).inputMode = nip ? 'numeric' : 'text';
-    $(id).maxLength = nip ? 10 : 72; // el tope de 10 es solo para el NIP; una contraseña no se recorta
-  }
-  btnGuardar.firstChild.textContent = modo === 'crear' ? 'Registrar ' : modo === 'nip' ? 'Restablecer NIP ' : 'Guardar ';
-  $('pie-nota').textContent = modo === 'crear' && tipo === 'codigo' ? 'Se crea la cuenta y la ficha; la persona ya podrá entrar.' : '';
+  $('grupo-secreto').hidden = modo === 'editar';
+  $('e-correo').readOnly = Boolean(porCorreo);
+  $('e-rol').disabled = modo === 'editar' && actual?.id === yo.usuario;
+  $('et-secreto').textContent = modo === 'nip' ? 'NIP nuevo *' : 'NIP *';
+  $('et-secreto2').textContent = modo === 'nip' ? 'Repite el NIP nuevo *' : 'Repite el NIP *';
+  const numero = $('e-numero');
+  numero.hidden = !(actual && tipoDe(actual) === 'codigo');
+  numero.textContent = numero.hidden ? '' : `Nº de colaborador ${actual.id} (interno: nadie lo tiene que teclear).`;
+  $('nip-generado').hidden = true;
+  btnGuardar.firstChild.textContent = modo === 'crear' ? 'Registrar ' : modo === 'nip' ? 'Cambiar NIP ' : 'Guardar ';
+  $('pie-nota').textContent = modo === 'crear'
+    ? 'Se crea la cuenta; la persona ya podrá entrar.'
+    : modo === 'nip' ? 'El NIP anterior deja de servir de inmediato.' : '';
 }
-for (const radio of form.querySelectorAll('input[name="tipo"], input[name="cuenta"]')) radio.addEventListener('change', ajustarFormulario);
 
 function abrir(modo, actual, titulo) {
   estado.modo = modo;
@@ -234,24 +302,24 @@ function abrir(modo, actual, titulo) {
   avisoEnEditor('');
   $('editor-titulo').textContent = titulo;
   if (actual) {
-    $('e-codigo').value = tipoDe(actual) === 'codigo' ? actual.id : '';
-    $('e-correo').value = tipoDe(actual) === 'correo' ? actual.id : '';
     $('e-nombre').value = actual.nombre ?? '';
+    $('e-correo').value = correoDe(actual) ?? '';
     $('e-rol').value = actual.rol ?? 'empleado';
     $('e-tienda').value = actual.tienda ?? '';
+    $('e-catalogo').checked = actual.catalogo === true;
   } else {
-    $('e-codigo').value = siguienteCodigo([...fichas.keys()]);
     $('e-tienda').value = '';
+    $('e-catalogo').checked = false;
   }
   ajustarFormulario();
   if (!editor.open) editor.showModal();
-  const primero = modo === 'nip' ? $('e-secreto') : modo === 'editar' ? $('e-nombre') : tipoElegido() === 'codigo' ? $('e-nombre') : $('e-correo');
+  const primero = modo === 'nip' ? $('e-secreto') : modo === 'editar' && !actual?.correo && tipoDe(actual) === 'codigo' ? $('e-correo') : $('e-nombre');
   setTimeout(() => primero.focus(), 0);
 }
 
 const abrirNuevo = () => abrir('crear', null, 'Nuevo empleado');
-const abrirEditar = (ficha) => abrir('editar', ficha, `Editar · ${etiquetaUsuario(ficha.id, ficha.nombre)}`);
-const abrirNip = (ficha) => abrir('nip', ficha, `Restablecer NIP · ${etiquetaUsuario(ficha.id, ficha.nombre)}`);
+const abrirEditar = (ficha) => abrir('editar', ficha, `Editar · ${ficha.nombre ?? ficha.id}`);
+const abrirNip = (ficha) => abrir('nip', ficha, `Cambiar NIP · ${ficha.nombre ?? ficha.id}`);
 
 $('btn-nuevo').addEventListener('click', abrirNuevo);
 $('btn-cerrar').addEventListener('click', () => editor.close());
@@ -262,96 +330,101 @@ document.addEventListener('keydown', (evento) => {
   }
 });
 
-/** Lee y valida el secreto (NIP o contraseña) por duplicado. Devuelve el texto o lanza Error. */
-function leerSecreto(nip) {
+/** Un NIP al azar que cumple las reglas (ni repetido ni secuencia); la unicidad se comprueba al guardar. */
+function nipAlAzar() {
+  for (;;) {
+    const nip = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, '0');
+    if (!validarNIP(nip)) return nip;
+  }
+}
+$('btn-generar').addEventListener('click', () => {
+  const nip = nipAlAzar();
+  $('e-secreto').value = nip;
+  $('e-secreto2').value = nip;
+  const salida = $('nip-generado');
+  salida.hidden = false;
+  salida.textContent = `NIP: ${nip} · anótalo para entregarlo`;
+});
+
+/** Lee y valida el NIP por duplicado. */
+function leerNip() {
   const a = $('e-secreto').value.trim();
   const b = $('e-secreto2').value.trim();
-  const error = nip ? validarNIP(a) : validarContrasena(a);
-  if (error) throw Object.assign(new Error(error), { campo: $('e-secreto') });
-  if (a !== b) throw Object.assign(new Error(nip ? 'Los dos NIP no coinciden.' : 'Las dos contraseñas no coinciden.'), { campo: $('e-secreto2') });
+  const error = validarNIP(a);
+  if (error) throw fallo(error, $('e-secreto'));
+  if (a !== b) throw fallo('Los dos NIP no coinciden.', $('e-secreto2'));
   return a;
 }
 
-/** Crea la ficha solo si no existe (dos gerentes no pueden repetir un código). */
-async function crearFicha(ficha) {
-  const referencia = doc(db, 'staff', ficha.usuario);
-  await runTransaction(db, async (transaccion) => {
-    const existente = await transaccion.get(referencia);
-    if (existente.exists()) throw Object.assign(new Error(`${ficha.usuario} ya está registrado.`), { code: 'catalogo/duplicado' });
-    const marca = ahora();
-    transaccion.set(referencia, { ...ficha, creadoEn: marca, actualizadoEn: marca });
-    // La pantalla de entrada consulta accesos/{código} para saber la versión de cuenta vigente.
-    if (ficha.tipo === 'codigo') transaccion.set(doc(db, 'accesos', ficha.usuario), { version: ficha.cuentaVersion });
-  });
-}
-
 async function registrar() {
-  const tipo = tipoElegido();
   const nombre = $('e-nombre').value.trim();
-  if (nombre === '') throw Object.assign(new Error('Escribe el nombre.'), { campo: $('e-nombre') });
-  const rol = $('e-rol').value;
-  const tienda = $('e-tienda').value || null;
-
-  if (tipo === 'codigo') {
-    const codigo = normalizarIdentificador($('e-codigo').value);
-    const errorCodigo = validarCodigo(codigo);
-    if (errorCodigo) throw Object.assign(new Error(errorCodigo), { campo: $('e-codigo') });
-    if (fichas.has(codigo)) throw Object.assign(new Error(`El código ${codigo} ya es de ${fichas.get(codigo).nombre}. Elige otro.`), { campo: $('e-codigo') });
-    const nip = leerSecreto(true);
-    // 1) la cuenta (si una versión anterior quedó huérfana se usa la siguiente); 2) la ficha
-    const cuenta = await crearCuentaDeCodigo(codigo, nip);
-    const ficha = armarFichaPersonal({ usuario: codigo, tipo: 'codigo', correoAuth: cuenta.correoAuth, cuentaVersion: cuenta.cuentaVersion, nombre, rol, tienda }, yo.usuario);
-    const errores = validarFichaPersonal(ficha);
-    if (errores.length > 0) throw new Error(errores.join(' '));
-    await crearFicha(ficha);
-    return `${nombre} registrado con el código ${codigo}. Ya puede entrar con ese código y su NIP.`;
-  }
-
-  const correo = normalizarIdentificador($('e-correo').value);
-  if (!esCorreo(correo)) throw Object.assign(new Error('Escribe un correo válido.'), { campo: $('e-correo') });
-  if (fichas.has(correo)) throw Object.assign(new Error(`${correo} ya está registrado.`), { campo: $('e-correo') });
-  const crearAhora = cuentaElegida() === 'crear';
-  const contrasena = crearAhora ? leerSecreto(false) : null;
-  const ficha = armarFichaPersonal({ usuario: correo, tipo: 'correo', nombre, rol, tienda }, yo.usuario);
+  if (nombre === '') throw fallo('Escribe el nombre.', $('e-nombre'));
+  const correo = leerCorreo();
+  const nip = leerNip();
+  await correoLibre(correo);
+  const huella = await huellaLibre(nip);
+  const codigo = siguienteCodigo([...fichas.keys()]);
+  // 1) la cuenta (si una versión anterior quedó huérfana se usa la siguiente); 2) todo lo demás en un lote
+  const cuenta = await crearCuentaDeCodigo(codigo, nip);
+  const ficha = armarFichaPersonal({
+    usuario: codigo, tipo: 'codigo', correoAuth: cuenta.correoAuth, cuentaVersion: cuenta.cuentaVersion,
+    nombre, rol: $('e-rol').value, tienda: $('e-tienda').value || null, correo, catalogo: $('e-catalogo').checked,
+  }, yo.usuario);
   const errores = validarFichaPersonal(ficha);
   if (errores.length > 0) throw new Error(errores.join(' '));
-  if (crearAhora) {
-    try {
-      await crearCuenta(correo, contrasena);
-    } catch (error) {
-      if (error?.code === 'auth/email-already-in-use') {
-        throw Object.assign(new Error(`Ya existe una cuenta de Firebase para ${correo}: elige «La cuenta ya existe» y vuelve a registrar.`), { campo: $('e-correo') });
-      }
-      throw error;
-    }
-  }
-  await crearFicha(ficha);
-  return crearAhora
-    ? `${nombre} registrado. Puede entrar con ${correo} y la contraseña temporal; conviene cambiarla en «Mi cuenta».`
-    : `Acceso registrado para ${correo}. Podrá entrar cuando exista su cuenta en Firebase → Authentication.`;
+  const referencia = doc(db, 'staff', codigo);
+  await runTransaction(db, async (transaccion) => {
+    if ((await transaccion.get(referencia)).exists()) throw Object.assign(new Error(`El número ${codigo} ya está registrado. Vuelve a intentarlo.`), { code: 'catalogo/duplicado' });
+    const marca = ahora();
+    transaccion.set(referencia, { ...ficha, creadoEn: marca, actualizadoEn: marca });
+    transaccion.set(doc(db, 'accesos', codigo), { version: ficha.cuentaVersion });
+    transaccion.set(doc(db, 'correos', correo), { codigo });
+    transaccion.set(doc(db, 'nips', huella), { codigo, version: ficha.cuentaVersion });
+  });
+  return `${nombre} registrado. Entra en la caja con su NIP y en la consulta y el Catálogo con ${correo} y su NIP.`;
 }
 
 async function guardarEdicion() {
+  const actual = estado.actual;
   const nombre = $('e-nombre').value.trim();
-  if (nombre === '') throw Object.assign(new Error('Escribe el nombre.'), { campo: $('e-nombre') });
-  const cambios = { nombre, rol: $('e-rol').disabled ? estado.actual.rol : $('e-rol').value, tienda: $('e-tienda').value || null };
-  const ficha = completar(estado.actual, cambios);
+  if (nombre === '') throw fallo('Escribe el nombre.', $('e-nombre'));
+  const porCodigo = tipoDe(actual) === 'codigo';
+  const correo = porCodigo ? leerCorreo() : correoDe(actual);
+  const correoAnterior = porCodigo ? (actual.correo ?? null) : null;
+  if (porCodigo && correo !== correoAnterior) await correoLibre(correo, actual.id);
+  const ficha = completar(actual, {
+    nombre,
+    rol: $('e-rol').disabled ? actual.rol : $('e-rol').value,
+    tienda: $('e-tienda').value || null,
+    catalogo: $('e-catalogo').checked,
+    correo,
+  });
   const errores = validarFichaPersonal(ficha);
   if (errores.length > 0) throw new Error(errores.join(' '));
-  await guardarFicha(ficha);
-  return `${etiquetaUsuario(ficha.usuario, ficha.nombre)} guardado.`;
+  const lote = loteFicha(ficha);
+  if (porCodigo && correo !== correoAnterior) {
+    if (correoAnterior) {
+      const anterior = await getDoc(doc(db, 'correos', correoAnterior));
+      if (anterior.exists() && anterior.data().codigo === actual.id) lote.delete(doc(db, 'correos', correoAnterior));
+    }
+    lote.set(doc(db, 'correos', correo), { codigo: actual.id });
+  }
+  await lote.commit();
+  return `${ficha.nombre} guardado.`;
 }
 
-async function restablecerNip() {
-  const nip = leerSecreto(true);
+async function cambiarNip() {
   const actual = estado.actual;
+  const nip = leerNip();
+  const huella = await huellaLibre(nip, actual.id);
+  const anteriores = await getDocs(query(collection(db, 'nips'), where('codigo', '==', actual.id)));
   const cuenta = await crearCuentaDeCodigo(actual.id, nip, (actual.cuentaVersion ?? 1) + 1);
   const ficha = completar(actual, { correoAuth: cuenta.correoAuth, cuentaVersion: cuenta.cuentaVersion });
-  const lote = writeBatch(db);
-  lote.set(doc(db, 'staff', ficha.usuario), ficha);
-  lote.set(doc(db, 'accesos', ficha.usuario), { version: ficha.cuentaVersion });
+  const lote = loteFicha(ficha);
+  anteriores.forEach((d) => lote.delete(d.ref));
+  lote.set(doc(db, 'nips', huella), { codigo: actual.id, version: ficha.cuentaVersion });
   await lote.commit();
-  return `NIP de ${etiquetaUsuario(actual.id, actual.nombre)} restablecido. El NIP anterior ya no sirve.`;
+  return `NIP de ${actual.nombre ?? actual.id} cambiado. El anterior ya no sirve.${actual.correo ? '' : ' Falta su correo: edítalo para que pueda entrar a la consulta y al Catálogo.'}`;
 }
 
 form.addEventListener('submit', async (evento) => {
@@ -361,13 +434,12 @@ form.addEventListener('submit', async (evento) => {
   btnGuardar.disabled = true;
   avisoEnEditor('');
   try {
-    const texto = estado.modo === 'crear' ? await registrar() : estado.modo === 'nip' ? await restablecerNip() : await guardarEdicion();
+    const texto = estado.modo === 'crear' ? await registrar() : estado.modo === 'nip' ? await cambiarNip() : await guardarEdicion();
     editor.close();
     mostrar(mensaje, 'ok', texto);
     avisar(texto, 'ok');
   } catch (error) {
-    avisoEnEditor(error?.code ? mensajeError(error) : error.message);
-    if (error?.code === 'catalogo/duplicado') avisoEnEditor(error.message);
+    avisoEnEditor(error?.code && !String(error.code).startsWith('catalogo/') ? mensajeError(error) : error.message);
     error.campo?.focus();
   } finally {
     estado.guardando = false;

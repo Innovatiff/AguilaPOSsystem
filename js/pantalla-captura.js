@@ -3,6 +3,10 @@
  * Escanear → nombre → marca → presentación → precio (+clase fiscal) → Enter.
  * Solo teclado. El guardado no espera al servidor: la fila entra en la
  * bitácora al instante y su marca cambia cuando Firestore confirma.
+ *
+ * En la app Catálogo, quien no es administrador captura SIN precio: el
+ * producto nuevo se envía como solicitud de alta (el admin pone el precio y
+ * la clase fiscal) y no puede reactivar productos inactivos.
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
@@ -12,6 +16,7 @@ import { armarProducto, validarProducto, diferenciasProducto } from './esquema.j
 import { normalizarUPC } from './upca.js';
 import { interpretarPrecio, formatearPrecio, indicadorFiscal, textoDesdeCentavos } from './precios.js';
 import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
+import { pedirAlta, observarSolicitudes } from './solicitudes.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'captura.html' });
@@ -35,6 +40,22 @@ const contador = $('contador');
 const btnCorregir = $('btn-corregir');
 const vistaEtiqueta = $('vista-etiqueta');
 
+// Personal del Catálogo (no admin): sin precio ni clase fiscal; lo nuevo es una solicitud de alta.
+const pideAlAdmin = !esAdmin;
+const altasPendientes = new Map(); // upc → solicitud de alta pendiente
+if (pideAlAdmin) {
+  campos.precio.closest('.campo').hidden = true;
+  form.querySelector('input[name="clase"]').closest('fieldset').hidden = true;
+  // Sin precio no hay etiqueta que previsualizar; la pista explica el recorrido sin precio.
+  vistaEtiqueta.hidden = true;
+  $('titulo-vista').hidden = true;
+  $('pista-captura').textContent = 'Escanea · Enter pasa al siguiente campo · Enter en Presentación envía la solicitud de alta (sin precio: lo pone un administrador) · Esc limpia · F4 corrige el último';
+  observarSolicitudes('pendiente', (lista) => {
+    altasPendientes.clear();
+    for (const s of lista) if (s.tipo === 'alta' && s.producto?.upc) altasPendientes.set(s.producto.upc, s);
+  }, () => {});
+}
+
 const PREFERENCIAS = { tienda: 'captura.tienda', otras: 'captura.otras', clase: 'captura.clase' };
 const leerPreferencia = (clave) => { try { return localStorage.getItem(clave); } catch { return null; } };
 const guardarPreferencia = (clave, valor) => { try { localStorage.setItem(clave, valor); } catch { /* sin almacenamiento */ } };
@@ -52,7 +73,7 @@ let temporizadorVista = null;
 let temporizadorListas = null;
 
 const nombreCompleto = (p) => [p.marca, p.nombre].filter(Boolean).join(' ');
-const precioTexto = (p) => `${formatearPrecio(p.precioCentavos)}${indicadorFiscal(p.claseFiscal)}`;
+const precioTexto = (p) => (Number.isInteger(p.precioCentavos) ? `${formatearPrecio(p.precioCentavos)}${indicadorFiscal(p.claseFiscal)}` : 'sin precio');
 const tiendaActual = () => selectTienda.value || null;
 const nombreTienda = (id) => tiendas.find((t) => t.id === id)?.nombre ?? id;
 const horaCorta = () => new Date().toLocaleTimeString('es-CA', { hour: '2-digit', minute: '2-digit' });
@@ -186,8 +207,15 @@ function alEnterUPC() {
   }
   campos.upc.value = codigo;
   const producto = porUPC.get(codigo);
+  const pendiente = !producto && pideAlAdmin ? altasPendientes.get(codigo) : null;
+  if (pendiente) {
+    accionPendiente = 'siguiente';
+    mostrarBanner('aviso', `Ya se pidió el alta del UPC ${codigo} (${pendiente.creadaPorNombre}): falta que un administrador le ponga precio. Enter: siguiente`);
+    campos.upc.select();
+    return;
+  }
   if (!producto) {
-    mostrarBanner('ok', `UPC ${codigo}: nuevo. Escribe los datos.`);
+    mostrarBanner('ok', pideAlAdmin ? `UPC ${codigo}: nuevo. Escribe los datos (sin precio) y Enter envía la solicitud de alta.` : `UPC ${codigo}: nuevo. Escribe los datos.`);
     campos.nombre.focus();
     actualizarVista();
     return;
@@ -195,7 +223,10 @@ function alEnterUPC() {
   existente = producto;
   const tienda = tiendaActual();
   const resumen = `${nombreCompleto(producto)} · ${precioTexto(producto)}`;
-  if (!producto.activo) {
+  if (!producto.activo && pideAlAdmin) {
+    accionPendiente = 'siguiente';
+    mostrarBanner('aviso', `${resumen} está INACTIVO: solo un administrador lo puede reactivar. Enter: siguiente`);
+  } else if (!producto.activo) {
     accionPendiente = 'reactivar';
     mostrarBanner('aviso', `${resumen} está INACTIVO. Enter: reactivar${tienda ? ` y agregar a ${nombreTienda(tienda)}` : ''} · Esc: omitir`);
   } else if (tienda && !producto.tiendas.includes(tienda)) {
@@ -239,7 +270,9 @@ for (const [nombre, siguiente] of Object.entries(SIGUIENTE)) {
   campos[nombre].addEventListener('keydown', (evento) => {
     if (evento.key !== 'Enter') return;
     evento.preventDefault();
-    setTimeout(() => campos[siguiente].focus(), 0);
+    // Sin precio (Catálogo), la presentación es el último dato: Enter guarda.
+    if (pideAlAdmin && siguiente === 'precio') setTimeout(guardar, 0);
+    else setTimeout(() => campos[siguiente].focus(), 0);
   });
 }
 
@@ -300,6 +333,12 @@ function leerFormulario() {
   const upc = upcTexto === '' ? null : normalizarUPC(upcTexto);
   const nombre = campos.nombre.value.trim();
   if (nombre === '') throw Object.assign(new Error('Falta el nombre.'), { campo: campos.nombre });
+  if (pideAlAdmin) {
+    return {
+      upc, plu: null, nombre, marca: campos.marca.value, descriptor: null, presentacion: campos.presentacion.value,
+      precioCentavos: null, unidadVenta: 'pieza', precioPorKgCentavos: null, claseFiscal: null, proveedor: null,
+    };
+  }
   let interpretado;
   try {
     interpretado = interpretarPrecio(campos.precio.value);
@@ -337,7 +376,8 @@ function guardar() {
 
   if (modo === 'corregir' && corrigiendo) {
     const base = catalogo.get(corrigiendo.id) ?? corrigiendo;
-    const preparado = armarProducto({ ...datos, tiendas: base.tiendas, activo: base.activo, ultimoPrecioImpresoCentavos: base.ultimoPrecioImpresoCentavos, fechaUltimaImpresion: base.fechaUltimaImpresion, descriptor: base.descriptor, proveedor: base.proveedor, plu: base.plu, unidadVenta: base.unidadVenta, precioPorKgCentavos: base.precioPorKgCentavos }, personal.usuario);
+    const precio = pideAlAdmin ? { precioCentavos: base.precioCentavos, claseFiscal: base.claseFiscal } : {};
+    const preparado = armarProducto({ ...datos, ...precio, tiendas: base.tiendas, activo: base.activo, ultimoPrecioImpresoCentavos: base.ultimoPrecioImpresoCentavos, fechaUltimaImpresion: base.fechaUltimaImpresion, descriptor: base.descriptor, proveedor: base.proveedor, plu: base.plu, unidadVenta: base.unidadVenta, precioPorKgCentavos: base.precioPorKgCentavos }, personal.usuario);
     const errores = validarProducto({ ...preparado, creadoEn: {}, actualizadoEn: {} });
     if (errores.length > 0) {
       mostrarBanner('error', errores.join(' '));
@@ -369,6 +409,10 @@ function guardar() {
     campos.upc.select();
     return;
   }
+  if (pideAlAdmin) {
+    solicitarAlta(datos);
+    return;
+  }
   const preparado = armarProducto({ ...datos, tiendas: tiendasParaNuevo(), activo: true }, personal.usuario);
   const errores = validarProducto({ ...preparado, creadoEn: {}, actualizadoEn: {} });
   if (errores.length > 0) {
@@ -384,6 +428,21 @@ function guardar() {
   registrar(promesa, `Creado · ${producto.tiendas.map(nombreTienda).join(', ') || 'sin tienda'}`, conId);
   ultimo = { id };
   btnCorregir.disabled = false;
+  limpiar();
+}
+
+/** Catálogo: el producto nuevo va como solicitud de alta, sin precio. */
+function solicitarAlta(datos) {
+  if (datos.upc && altasPendientes.has(datos.upc)) {
+    mostrarBanner('error', `Ya se pidió el alta del UPC ${datos.upc}: falta que un administrador le ponga precio.`);
+    campos.upc.focus();
+    return;
+  }
+  const { promesa, solicitud } = pedirAlta({ ...datos, tiendas: tiendasParaNuevo() }, personal);
+  if (datos.upc) altasPendientes.set(datos.upc, solicitud); // evita pedirlo dos veces antes de que llegue la confirmación
+  capturados += 1;
+  contador.textContent = String(capturados);
+  registrar(promesa, 'Solicitud de alta enviada · el administrador pondrá el precio', { ...solicitud.producto, precioCentavos: null });
   limpiar();
 }
 

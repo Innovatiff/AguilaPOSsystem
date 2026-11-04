@@ -1,9 +1,12 @@
 /**
- * Navegación del back office (solo administradores): barra lateral con las
- * secciones agrupadas en pantallas anchas; en pantallas angostas, una barra
- * superior con un botón de menú que despliega las mismas secciones.
+ * Navegación del back office (solo administradores) y de la app Catálogo del
+ * personal: barra lateral con las secciones agrupadas en pantallas anchas; en
+ * pantallas angostas, una barra superior con un botón de menú que despliega
+ * las mismas secciones. La app Catálogo solo enlaza sus propias páginas:
+ * desde ella no se llega al back office.
  */
-import { cerrarSesion, RAIZ } from './auth.js';
+import { cerrarSesion, RAIZ, EN_CATALOGO, paginaActual } from './auth.js';
+import { db, collection, query, where, onSnapshot } from './firebase.js';
 
 /** Trazos de los íconos (24 × 24, línea de 2 px). */
 const ICONOS = {
@@ -21,6 +24,7 @@ const ICONOS = {
   tiendas: 'M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6',
   configuracion: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   caja: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
+  solicitudes: 'M4 13h4l2 3h4l2-3h4M4 13l2.5-8h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z',
 };
 
 /** Secciones del back office, en grupos. */
@@ -38,6 +42,7 @@ const GRUPOS = [
     titulo: 'Catálogo',
     secciones: [
       { href: 'productos.html', texto: 'Productos', icono: 'productos' },
+      { href: 'solicitudes.html', texto: 'Solicitudes', icono: 'solicitudes', contador: true },
       { href: 'captura.html', texto: 'Captura rápida', icono: 'captura' },
       { href: 'imprimir.html', texto: 'Etiquetas', icono: 'etiquetas' },
       { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas', icono: 'prueba' },
@@ -51,6 +56,19 @@ const GRUPOS = [
       { href: 'gestion/cajas.html', texto: 'Cajas', icono: 'cajas' },
       { href: 'gestion/tiendas.html', texto: 'Tiendas', icono: 'tiendas' },
       { href: 'gestion/configuracion.html', texto: 'Configuración', icono: 'configuracion' },
+    ],
+  },
+];
+
+/** Secciones de la app Catálogo del personal (/catalogo/). */
+const GRUPOS_CATALOGO = [
+  {
+    titulo: 'Catálogo',
+    secciones: [
+      { href: 'catalogo/index.html', texto: 'Productos', icono: 'productos' },
+      { href: 'catalogo/captura.html', texto: 'Captura rápida', icono: 'captura' },
+      { href: 'catalogo/etiquetas.html', texto: 'Etiquetas', icono: 'etiquetas' },
+      { href: 'catalogo/solicitudes.html', texto: 'Mis solicitudes', icono: 'solicitudes' },
     ],
   },
 ];
@@ -89,13 +107,15 @@ export function pintarNavegacion({ personal, activa }) {
   encabezado.replaceChildren();
 
   const marca = document.createElement('a');
-  marca.href = `${RAIZ}index.html`;
+  marca.href = `${RAIZ}${EN_CATALOGO ? 'catalogo/index.html' : 'index.html'}`;
   marca.className = 'marca';
   marca.append(
     Object.assign(document.createElement('span'), { className: 'marca__logo' }),
     Object.assign(document.createElement('span'), { className: 'marca__texto', textContent: 'Águila POS' }),
-    Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: 'Back office' }),
+    Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: EN_CATALOGO ? 'Catálogo' : 'Back office' }),
   );
+  // En el Catálogo las pantallas compartidas pasan el nombre del back office: manda la página real.
+  const actual = EN_CATALOGO ? paginaActual().split('?')[0] : activa;
 
   const botonMenu = document.createElement('button');
   botonMenu.type = 'button';
@@ -111,32 +131,33 @@ export function pintarNavegacion({ personal, activa }) {
 
   const nav = document.createElement('nav');
   nav.setAttribute('aria-label', 'Secciones');
-  for (const grupo of GRUPOS) {
+  for (const grupo of EN_CATALOGO ? GRUPOS_CATALOGO : GRUPOS) {
     const bloque = document.createElement('div');
     bloque.className = 'nav-grupo';
     if (grupo.titulo) bloque.append(Object.assign(document.createElement('div'), { className: 'nav-grupo__titulo', textContent: grupo.titulo }));
     for (const seccion of grupo.secciones) {
       const a = enlace(seccion.href, seccion.texto, '', seccion.icono);
-      if (seccion.href === activa) a.setAttribute('aria-current', 'page');
+      if (seccion.href === actual) a.setAttribute('aria-current', 'page');
+      if (seccion.contador) contarPendientes(a);
       bloque.append(a);
     }
     nav.append(bloque);
   }
 
-  const caja = enlace('caja/', 'Abrir la caja', 'nav-caja', 'caja');
-  caja.title = 'La caja registradora (para vender)';
+  const caja = EN_CATALOGO ? null : enlace('caja/', 'Abrir la caja', 'nav-caja', 'caja');
+  if (caja) caja.title = 'La caja registradora (para vender)';
 
   const usuario = document.createElement('div');
   usuario.className = 'usuario';
-  const cuenta = document.createElement('a');
-  cuenta.href = `${RAIZ}cuenta.html`;
+  const cuenta = document.createElement(EN_CATALOGO ? 'div' : 'a');
+  if (!EN_CATALOGO) cuenta.href = `${RAIZ}cuenta.html`;
   cuenta.className = 'usuario__nombre';
   cuenta.append(
     Object.assign(document.createElement('strong'), { textContent: personal.nombre }),
-    Object.assign(document.createElement('span'), { textContent: `${NOMBRE_ROL[personal.rol] ?? personal.rol} · Mi cuenta` }),
+    Object.assign(document.createElement('span'), { textContent: EN_CATALOGO ? (personal.correo ?? NOMBRE_ROL[personal.rol] ?? '') : `${NOMBRE_ROL[personal.rol] ?? personal.rol} · Mi cuenta` }),
   );
-  cuenta.title = `${personal.tipo === 'codigo' ? 'Código ' : ''}${personal.usuario}`;
-  if (activa === 'cuenta.html') cuenta.setAttribute('aria-current', 'page');
+  if (!EN_CATALOGO) cuenta.title = `${personal.tipo === 'codigo' ? 'Nº ' : ''}${personal.usuario}`;
+  if (actual === 'cuenta.html') cuenta.setAttribute('aria-current', 'page');
   const salir = document.createElement('button');
   salir.type = 'button';
   salir.className = 'boton boton--secundario';
@@ -144,7 +165,7 @@ export function pintarNavegacion({ personal, activa }) {
   salir.addEventListener('click', () => cerrarSesion());
   usuario.append(cuenta, salir);
 
-  panel.append(nav, caja, usuario);
+  panel.append(...[nav, caja, usuario].filter(Boolean));
 
   const fijarAbierto = (abierto) => {
     encabezado.classList.toggle('encabezado--abierto', abierto);
@@ -160,4 +181,20 @@ export function pintarNavegacion({ personal, activa }) {
   });
 
   encabezado.append(marca, botonMenu, panel);
+}
+
+/** Insignia con las solicitudes del Catálogo pendientes (back office). */
+function contarPendientes(enlaceSolicitudes) {
+  const insignia = Object.assign(document.createElement('span'), { className: 'nav-insignia', hidden: true });
+  insignia.setAttribute('aria-label', 'pendientes');
+  enlaceSolicitudes.append(insignia);
+  onSnapshot(
+    query(collection(db, 'solicitudes'), where('estado', '==', 'pendiente')),
+    (resultado) => {
+      insignia.hidden = resultado.size === 0;
+      insignia.textContent = String(resultado.size);
+      insignia.setAttribute('aria-label', `${resultado.size} pendientes`);
+    },
+    () => { insignia.hidden = true; },
+  );
 }

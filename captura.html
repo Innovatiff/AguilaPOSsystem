@@ -23,7 +23,7 @@
     <div class="captura__cabecera">
       <div>
         <h1>Captura rápida</h1>
-        <p class="pista">Escanea · <kbd>Enter</kbd> pasa al siguiente campo · en Precio escribe <kbd>4.99+</kbd> (gravado) o
+        <p class="pista" id="pista-captura">Escanea · <kbd>Enter</kbd> pasa al siguiente campo · en Precio escribe <kbd>4.99+</kbd> (gravado) o
           <kbd>5.00c</kbd> (tasa cero) y <kbd>Enter</kbd> guarda · <kbd>Esc</kbd> limpia · <kbd>F4</kbd> corrige el último</p>
       </div>
       <div class="captura__tienda">
@@ -75,7 +75,7 @@
       </form>
 
       <aside class="captura__lateral">
-        <h3 class="editor__lateral-titulo">Etiqueta</h3>
+        <h3 class="editor__lateral-titulo" id="titulo-vista">Etiqueta</h3>
         <div id="vista-etiqueta" class="vista-etiqueta"></div>
         <h3>Esta sesión · <span id="contador">0</span></h3>
         <ol id="bitacora" class="bitacora"></ol>

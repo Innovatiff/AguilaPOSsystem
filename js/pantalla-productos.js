@@ -1,6 +1,11 @@
 /**
  * Pantalla de productos: búsqueda por teclado o escáner, alta, edición y
  * desactivación. Todo alcanzable sin ratón.
+ *
+ * La usan el back office (administradores) y la app Catálogo. En el Catálogo,
+ * quien no es administrador nunca pone ni cambia precios, unidad de venta ni
+ * clase fiscal, y no da de baja: un producto nuevo se envía como solicitud de
+ * alta (sin precio) y quitar uno se pide al administrador (js/solicitudes.js).
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
@@ -16,6 +21,7 @@ import { renderEtiqueta, ajustarEtiqueta } from './etiquetas.js';
 import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
 import { cargarNombres, nombreDeUsuario } from './personal.js';
 import { paginar, ventanaDePaginas, tamanoDePagina } from './paginacion.js';
+import { pedirAlta, pedirBaja, observarSolicitudes } from './solicitudes.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'productos.html' });
@@ -50,6 +56,20 @@ const meta = $('meta');
 const historial = $('historial');
 const detalle = $('detalle');
 const escaner = $('escaner');
+
+// Personal del Catálogo (no admin): pide altas y bajas en lugar de hacerlas.
+const pideAlAdmin = !esAdmin;
+const altasPendientes = new Map(); // upc → solicitud de alta pendiente
+if (pideAlAdmin) {
+  $('btn-nuevo').firstChild.textContent = 'Pedir alta de producto ';
+  $('oferta-crear-btn').firstChild.textContent = 'Pedir alta con este UPC ';
+  $('escaner-crear').textContent = 'Pedir alta con este UPC';
+  observarSolicitudes('pendiente', (lista) => {
+    altasPendientes.clear();
+    for (const s of lista) if (s.tipo === 'alta' && s.producto?.upc) altasPendientes.set(s.producto.upc, s);
+  }, () => {});
+}
+const textoAltaPendiente = (upc, s) => `Ya se pidió el alta del UPC ${upc} (${s.creadaPorNombre}): falta que un administrador le ponga precio.`;
 
 /** Pantalla táctil o angosta: se abre la ficha de consulta en lugar del editor, y no se roba el foco al teclado. */
 const esMovil = () => window.matchMedia('(max-width: 720px), (pointer: coarse)').matches;
@@ -346,6 +366,11 @@ function abrirSegunDispositivo(id) {
 }
 
 function ofrecerCrear(codigo) {
+  const pendiente = pideAlAdmin ? altasPendientes.get(codigo) : null;
+  if (pendiente) {
+    mostrarMensaje(avisoBusqueda, textoAltaPendiente(codigo, pendiente));
+    return;
+  }
   $('oferta-upc').textContent = codigo;
   oferta.hidden = false;
   oferta.dataset.upc = codigo;
@@ -437,12 +462,31 @@ function llenarFormulario(p) {
 }
 
 /** Solo un administrador cambia el precio (y la unidad de venta) de un producto existente; los demás lo ven en solo lectura. */
-const CAMPOS_PRECIO = ['precioCentavos', 'precioPorKgCentavos', 'unidadVenta'];
+const CAMPOS_PRECIO = ['precioCentavos', 'precioPorKgCentavos', 'unidadVenta', 'claseFiscal'];
+const NOTA_PRECIO_BLOQUEADO = 'El precio, la unidad de venta y la clase fiscal solo los cambia un administrador. Lo demás sí se puede editar.';
+const NOTA_PRECIO_SOLICITUD = 'Sin precio: el precio y la clase fiscal los pone un administrador. El producto entra al catálogo cuando aprueba la solicitud.';
 function bloquearPrecio(bloqueado) {
   $('f-precio').readOnly = bloqueado;
   $('f-precio-kg').readOnly = bloqueado;
-  for (const radio of form.querySelectorAll('input[name="unidad"]')) radio.disabled = bloqueado;
+  for (const radio of form.querySelectorAll('input[name="unidad"], input[name="fiscal"]')) radio.disabled = bloqueado;
   $('nota-precio').hidden = !bloqueado;
+  $('nota-precio').querySelector('.nota').textContent = NOTA_PRECIO_BLOQUEADO;
+}
+/** Solicitud de alta: sin campos de precio ni clase fiscal (la unidad de venta sí se propone). */
+function ocultarPrecio(oculto) {
+  $('f-precio').closest('.campo').hidden = oculto;
+  form.querySelector('input[name="fiscal"]').closest('fieldset').hidden = oculto;
+  for (const radio of form.querySelectorAll('input[name="unidad"]')) radio.disabled = false;
+  actualizarUnidad();
+  if (oculto) {
+    $('nota-precio').hidden = false;
+    $('nota-precio').querySelector('.nota').textContent = NOTA_PRECIO_SOLICITUD;
+  }
+  btnGuardar.firstChild.textContent = oculto ? 'Enviar solicitud ' : 'Guardar ';
+  $('editor-lateral').hidden = oculto; // sin precio no hay etiqueta ni historial que mostrar
+  $('nota-pie').textContent = pideAlAdmin
+    ? (oculto ? 'La solicitud la revisa un administrador.' : 'El precio solo lo cambia un administrador.')
+    : 'Los cambios de precio quedan en el historial.';
 }
 
 class ErrorCampo extends Error {
@@ -453,7 +497,7 @@ class ErrorCampo extends Error {
 }
 
 /** Lee el formulario ya normalizado; lanza ErrorCampo con el campo a corregir. */
-function leerFormulario() {
+function leerFormulario({ sinPrecio = false } = {}) {
   const upcTexto = $('f-upc').value.trim();
   let upc = null;
   if (upcTexto !== '') {
@@ -468,14 +512,16 @@ function leerFormulario() {
   const nombre = $('f-nombre').value.trim();
   if (nombre === '') throw new ErrorCampo('El nombre es obligatorio: es la barra negra de la etiqueta.', $('f-nombre'));
   const unidadVenta = form.unidad.value;
-  let precioCentavos;
-  try {
-    precioCentavos = centavosDesdeTexto($('f-precio').value);
-  } catch (error) {
-    throw new ErrorCampo(error.message, $('f-precio'));
+  let precioCentavos = null;
+  if (!sinPrecio) {
+    try {
+      precioCentavos = centavosDesdeTexto($('f-precio').value);
+    } catch (error) {
+      throw new ErrorCampo(error.message, $('f-precio'));
+    }
   }
   let precioPorKgCentavos = null;
-  if (unidadVenta === 'peso') {
+  if (unidadVenta === 'peso' && !sinPrecio) {
     try {
       precioPorKgCentavos = centavosDesdeTexto($('f-precio-kg').value);
     } catch (error) {
@@ -502,7 +548,7 @@ const huellaFormulario = () => JSON.stringify([...new FormData(form).entries()].
 const sucio = () => huellaFormulario() !== estado.inicial;
 
 function actualizarUnidad() {
-  const peso = form.unidad.value === 'peso';
+  const peso = form.unidad.value === 'peso' && estado.modo !== 'solicitar';
   campoKilo.hidden = !peso;
   $('f-precio-kg').required = peso;
 }
@@ -530,14 +576,18 @@ function dejarDeObservarProducto() {
 
 function abrirNuevo(prefijado = {}) {
   dejarDeObservarProducto();
-  estado.modo = 'crear';
+  estado.modo = pideAlAdmin ? 'solicitar' : 'crear';
   estado.actual = null;
-  $('editor-titulo').textContent = prefijado.upc ? `Nuevo producto · UPC ${prefijado.upc}` : 'Nuevo producto';
+  $('editor-titulo').textContent = pideAlAdmin
+    ? (prefijado.upc ? `Pedir alta · UPC ${prefijado.upc}` : 'Pedir alta de producto')
+    : (prefijado.upc ? `Nuevo producto · UPC ${prefijado.upc}` : 'Nuevo producto');
   btnDesactivar.hidden = true;
   meta.replaceChildren();
   historial.replaceChildren(crear('li', 'nota', 'Sin cambios de precio.'));
   llenarFormulario({ ...VACIO, ...prefijado });
-  bloquearPrecio(false); // el precio inicial lo pone quien captura
+  bloquearPrecio(false); // el precio inicial lo pone quien captura (en el Catálogo, nadie: lo pone el admin al aprobar)
+  ocultarPrecio(pideAlAdmin);
+  btnGuardar.disabled = false;
   mostrarEditor();
   enfocar(prefijado.upc ? $('f-marca') : $('f-upc'));
 }
@@ -549,10 +599,12 @@ function abrirProducto(id) {
   estado.modo = 'editar';
   estado.actual = producto;
   $('editor-titulo').textContent = nombreCompleto(producto);
-  btnDesactivar.hidden = false;
-  btnDesactivar.textContent = producto.activo ? 'Desactivar producto' : 'Reactivar producto';
+  btnDesactivar.hidden = pideAlAdmin && !producto.activo;
+  btnDesactivar.textContent = pideAlAdmin ? 'Pedir que se quite' : (producto.activo ? 'Desactivar producto' : 'Reactivar producto');
   llenarFormulario(producto);
+  ocultarPrecio(false);
   bloquearPrecio(!esAdmin);
+  btnGuardar.disabled = pideAlAdmin && !producto.activo;
   pintarMeta(producto);
   historial.replaceChildren(crear('li', 'nota', 'Cargando…'));
   estado.dejarDeObservarHistorial = observarHistorial(
@@ -577,7 +629,9 @@ function abrirProducto(id) {
 }
 
 function mostrarEditor() {
-  mostrarAvisoEditor('');
+  mostrarAvisoEditor(pideAlAdmin && estado.modo === 'editar' && estado.actual?.activo === false
+    ? 'Producto inactivo: solo un administrador lo puede reactivar o editar.'
+    : '', 'aviso');
   if (!editor.open) editor.showModal();
   estado.inicial = huellaFormulario();
   actualizarVista();
@@ -707,8 +761,53 @@ form.addEventListener('submit', async (evento) => {
   await guardar();
 });
 
+/** Personal del Catálogo: envía el producto nuevo, sin precio, como solicitud de alta. */
+async function solicitarAlta() {
+  let datos;
+  try {
+    datos = leerFormulario({ sinPrecio: true });
+  } catch (error) {
+    mostrarAvisoEditor(error.message);
+    error.campo?.focus();
+    return;
+  }
+  if (datos.upc) {
+    const duplicado = await upcDuplicado(datos.upc);
+    if (duplicado) {
+      mostrarAvisoEditor(`El UPC ${datos.upc} ya pertenece a «${nombreCompleto(duplicado)}»${duplicado.activo ? '' : ' (inactivo: pide a un administrador que lo reactive)'}.`);
+      $('f-upc').focus();
+      return;
+    }
+    const pendiente = altasPendientes.get(datos.upc);
+    if (pendiente) {
+      mostrarAvisoEditor(textoAltaPendiente(datos.upc, pendiente));
+      return;
+    }
+  }
+  estado.guardando = true;
+  btnGuardar.disabled = true;
+  try {
+    const { promesa } = pedirAlta(datos, personal);
+    promesa.catch(() => {});
+    const resultado = await esperarConfirmacion(promesa);
+    if (resultado === 'pendiente') vigilarRechazo(promesa, datos.nombre);
+    avisar(`Solicitud enviada: «${datos.nombre}» entra al catálogo cuando un administrador le ponga precio.`, resultado === 'confirmado' ? 'ok' : 'info');
+    estado.inicial = huellaFormulario();
+    cerrarEditor();
+  } catch (error) {
+    mostrarAvisoEditor(mensajeError(error));
+  } finally {
+    estado.guardando = false;
+    btnGuardar.disabled = false;
+  }
+}
+
 async function guardar() {
   if (estado.guardando) return;
+  if (estado.modo === 'solicitar') {
+    await solicitarAlta();
+    return;
+  }
   let datos;
   try {
     datos = leerFormulario();
@@ -755,7 +854,7 @@ async function guardar() {
     } else {
       const cambios = diferenciasProducto(estado.actual, preparado);
       if (!esAdmin && CAMPOS_PRECIO.some((campo) => campo in cambios)) {
-        mostrarAvisoEditor('Solo un administrador puede cambiar el precio o la unidad de venta. Deja el precio como estaba y guarda lo demás.');
+        mostrarAvisoEditor('Solo un administrador puede cambiar el precio, la unidad de venta o la clase fiscal. Déjalos como estaban y guarda lo demás.');
         return;
       }
       if (Object.keys(cambios).length === 0) {
@@ -780,7 +879,7 @@ async function guardar() {
       error?.code === 'permission-denied' && estado.modo === 'editar'
         ? (esAdmin
           ? 'El servidor rechazó el cambio. Si cambiaste el precio, puede que otra estación lo haya cambiado antes: cierra y vuelve a abrir el producto.'
-          : 'El servidor rechazó el cambio: el precio y la unidad de venta solo los cambia un administrador.')
+          : 'El servidor rechazó el cambio: el precio, la unidad de venta y la clase fiscal solo los cambia un administrador.')
         : mensajeError(error),
     );
   } finally {
@@ -789,9 +888,34 @@ async function guardar() {
   }
 }
 
+/** Personal del Catálogo: pide al administrador que quite el producto. */
+async function pedirQueSeQuite(producto) {
+  const motivo = window.prompt(`¿Por qué hay que quitar «${nombreCompleto(producto)}» del catálogo? (lo revisa un administrador)`, '');
+  if (motivo === null) return;
+  estado.guardando = true;
+  btnDesactivar.disabled = true;
+  try {
+    const { promesa } = pedirBaja(producto, motivo, personal);
+    promesa.catch(() => {});
+    const resultado = await esperarConfirmacion(promesa);
+    if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
+    avisar(`Solicitud enviada: un administrador decidirá si «${nombreCompleto(producto)}» se quita del catálogo.`, resultado === 'confirmado' ? 'ok' : 'info');
+    cerrarEditor();
+  } catch (error) {
+    mostrarAvisoEditor(mensajeError(error));
+  } finally {
+    estado.guardando = false;
+    btnDesactivar.disabled = false;
+  }
+}
+
 btnDesactivar.addEventListener('click', async () => {
   const producto = estado.actual;
   if (!producto || estado.guardando) return;
+  if (pideAlAdmin) {
+    await pedirQueSeQuite(producto);
+    return;
+  }
   const activar = !producto.activo;
   if (!activar && !window.confirm(`¿Desactivar «${nombreCompleto(producto)}»? Dejará de salir en búsquedas e impresiones; se puede reactivar.`)) return;
   estado.guardando = true;
@@ -993,7 +1117,9 @@ async function alLeerCodigo({ texto }) {
     return;
   }
   estadoDelEscaner(`UPC ${codigo}`);
-  $('escaner-oferta-texto').textContent = `No hay ningún producto con el UPC ${codigo}.`;
+  const pendiente = pideAlAdmin ? altasPendientes.get(codigo) : null;
+  $('escaner-crear').hidden = Boolean(pendiente);
+  $('escaner-oferta-texto').textContent = pendiente ? textoAltaPendiente(codigo, pendiente) : `No hay ningún producto con el UPC ${codigo}.`;
   escanerOferta.hidden = false;
   escanerOferta.dataset.upc = codigo;
   $('escaner-crear').focus();

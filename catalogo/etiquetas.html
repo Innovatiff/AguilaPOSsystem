@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generada por herramientas/paginas-catalogo.mjs a partir de la página del back office. No editar a mano. -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Etiquetas · Águila Catálogo</title>
+  <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <link rel="stylesheet" href="../css/etiquetas.css">
+  <script type="module" src="../js/pantalla-imprimir.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado no-imprimir"></header>
+  <main id="contenido" hidden>
+
+    <section id="seleccion" class="no-imprimir" aria-labelledby="titulo-seleccion">
+      <h1 id="titulo-seleccion">Imprimir etiquetas</h1>
+      <p class="nota">Etiquetas pendientes: productos activos cuyo precio cambió desde la última impresión, o que
+        nunca se han impreso. Un producto en dos tiendas sale una vez por tienda.</p>
+      <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
+
+      <div class="barra-acciones">
+        <button id="btn-todo" class="boton boton--secundario" type="button">Seleccionar todo <kbd>Alt+A</kbd></button>
+        <button id="btn-nada" class="boton boton--secundario" type="button">Quitar selección</button>
+        <div class="agregar">
+          <label for="agregar" class="visualmente-oculto">Añadir un producto a la impresión</label>
+          <input id="agregar" type="search" autocomplete="off" spellcheck="false"
+            placeholder="Añadir otro producto: escanea o escribe el nombre">
+          <div id="sugerencias" class="sugerencias" hidden></div>
+        </div>
+        <span class="separador"></span>
+        <span id="contador" class="nota">0 etiquetas seleccionadas</span>
+        <button id="btn-vista" class="boton" type="button" disabled>Vista previa e imprimir <kbd>Alt+P</kbd></button>
+      </div>
+
+      <div id="grupos"></div>
+      <p id="sin-pendientes" class="nota" hidden>No hay etiquetas pendientes. Todas las etiquetas reflejan el precio actual.</p>
+    </section>
+
+    <section id="vista" hidden aria-labelledby="titulo-vista">
+      <div class="vista__barra no-imprimir">
+        <h2 id="titulo-vista">Vista previa</h2>
+        <button id="btn-volver" class="boton boton--secundario" type="button">Volver <kbd>Esc</kbd></button>
+        <button id="btn-imprimir" class="boton" type="button">Imprimir <kbd>Enter</kbd></button>
+      </div>
+      <p class="nota no-imprimir">En el diálogo: impresora de etiquetas, papel 62mm, horizontal, márgenes ninguno, escala 100 %.
+        Cada etiqueta sale en su propia etiqueta física; en una hoja carta salen varias por hoja.</p>
+      <details class="ayuda no-imprimir">
+        <summary>Imprimir directo, sin el cuadro de diálogo de Chrome</summary>
+        <p>Es un ajuste de Chrome en cada laptop, no de la app. Con él, «Imprimir» manda las etiquetas a la
+          impresora al instante y esta pantalla pasa directo a la confirmación.</p>
+        <ol>
+          <li>Imprime una vez desde el cuadro de diálogo con los ajustes correctos (impresora Brother, papel 62mm,
+            márgenes ninguno, sin encabezados ni pies de página) y deja la Brother como impresora predeterminada de
+            Windows. Chrome recuerda la última impresora y sus ajustes, y son los que usará sin preguntar.</li>
+          <li>Cierra Chrome por completo. En <code>chrome://settings/system</code> desactiva «Seguir ejecutando
+            aplicaciones en segundo plano al cerrar Google Chrome»; si no, el ajuste no se aplica.</li>
+          <li>Clic derecho en el acceso directo de Chrome, Propiedades, y en «Destino» agrega al final, después de
+            las comillas: <code>&nbsp;--kiosk-printing</code>. Haz lo mismo en el icono anclado a la barra de tareas.</li>
+          <li>Abre Chrome con ese acceso directo y entra a <code>chrome://version</code>: la «Línea de comandos»
+            debe incluir <code>--kiosk-printing</code>.</li>
+        </ol>
+        <p>Con ese ajuste cualquier página que mande imprimir sale al instante en la impresora predeterminada;
+          úsalo solo en las laptops de los carritos. Para cambiar de impresora o de ajustes, abre Chrome una vez
+          sin el ajuste, imprime desde el diálogo y vuelve a abrirlo con el ajuste.</p>
+      </details>
+      <div id="confirmacion" class="mensaje mensaje--ok confirmacion no-imprimir" hidden>
+        <span id="confirmacion-texto"></span>
+        <button id="btn-confirmar" class="boton" type="button">Sí, marcar como impresas <kbd>Enter</kbd></button>
+        <button id="btn-rechazar" class="boton boton--enlace" type="button">No, volver a intentar <kbd>Esc</kbd></button>
+      </div>
+      <div id="hoja" class="hoja-etiquetas"></div>
+    </section>
+
+  </main>
+</body>
+</html>

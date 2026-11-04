@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Solicitudes · Águila POS</title>
+  <link rel="icon" href="icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <script type="module" src="js/gestion-solicitudes.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Solicitudes del Catálogo</h1>
+        <p class="nota">Lo que pide el personal desde la app Catálogo: productos nuevos (sin precio) y productos que ya no se venden.</p>
+      </div>
+    </div>
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="panel panel--12 panel--separado" aria-labelledby="titulo-pendientes">
+      <header class="panel__cabecera"><h2 id="titulo-pendientes">Pendientes</h2><span class="panel__nota" id="cuenta-pendientes"></span></header>
+      <div id="lista-pendientes" class="solicitudes"></div>
+      <p id="sin-pendientes" class="nota" hidden>No hay solicitudes pendientes.</p>
+    </section>
+
+    <section class="panel panel--12 panel--separado" aria-labelledby="titulo-resueltas">
+      <header class="panel__cabecera"><h2 id="titulo-resueltas">Resueltas</h2><span class="panel__nota">Las últimas 50</span></header>
+      <div class="tabla-desplazable">
+        <table class="tabla" id="tabla-resueltas">
+          <thead><tr><th>Fecha</th><th>Pidió</th><th>Solicitud</th><th>Producto</th><th>Resultado</th><th>Nota</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="sin-resueltas" class="nota" hidden>Todavía no se ha resuelto ninguna.</p>
+    </section>
+  </main>
+</body>
+</html>

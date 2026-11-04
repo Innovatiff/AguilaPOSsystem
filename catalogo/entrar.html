@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Entrar · Águila Catálogo</title>
+  <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/login.js"></script>
+</head>
+<body class="pagina-login">
+  <main class="tarjeta-login">
+    <h1><span class="marca__logo marca__logo--login" aria-hidden="true"></span> <strong>Águila POS</strong></h1>
+    <p class="subtitulo">Catálogo · para el personal con permiso</p>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <form id="form-login" class="formulario" novalidate>
+      <div class="campo">
+        <label for="identificador">Correo</label>
+        <input id="identificador" name="identificador" type="text" inputmode="email" autocomplete="username"
+          autocapitalize="off" spellcheck="false" required autofocus placeholder="tu@correo.com">
+      </div>
+      <div class="campo">
+        <label for="secreto" id="secreto-etiqueta">NIP</label>
+        <input id="secreto" name="secreto" type="password" inputmode="numeric" autocomplete="current-password" required minlength="6">
+      </div>
+      <div class="acciones">
+        <button id="btn-entrar" class="boton" type="submit">Entrar</button>
+        <button id="btn-olvide" class="boton boton--enlace" type="button" hidden>Olvidé mi contraseña</button>
+      </div>
+      <p id="pista-nip" class="nota nota--login">Entra con tu correo y tu NIP de 6 dígitos. El permiso para usar el Catálogo lo da un administrador.</p>
+    </form>
+    <nav class="login__otras" aria-label="Otras opciones">
+      <a href="../caja/consulta.html">Consultar precios</a>
+    </nav>
+  </main>
+</body>
+</html>

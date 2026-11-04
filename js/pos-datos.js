@@ -27,9 +27,9 @@ import {
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from './firebase.js';
-import { versionDeCodigo } from './auth.js';
+import { correoDeNip } from './auth.js';
 import { configConDefectos, armarConfigPos } from './config-pos.js';
-import { correoDeAcceso, normalizarIdentificador, tipoDeIdentificador, usuarioDe } from './identidad.js';
+import { usuarioDe } from './identidad.js';
 
 const conId = (instantanea) => ({ id: instantanea.id, ...instantanea.data() });
 
@@ -299,21 +299,18 @@ export async function comprobarSecretoEnServidor(secreto) {
 }
 
 /**
- * Un administrador autoriza algo en la caja con su propio código y NIP (o
- * correo y contraseña), en una sesión aparte que se descarta al terminar: el
- * turno de la cajera sigue abierto. Escribe autorizaciones/{id} con la sesión
- * del administrador. Necesita conexión.
- * @param {{ identificador: string, secreto: string, tipo: 'modificacion'|'devolucion', turno: object, detalle: string }} datos
+ * Un administrador autoriza algo en la caja con su NIP (la clave de la caja
+ * dice de quién es; js/nip.js), en una sesión aparte que se descarta al
+ * terminar: el turno de la cajera sigue abierto. Escribe autorizaciones/{id}
+ * con la sesión del administrador. Necesita conexión.
+ * @param {{ nip: string, claveCaja: string, tipo: 'modificacion'|'devolucion', turno: object, detalle: string }} datos
  * @returns {Promise<{ id: string, admin: string, nombreAdmin: string }>}
  */
-export async function autorizarComoAdmin({ identificador, secreto, tipo, turno, detalle }) {
-  const tipoId = tipoDeIdentificador(identificador);
-  if (!tipoId) throw Object.assign(new Error('Escribe el código o el correo del administrador.'), { code: 'catalogo/identificador' });
-  const version = tipoId === 'codigo' ? await versionDeCodigo(normalizarIdentificador(identificador)) : 1;
-  const correo = correoDeAcceso(identificador, version);
+export async function autorizarComoAdmin({ nip, claveCaja, tipo, turno, detalle }) {
+  const correo = await correoDeNip(nip, claveCaja);
   const sesion = autenticacionSecundaria({ conFirestore: true });
   try {
-    const credencial = await signInWithEmailAndPassword(sesion.auth, correo, String(secreto));
+    const credencial = await signInWithEmailAndPassword(sesion.auth, correo, String(nip).trim());
     const admin = usuarioDe(credencial.user.email);
     const ficha = await getDoc(doc(sesion.db, 'staff', admin));
     const datos = ficha.exists() ? ficha.data() : null;

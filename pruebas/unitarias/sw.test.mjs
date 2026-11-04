@@ -20,7 +20,7 @@ describe('service worker', () => {
     for (const m of modulos) assert.ok(archivos.includes(`js/${m}`), `falta js/${m}`);
     const paginas = [
       ...readdirSync('.').filter((n) => n.endsWith('.html')),
-      ...['gestion', 'caja'].flatMap((carpeta) => readdirSync(carpeta).filter((n) => n.endsWith('.html')).map((n) => `${carpeta}/${n}`)),
+      ...['gestion', 'caja', 'catalogo'].flatMap((carpeta) => readdirSync(carpeta).filter((n) => n.endsWith('.html')).map((n) => `${carpeta}/${n}`)),
     ];
     for (const p of paginas) assert.ok(archivos.includes(p), `falta ${p}`);
   });

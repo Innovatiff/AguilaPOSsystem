@@ -12,7 +12,9 @@
  * navegador (o directo con Chrome en --kiosk-printing).
  */
 import { auth, onAuthStateChanged, Timestamp } from './firebase.js';
-import { iniciarSesion, fichaEfectiva, usuarioActual, mensajeError, cerrarSesionSilenciosa } from './auth.js';
+import { iniciarSesion, iniciarSesionConNip, fichaEfectiva, usuarioActual, mensajeError, cerrarSesionSilenciosa } from './auth.js';
+import { obtenerClaveCaja } from './clave-caja.js';
+import { claveCajaValida } from './nip.js';
 import { observarCatalogo, buscarPorUPC, esperarConfirmacion } from './productos.js';
 import {
   leerConfigPos, leerCaja, listarCajas, leerTienda, leerTurno,
@@ -41,7 +43,7 @@ import { pedirFondo, contarEfectivo, pedirMovimiento, mostrarCorte } from './caj
 import { normalizarUPC } from './upca.js';
 import { palabras } from './esquema.js';
 import { centavosDesdeTexto } from './precios.js';
-import { tipoDeIdentificador } from './identidad.js';
+import { esNIP } from './identidad.js';
 
 const $ = (id) => document.getElementById(id);
 const PANTALLAS = ['cargando', 'configurar', 'acceso', 'venta'];
@@ -185,13 +187,18 @@ function tic() {
 
 // ===================================================================== asignar la computadora a una caja
 
-function mostrarConfigurar() {
+/** `renovar`: la caja ya estaba asignada pero le falta la clave para entrar solo con el NIP. */
+function mostrarConfigurar({ renovar = false } = {}) {
   detenerVenta();
   mostrar('configurar');
   $('form-configurar').hidden = false;
   $('config-cajas').hidden = true;
   $('config-mensaje').hidden = true;
   $('config-secreto').value = '';
+  $('config-titulo').textContent = renovar ? 'Un administrador debe configurar esta caja otra vez' : 'Esta computadora todavía no es una caja';
+  $('config-nota').textContent = renovar
+    ? 'Ahora cada colaborador entra solo con su NIP. Para eso, un administrador entra aquí una vez y elige la caja (puede ser la misma).'
+    : 'Un administrador la asigna a una de las cajas dadas de alta en el back office (Cajas). Solo se hace una vez por computadora; después cada colaborador entra solo con su NIP.';
   $('config-identificador').focus();
 }
 
@@ -215,6 +222,8 @@ async function configurar(evento) {
       await cerrarSesionSilenciosa();
       throw fallo('Solo un administrador puede asignar esta computadora a una caja.');
     }
+    // La clave de caja queda en el equipo: con ella, cada quien entra solo con su NIP.
+    local.guardarClaveCaja(await obtenerClaveCaja(personal.usuario));
     const cajas = (await listarCajas()).filter((c) => c.activo);
     if (cajas.length === 0) {
       await cerrarSesionSilenciosa();
@@ -277,11 +286,10 @@ function mostrarAcceso({ mensaje = null, tipo = 'error' } = {}) {
   $('acceso-caja').textContent = a.nombre;
   $('acceso-tienda').textContent = a.tiendaNombre ?? a.tienda;
   estadoAcceso(null);
-  $('acceso-codigo').value = '';
   $('acceso-nip').value = '';
   ocupadoAcceso(false);
   mensajeAcceso(mensaje, tipo);
-  $('acceso-codigo').focus();
+  $('acceso-nip').focus();
 }
 
 function mensajeAcceso(texto, tipo = 'error') {
@@ -303,22 +311,23 @@ function ocupadoAcceso(ocupado, texto = 'Entrar') {
   const boton = $('acceso-entrar');
   boton.disabled = ocupado;
   boton.textContent = ocupado ? texto : 'Entrar';
-  $('acceso-codigo').disabled = ocupado;
   $('acceso-nip').disabled = ocupado;
 }
 
+const CREDENCIAL_INCORRECTA = new Set(['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials', 'caja/nip-incorrecto']);
+
+/** Entrar solo con el NIP: la clave de la caja dice de quién es (js/nip.js). */
 async function entrar() {
   if (entrando) return;
-  const identificador = $('acceso-codigo').value.trim();
-  const nip = $('acceso-nip').value;
-  if (!tipoDeIdentificador(identificador)) {
-    mensajeAcceso('Escribe tu código de empleado (6 dígitos).');
-    $('acceso-codigo').focus();
+  const nip = $('acceso-nip').value.trim();
+  if (!esNIP(nip)) {
+    mensajeAcceso('Escribe tu NIP de 6 dígitos.');
+    $('acceso-nip').focus();
     return;
   }
-  if (!nip) {
-    mensajeAcceso('Escribe tu NIP.');
-    $('acceso-nip').focus();
+  const clave = local.leerClaveCaja();
+  if (!claveCajaValida(clave)) {
+    mostrarConfigurar({ renovar: true });
     return;
   }
   entrando = true;
@@ -326,12 +335,12 @@ async function entrar() {
   ocupadoAcceso(true, 'Entrando…');
   let enVenta = false;
   try {
-    const { personal } = await iniciarSesion(identificador, nip);
+    const { personal } = await iniciarSesionConNip(nip, clave);
     estado.personal = personal;
     enVenta = await prepararTurno(personal, nip);
   } catch (error) {
     registrarError(error);
-    mensajeAcceso(mensajeDe(error));
+    mensajeAcceso(CREDENCIAL_INCORRECTA.has(String(error?.code ?? '')) ? 'NIP incorrecto.' : mensajeDe(error));
   } finally {
     entrando = false;
     if (!enVenta) {
@@ -339,7 +348,7 @@ async function entrar() {
       estado.personal = null;
       ocupadoAcceso(false);
       $('acceso-nip').value = '';
-      $('acceso-codigo').focus();
+      $('acceso-nip').focus();
     }
   }
 }
@@ -1198,45 +1207,31 @@ async function asegurarAutorizacion(tipo, detalle) {
 }
 
 function pedirAutorizacion(tipo, detalle) {
-  const codigo = h('input', { id: 'aut-codigo', inputmode: 'none', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', maxlength: 80 });
-  const nip = h('input', { id: 'aut-nip', type: 'password', inputmode: 'none', autocomplete: 'off', maxlength: 72 });
-  let activo = codigo;
-  codigo.addEventListener('focus', () => { activo = codigo; });
-  nip.addEventListener('focus', () => { activo = nip; });
-  codigo.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      nip.focus();
-    }
-  });
-  codigo.addEventListener('input', () => {
-    if (/^\d{6}$/.test(codigo.value.trim())) nip.focus();
-  });
+  const nip = h('input', { id: 'aut-nip', type: 'password', inputmode: 'none', autocomplete: 'off', maxlength: 6 });
   return abrirDialogo({
     titulo: tipo === 'devolucion' ? 'Autorizar devolución' : 'Autorización de administrador',
     cuerpo: [
       h('p', { class: 'dlg__texto' }, h('strong', { text: detalle })),
-      h('p', { class: 'dlg__nota', text: 'Un administrador escribe aquí su código y su NIP. El turno de la cajera sigue abierto.' }),
-      h('div', { class: 'campo-pos' }, h('label', { for: 'aut-codigo', text: 'Código del administrador' }), codigo),
-      h('div', { class: 'campo-pos' }, h('label', { for: 'aut-nip', text: 'NIP' }), nip),
-      tecladoNumerico({ destino: () => activo }),
+      h('p', { class: 'dlg__nota', text: 'Un administrador escribe aquí su NIP. El turno de la cajera sigue abierto.' }),
+      h('div', { class: 'campo-pos' }, h('label', { for: 'aut-nip', text: 'NIP del administrador' }), nip),
+      tecladoNumerico({ destino: nip }),
     ],
     botones: [
       { texto: 'Cancelar', valor: null, cerrar: true },
       { texto: 'Autorizar', valor: 'autorizar', principal: true },
     ],
-    alAbrir: () => codigo.focus(),
+    alAbrir: () => nip.focus(),
     alPulsar: async (_valor, ctx) => {
-      if (!tipoDeIdentificador(codigo.value)) throw new Error('Escribe el código del administrador.');
-      if (!nip.value) throw new Error('Escribe el NIP.');
+      if (!esNIP(nip.value)) throw new Error('Escribe el NIP de 6 dígitos del administrador.');
+      if (!claveCajaValida(local.leerClaveCaja())) throw new Error('Esta caja todavía no tiene su clave: al cerrar el turno, un administrador debe configurarla otra vez («Asignar esta computadora a otra caja»).');
       if (!navigator.onLine) throw new Error('Sin conexión: para autorizar se necesita internet.');
       ctx.error('Comprobando…', 'info');
       try {
-        const resultado = await autorizarComoAdmin({ identificador: codigo.value, secreto: nip.value, tipo, turno: estado.turno, detalle });
+        const resultado = await autorizarComoAdmin({ nip: nip.value, claveCaja: local.leerClaveCaja(), tipo, turno: estado.turno, detalle });
         ctx.cerrar(resultado);
       } catch (error) {
         nip.value = '';
-        throw new Error(mensajeDe(error));
+        throw new Error(CREDENCIAL_INCORRECTA.has(String(error?.code ?? '')) ? 'NIP incorrecto.' : mensajeDe(error));
       }
     },
   });
@@ -2157,22 +2152,14 @@ function conectarEventos() {
   $('form-configurar').addEventListener('submit', configurar);
   $('btn-reconfigurar').addEventListener('click', mostrarConfigurar);
 
-  // Acceso: teclado en pantalla para el código y el NIP
-  const teclado = tecladoNumerico({ destino: () => campoAccesoActivo ?? $('acceso-codigo'), clase: 'teclado--acceso' });
+  // Acceso: solo el NIP, con teclado en pantalla; al sexto dígito entra solo
+  const teclado = tecladoNumerico({ destino: () => campoAccesoActivo ?? $('acceso-nip'), clase: 'teclado--acceso' });
   teclado.id = 'teclado-acceso';
   $('teclado-acceso').replaceWith(teclado);
-  for (const id of ['acceso-codigo', 'acceso-nip']) {
-    $(id).setAttribute('inputmode', 'none');
-    $(id).addEventListener('focus', () => { campoAccesoActivo = $(id); });
-  }
-  $('acceso-codigo').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      $('acceso-nip').focus();
-    }
-  });
-  $('acceso-codigo').addEventListener('input', () => {
-    if (/^\d{6}$/.test($('acceso-codigo').value.trim())) $('acceso-nip').focus();
+  $('acceso-nip').setAttribute('inputmode', 'none');
+  $('acceso-nip').addEventListener('focus', () => { campoAccesoActivo = $('acceso-nip'); });
+  $('acceso-nip').addEventListener('input', () => {
+    if (esNIP($('acceso-nip').value)) entrar();
   });
   $('form-acceso').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -2246,6 +2233,7 @@ async function arrancar() {
     mostrarConfigurar();
     return;
   }
+  const sinClave = !claveCajaValida(local.leerClaveCaja());
   $('cargando-texto').textContent = 'Recuperando la sesión…';
   const usuario = await usuarioActual();
   if (usuario) {
@@ -2264,6 +2252,10 @@ async function arrancar() {
       console.warn('No se pudo retomar la sesión', error);
     }
     await cerrarSesionSilenciosa().catch(() => {});
+  }
+  if (sinClave) {
+    mostrarConfigurar({ renovar: true });
+    return;
   }
   mostrarAcceso();
 }

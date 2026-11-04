@@ -12,7 +12,7 @@ node node_modules/http-server/bin/http-server -p 5500 -s -c-1 "$SITIO_E2E" >/dev
 PID_HTTP=$!
 for i in $(seq 1 40); do curl -sf http://127.0.0.1:5500/ >/dev/null 2>&1 && break; sleep 0.25; done
 ESTADO=0
-if [ "$#" -gt 0 ]; then ESCENARIOS=("$@"); else ESCENARIOS=(acceso gestion productos captura imprimir movil caja backoffice); fi
+if [ "$#" -gt 0 ]; then ESCENARIOS=("$@"); else ESCENARIOS=(acceso gestion productos captura imprimir movil caja backoffice catalogo); fi
 for escenario in "${ESCENARIOS[@]}"; do
   node "pruebas/e2e/${escenario%.cjs}.cjs" || ESTADO=1
 done

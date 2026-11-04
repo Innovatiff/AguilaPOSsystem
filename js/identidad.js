@@ -13,6 +13,11 @@
  * historial de precios. Al restablecer un NIP se crea una cuenta nueva (sube
  * la versión: "100123.2@…") pero el usuario sigue siendo "100123".
  *
+ * Desde la app Catálogo, cada persona se registra con su CORREO y su NIP de
+ * colaborador (6 dígitos, único). El código queda como número interno: nadie
+ * lo teclea. Se entra con correo + NIP (catálogo, consulta, back office) o
+ * solo con el NIP en una caja configurada por un administrador (js/nip.js).
+ *
  * Módulo puro (sin Firebase ni DOM): se prueba en Node y lo reflejan las
  * reglas de Firestore (función usuarioActual()).
  */
@@ -21,7 +26,7 @@
 export const DOMINIO_CODIGOS = 'codigo.aguilapos.firebaseapp.com';
 
 export const REGEX_CODIGO = /^[0-9]{6}$/;
-export const REGEX_NIP = /^[0-9]{6,10}$/;
+export const REGEX_NIP = /^[0-9]{6}$/;
 export const REGEX_CORREO = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/;
 export const LONGITUD_MINIMA_CONTRASENA = 8;
 export const TIPOS_ACCESO = Object.freeze(['codigo', 'correo']);
@@ -30,7 +35,13 @@ export const TIPOS_ACCESO = Object.freeze(['codigo', 'correo']);
 export const CAMPOS_PERSONAL = Object.freeze([
   'usuario', 'tipo', 'correoAuth', 'nombre', 'rol', 'activo', 'tienda',
   'creadoEn', 'actualizadoEn', 'actualizadoPor', 'cuentaVersion',
+  'correo', 'catalogo',
 ]);
+
+/** ¿Parece un NIP de colaborador? Exactamente 6 dígitos. */
+export function esNIP(texto) {
+  return REGEX_NIP.test(String(texto ?? '').trim());
+}
 
 /** Limpia lo que teclea alguien para entrar: código (solo dígitos) o correo en minúsculas. */
 export function normalizarIdentificador(texto) {
@@ -103,11 +114,11 @@ export function validarCodigo(codigo) {
 
 const SECUENCIAS = new Set(['0123456789', '9876543210']);
 
-/** NIP: de 6 a 10 dígitos, ni todos iguales ni una secuencia (123456, 654321…). */
+/** NIP de colaborador: 6 dígitos, ni todos iguales ni una secuencia (123456, 654321…). */
 export function validarNIP(nip) {
   const texto = String(nip ?? '').trim();
   if (texto === '') return 'Escribe el NIP.';
-  if (!REGEX_NIP.test(texto)) return 'El NIP son de 6 a 10 dígitos, solo números.';
+  if (!REGEX_NIP.test(texto)) return 'El NIP son 6 dígitos, solo números.';
   if (/^(\d)\1+$/.test(texto)) return 'El NIP no puede ser el mismo dígito repetido.';
   for (const secuencia of SECUENCIAS) {
     if (secuencia.includes(texto)) return 'El NIP no puede ser una secuencia como 123456.';
@@ -150,6 +161,7 @@ export function armarFichaPersonal(datos, actualizadoPor) {
   const cuentaVersion = Number(datos.cuentaVersion ?? 1);
   const correoAuth = datos.correoAuth ?? (tipo === 'codigo' ? correoDeAcceso(usuario, cuentaVersion) : usuario);
   const tienda = String(datos.tienda ?? '').trim();
+  const correo = tipo === 'correo' ? usuario : (String(datos.correo ?? '').trim().toLowerCase() || null);
   return {
     usuario,
     tipo,
@@ -160,6 +172,8 @@ export function armarFichaPersonal(datos, actualizadoPor) {
     tienda: tienda === '' ? null : tienda,
     actualizadoPor,
     cuentaVersion,
+    correo,
+    catalogo: datos.catalogo === true,
   };
 }
 
@@ -182,5 +196,8 @@ export function validarFichaPersonal(f) {
   if (f.tienda !== null && !/^[a-z0-9-]{2,40}$/.test(String(f.tienda))) errores.push('La tienda no es válida.');
   if (!Number.isInteger(f.cuentaVersion) || f.cuentaVersion < 1) errores.push('La versión de cuenta debe ser un entero mayor o igual a 1.');
   if (typeof f.actualizadoPor !== 'string' || f.actualizadoPor === '') errores.push('Falta quién actualiza la ficha.');
+  if (!(f.correo === null || esCorreo(f.correo))) errores.push('El correo no es válido.');
+  if (f.tipo === 'correo' && f.correo !== f.usuario) errores.push('El correo de una cuenta por correo es su propio usuario.');
+  if (typeof f.catalogo !== 'boolean') errores.push('El permiso del Catálogo debe ser sí o no.');
   return errores;
 }

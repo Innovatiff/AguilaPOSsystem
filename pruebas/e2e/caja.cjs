@@ -1,19 +1,14 @@
 /**
- * Caja registradora (/caja/): asignar la computadora a una caja, abrir turno
- * con NIP y fondo, vender (escáner, PLU por peso, multiplicador, búsqueda por
+ * Caja registradora (/caja/): asignar la computadora a una caja (el admin, con
+ * su correo; la caja guarda la clave para entrar solo con el NIP), abrir turno
+ * SOLO con el NIP y fondo, vender (escáner, PLU por peso, multiplicador, búsqueda por
  * nombre, venta libre por departamento), cobrar con cambio, descuento con
  * autorización de un administrador, devolución, ticket en espera, retiro de
  * efectivo, bloqueo y cierre de turno con conteo y corte Z.
  */
 const c = require('./comun.cjs');
 
-const JEFA = { codigo: '100150', nip: '735146', nombre: 'Rosa Méndez' };
-
-async function sembrarCodigo({ codigo, nip, nombre, rol = 'empleado', tienda = 'talbot' }) {
-  await c.crearCuentaAuth(c.correoDeCodigo(codigo), nip);
-  await c.rest('PATCH', `staff/${codigo}`, c.campos(c.ficha({ usuario: codigo, nombre, rol, tienda })));
-  await c.rest('PATCH', `accesos/${codigo}`, c.campos({ version: 1 }));
-}
+const JEFA = { codigo: '100150', nip: '735146', nombre: 'Rosa Méndez', correo: 'rosa@aguila.test' };
 
 const caja = (extra = {}) => ({
   nombre: 'Caja 1', numero: 1, tienda: 'talbot', activo: true,
@@ -46,8 +41,9 @@ const totalTicket = (page) => page.textContent('#tot-total');
     nombre: 'El Águila Market', direccion: '42 Erie St S, Leamington ON N8H 3A9', activo: true,
     telefono: '519-322-4222', correo: 'pleaguila@gmail.com', numeroImpuesto: '81234 5678 RT0001',
   }));
+  await c.sembrarClaveCaja();
   await c.sembrarEmpleadaCodigo();
-  await sembrarCodigo({ ...JEFA, rol: 'admin' });
+  await c.sembrarEmpleadaCodigo({ ...JEFA, rol: 'admin' });
   await c.sembrarCatalogoDemo();
   await c.sembrarProducto('p-aguacate', { plu: '4225', nombre: 'AGUACATE HASS', unidadVenta: 'peso', precioCentavos: 100, precioPorKgCentavos: 549, claseFiscal: 'tasaCero', tiendas: ['talbot'], tokensBusqueda: c.tokens('AGUACATE HASS') });
   await c.rest('PATCH', 'cajas/c1', c.campos(caja()));
@@ -69,33 +65,32 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await page.goto(`${c.BASE}/caja/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#pantalla-configurar:not([hidden])');
   v.ok('sin asignar, la caja pide a un administrador', await page.isVisible('#form-configurar'));
-  await page.fill('#config-identificador', c.EMPLEADA.codigo);
+  await page.fill('#config-identificador', c.EMPLEADA.correo);
   await page.fill('#config-secreto', c.EMPLEADA.nip);
   await page.click('#config-entrar');
   await page.waitForSelector('#config-mensaje:not([hidden])');
   v.ok('una empleada no puede asignar la computadora', /Solo un administrador/.test(await page.textContent('#config-mensaje')));
-  await page.fill('#config-identificador', JEFA.codigo);
+  await page.fill('#config-identificador', JEFA.correo);
   await page.fill('#config-secreto', JEFA.nip);
   await page.click('#config-entrar');
   await page.waitForSelector('#config-cajas:not([hidden]) button');
-  v.ok('el admin ve las cajas activas', (await page.$$('#config-cajas button')).length === 2);
+  v.ok('el admin entra con su correo y su NIP y ve las cajas activas', (await page.$$('#config-cajas button')).length === 2);
+  v.ok('la caja guarda la clave de caja para entrar solo con el NIP', (await page.evaluate(() => JSON.parse(localStorage.getItem('aguila.pos.claveCaja')))) === c.CLAVE_CAJA);
   await page.screenshot({ path: `${c.SALIDA}/caja-asignar.png` });
   await page.click('#config-cajas button:has-text("Caja 1")');
   await page.waitForSelector('#pantalla-acceso:not([hidden])');
   v.ok('queda asignada a Caja 1 y muestra la pantalla de acceso', (await page.textContent('#acceso-caja')) === 'Caja 1' && /El Águila Market/.test(await page.textContent('#acceso-tienda')));
   await page.screenshot({ path: `${c.SALIDA}/caja-acceso.png` });
 
-  // ---- 2) abrir turno
+  // ---- 2) abrir turno: solo el NIP
+  v.ok('la pantalla de acceso pide solo el NIP', (await page.$$('#form-acceso input')).length === 1);
   await page.click('#teclado-acceso .tecla:has-text("1")');
-  v.ok('el teclado en pantalla escribe en el código', (await page.inputValue('#acceso-codigo')) === '1');
-  await page.fill('#acceso-codigo', c.EMPLEADA.codigo);
-  await page.fill('#acceso-nip', '000000');
-  await page.press('#acceso-nip', 'Enter');
+  v.ok('el teclado en pantalla escribe en el NIP', (await page.inputValue('#acceso-nip')) === '1');
+  await page.fill('#acceso-nip', '');
+  for (const digito of '503182') await page.click(`#teclado-acceso .tecla:has-text("${digito}")`);
   await page.waitForSelector('#acceso-mensaje:not([hidden])');
-  v.ok('un NIP equivocado no entra', /incorrectos/.test(await page.textContent('#acceso-mensaje')));
-  await page.fill('#acceso-codigo', c.EMPLEADA.codigo);
+  v.ok('un NIP que no es de nadie no entra (con 6 dígitos lo intenta solo)', /NIP incorrecto/.test(await page.textContent('#acceso-mensaje')));
   await page.fill('#acceso-nip', c.EMPLEADA.nip);
-  await page.press('#acceso-nip', 'Enter');
   await page.waitForSelector('dialog[open]');
   v.ok('pide el fondo inicial con el sugerido', /Fondo inicial/.test(await abierto(page).textContent('h2')) && (await abierto(page).locator('input').inputValue()) === '150.00');
   await page.screenshot({ path: `${c.SALIDA}/caja-fondo.png` });
@@ -180,15 +175,13 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await page.click('#acciones-linea [data-accion="descuento-linea"]');
   await page.waitForSelector('dialog[open] .opciones');
   await abierto(page).locator('.rapidos button', { hasText: '10 %' }).click();
-  await page.waitForSelector('dialog[open] #aut-codigo');
-  v.ok('el descuento pide la autorización de un administrador', /Autorización/.test(await abierto(page).textContent('h2')));
+  await page.waitForSelector('dialog[open] #aut-nip');
+  v.ok('el descuento pide la autorización de un administrador, solo con su NIP', /Autorización/.test(await abierto(page).textContent('h2')) && (await abierto(page).locator('input').count()) === 1);
   await page.screenshot({ path: `${c.SALIDA}/caja-autorizacion.png` });
-  await page.fill('#aut-codigo', c.EMPLEADA.codigo);
   await page.fill('#aut-nip', c.EMPLEADA.nip);
   await pulsarEnDialogo(page, 'Autorizar');
   await page.waitForFunction(() => /no es administradora/.test(document.querySelector('dialog[open] .mensaje-pos')?.textContent ?? ''), null, { timeout: 15000 });
   v.ok('una empleada no puede autorizar', true);
-  await page.fill('#aut-codigo', JEFA.codigo);
   await page.fill('#aut-nip', JEFA.nip);
   await pulsarEnDialogo(page, 'Autorizar');
   await esperarSinDialogo(page);
@@ -226,8 +219,7 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await page.waitForSelector('dialog[open] #folio-original');
   await page.fill('#folio-original', venta1.folio.replace(/-/g, ''));
   await pulsarEnDialogo(page, 'Continuar');
-  await page.waitForSelector('dialog[open] #aut-codigo');
-  await page.fill('#aut-codigo', JEFA.codigo);
+  await page.waitForSelector('dialog[open] #aut-nip');
   await page.fill('#aut-nip', JEFA.nip);
   await pulsarEnDialogo(page, 'Autorizar');
   await esperarSinDialogo(page);

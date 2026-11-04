@@ -1,11 +1,16 @@
 /**
  * Mi cuenta: datos de la persona y cambio de su propio NIP o contraseña.
+ * El NIP identifica a la persona en la caja (nips/{huella}, js/nip.js): al
+ * cambiarlo se registra la huella nueva antes de cambiar la cuenta y se borra
+ * la vieja después; si la cuenta no cambia, la huella nueva se retira.
  */
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { cambiarSecretoPropio } from './cuentas.js';
-import { validarNIP, validarContrasena } from './identidad.js';
-import { db, doc, getDoc } from './firebase.js';
+import { validarNIP, validarContrasena, versionDe } from './identidad.js';
+import { obtenerClaveCaja } from './clave-caja.js';
+import { huellaNip } from './nip.js';
+import { db, doc, getDoc, getDocs, setDoc, deleteDoc, collection, query, where } from './firebase.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'cuenta.html' });
@@ -26,7 +31,8 @@ function fila(termino, valor) {
 const datos = $('datos-cuenta');
 datos.append(
   ...fila('Nombre', personal.nombre),
-  ...fila(esCodigo ? 'Código de empleado' : 'Correo', personal.usuario),
+  ...fila('Correo', personal.correo ?? (esCodigo ? 'Sin correo (pídelo a otro administrador en Empleados)' : personal.usuario)),
+  ...(esCodigo ? fila('Nº de colaborador', personal.usuario) : []),
   ...fila('Rol', NOMBRE_ROL[personal.rol] ?? personal.rol),
 );
 if (personal.tienda) {
@@ -40,7 +46,7 @@ if (personal.tienda) {
 
 $('titulo-secreto').textContent = esCodigo ? 'Cambiar NIP' : 'Cambiar contraseña';
 $('nota-secreto').textContent = esCodigo
-  ? 'El NIP son de 6 a 10 dígitos, solo números. Si lo olvidas, un administrador lo restablece desde Empleados.'
+  ? 'El NIP son 6 dígitos y nadie más puede tenerlo: en la caja es lo único que se escribe. Si lo olvidas, otro administrador lo cambia en Empleados.'
   : 'La contraseña debe tener al menos 8 caracteres. Si la olvidas, usa «Olvidé mi contraseña» al entrar.';
 $('et-actual').textContent = `${palabra[0].toUpperCase()}${palabra.slice(1)} actual`;
 $('et-nuevo').textContent = `${palabra[0].toUpperCase()}${palabra.slice(1)} nueva`.replace('NIP nueva', 'NIP nuevo');
@@ -77,18 +83,38 @@ $('form-secreto').addEventListener('submit', async (evento) => {
   }
   $('s-guardar').disabled = true;
   try {
-    await cambiarSecretoPropio(actual, nuevo);
+    if (esCodigo) await cambiarNipPropio(actual, nuevo);
+    else await cambiarSecretoPropio(actual, nuevo);
     $('form-secreto').reset();
     mostrar('ok', esCodigo ? 'NIP cambiado. Úsalo la próxima vez que entres.' : 'Contraseña cambiada.');
   } catch (e) {
     const codigo = e?.code ?? '';
     mostrar('error', ['auth/invalid-credential', 'auth/wrong-password', 'auth/invalid-login-credentials'].includes(codigo)
       ? `El ${palabra} actual no es correcto.`
-      : mensajeError(e));
+      : codigo === 'catalogo/nip-ocupado' ? e.message : mensajeError(e));
     if (codigo.startsWith('auth/')) $('s-actual').select();
   } finally {
     $('s-guardar').disabled = false;
   }
 });
+
+/** NIP propio: huella nueva (única) → cuenta → huellas viejas fuera. */
+async function cambiarNipPropio(actual, nuevo) {
+  const huella = await huellaNip(await obtenerClaveCaja(personal.usuario), nuevo);
+  const registro = doc(db, 'nips', huella);
+  if ((await getDoc(registro)).exists()) {
+    throw Object.assign(new Error('Ese NIP ya lo tiene otra persona. Elige otro.'), { code: 'catalogo/nip-ocupado' });
+  }
+  const anteriores = await getDocs(query(collection(db, 'nips'), where('codigo', '==', personal.usuario)));
+  const version = versionDe(personal.email); // la versión de la cuenta con la que entró (la vigente)
+  await setDoc(registro, { codigo: personal.usuario, version });
+  try {
+    await cambiarSecretoPropio(actual, nuevo);
+  } catch (error) {
+    await deleteDoc(registro).catch(() => {});
+    throw error;
+  }
+  await Promise.all(anteriores.docs.filter((d) => d.id !== huella).map((d) => deleteDoc(d.ref).catch(() => {})));
+}
 
 $('contenido').hidden = false;

@@ -53,11 +53,11 @@
 
   <main id="pantalla-configurar" class="pantalla pantalla--centro" hidden>
     <section class="tarjeta-pos">
-      <h1>Esta computadora todavía no es una caja</h1>
-      <p class="tarjeta-pos__nota">Un administrador la asigna a una de las cajas dadas de alta en el back office (Cajas). Solo se hace una vez por computadora.</p>
+      <h1 id="config-titulo">Esta computadora todavía no es una caja</h1>
+      <p class="tarjeta-pos__nota" id="config-nota">Un administrador la asigna a una de las cajas dadas de alta en el back office (Cajas). Solo se hace una vez por computadora; después cada colaborador entra solo con su NIP.</p>
       <form id="form-configurar" class="formulario-pos" novalidate>
-        <label for="config-identificador">Código o correo del administrador</label>
-        <input id="config-identificador" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+        <label for="config-identificador">Correo del administrador</label>
+        <input id="config-identificador" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false" required>
         <label for="config-secreto">NIP o contraseña</label>
         <input id="config-secreto" type="password" autocomplete="off" required>
         <p id="config-mensaje" class="mensaje-pos" role="alert" hidden></p>
@@ -79,14 +79,10 @@
       </div>
       <form class="acceso__form" id="form-acceso" novalidate>
         <h1 id="acceso-titulo">Iniciar turno</h1>
-        <p class="acceso__subtitulo" id="acceso-subtitulo">Escribe tu código de empleado y tu NIP.</p>
-        <div class="campo-pos">
-          <label for="acceso-codigo">Código de empleado</label>
-          <input id="acceso-codigo" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="80" required>
-        </div>
-        <div class="campo-pos">
+        <p class="acceso__subtitulo" id="acceso-subtitulo">Escribe tu NIP de 6 dígitos.</p>
+        <div class="campo-pos campo-pos--nip">
           <label for="acceso-nip">NIP</label>
-          <input id="acceso-nip" type="password" inputmode="numeric" autocomplete="off" maxlength="72" required>
+          <input id="acceso-nip" type="password" inputmode="numeric" autocomplete="off" maxlength="6" required>
         </div>
         <div class="teclado teclado--acceso" id="teclado-acceso"></div>
         <p id="acceso-mensaje" class="mensaje-pos" role="alert" hidden></p>
