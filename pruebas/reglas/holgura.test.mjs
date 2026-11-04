@@ -91,6 +91,8 @@ const ANCLA = {
   resolver: 'allow update: if resolverSolicitud();',
   nip: 'nipDeFicha(getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data, request.resource.data.version);',
   correo: 'getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data.correo == correo;',
+  evento: 'allow create: if crearEvento(request.resource.data);',
+  recepcion: 'allow create: if crearRecepcion(request.resource.data);',
   historial: 'allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);',
 };
 
@@ -160,6 +162,28 @@ const ESCENARIOS = [
       lote.update(doc(db, 'solicitudes/s1'), { estado: 'aprobada', productoId: 'nuevo', resueltaPor: '100150', resueltaEn: serverTimestamp() });
       return lote.commit();
     },
+  },
+  {
+    nombre: 'movimiento en vivo de la caja',
+    ancla: ANCLA.evento,
+    datos: conTurno('100123'),
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'eventos/e1'), {
+      tipo: 'pago', turno: 't1', caja: 'c1', cajaNombre: 'Caja 1', numeroCaja: 1, tienda: 'talbot', cajero: '100123', cajeroNombre: 'María',
+      ticket: 'tk1', folio: '261104-01-0001', texto: 'Efectivo $18.00 (saldo $0.00)', importeCentavos: 1800, fecha: Timestamp.now(), registradoEn: serverTimestamp(),
+    }),
+  },
+  {
+    nombre: 'entrega de mercancía (inventario)',
+    ancla: ANCLA.recepcion,
+    datos: { 'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true } },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'recepciones/r1'), {
+      tienda: 'talbot', proveedor: 'Distribuidora', referencia: 'F-1', nota: null,
+      lineas: [{ producto: 'p1', nombre: 'TAJIN', upc: '633148100013', plu: null, cantidad: 24, pesoGramos: null }],
+      productos: 1, piezas: 24, gramos: 0, recibidoPor: '100123', recibidoPorNombre: 'María', fecha: serverTimestamp(),
+      anulada: false, anuladaPor: null, anuladaEn: null,
+    }),
   },
   {
     nombre: 'registrar el NIP de un colaborador (huella y correo)',

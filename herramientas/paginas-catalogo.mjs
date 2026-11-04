@@ -1,4 +1,4 @@
-// App Catálogo (catalogo/): sus pantallas de productos, captura y etiquetas son
+// App Catálogo (catalogo/): sus pantallas de productos, captura, etiquetas e inventario son
 // las mismas del back office (js/pantalla-*.js deciden según la app y el rol),
 // así que sus páginas se generan a partir de las del back office: rutas un
 // nivel más arriba, título y nombre de la app. Sin build: el resultado se sube.
@@ -11,6 +11,7 @@ export const PAGINAS = Object.freeze([
   { fuente: 'productos.html', destino: 'catalogo/index.html', titulo: 'Productos' },
   { fuente: 'captura.html', destino: 'catalogo/captura.html', titulo: 'Captura rápida' },
   { fuente: 'imprimir.html', destino: 'catalogo/etiquetas.html', titulo: 'Etiquetas' },
+  { fuente: 'inventario.html', destino: 'catalogo/inventario.html', titulo: 'Recibir mercancía' },
 ]);
 
 const AVISO = '<!-- Generada por herramientas/paginas-catalogo.mjs a partir de la página del back office. No editar a mano. -->';

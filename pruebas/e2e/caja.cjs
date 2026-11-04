@@ -311,6 +311,25 @@ const totalTicket = (page) => page.textContent('#tot-total');
     && cerrado.resumen?.ventas === 2 && cerrado.resumen?.devoluciones === 1 && cerrado.resumen?.cancelaciones === 1 && cajaLibre.turnoActual === null, JSON.stringify({ e: cerrado?.estado, d: cerrado?.diferenciaCentavos, r: cerrado?.resumen?.ventas }));
   v.ok('vuelve a la pantalla de acceso, sin sesión', /Turno cerrado/.test(await page.textContent('#acceso-mensaje')));
 
+  // ---- 9) movimientos en vivo: cada paso de la caja queda registrado para el back office
+  const eventos = [...(await c.leerColeccion('eventos')).values()].sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha));
+  const tipos = new Set(eventos.map((e) => e.tipo));
+  const esperados = ['turno_abierto', 'venta_iniciada', 'articulo', 'articulo_anulado', 'descuento', 'autorizacion', 'pago', 'venta_completada',
+    'espera', 'recuperada', 'venta_cancelada', 'devolucion_iniciada', 'devolucion_completada', 'efectivo', 'turno_cerrado'];
+  v.ok('la caja registra sus movimientos en vivo (las reglas los aceptan): turno, artículos, anulación, descuento, autorización, pagos, espera, cancelación, devolución, efectivo y cierre',
+    esperados.every((tipo) => tipos.has(tipo)), `faltan: ${esperados.filter((tipo) => !tipos.has(tipo)).join()} · hay: ${[...tipos].join()}`);
+  const ticket1 = eventos.find((e) => e.folio === venta1.folio)?.ticket;
+  const delTicket1 = eventos.filter((e) => ticket1 && e.ticket === ticket1).map((e) => e.tipo);
+  v.ok('los movimientos de una venta comparten su ticket: de «Venta iniciada» a «Venta completada»',
+    delTicket1[0] === 'venta_iniciada' && delTicket1.at(-1) === 'venta_completada' && delTicket1.includes('articulo_anulado') && delTicket1.includes('pago'), delTicket1.join());
+  const completada1 = eventos.find((e) => e.tipo === 'venta_completada' && e.folio === venta1.folio);
+  v.ok('la venta completada dice folio, total, artículos, forma de pago y cambio',
+    new RegExp(`^Venta ${venta1.folio} completada — \\$30\\.37 \\(\\d+ artículos, efectivo\\), cambio \\$19\\.65$`).test(completada1?.texto ?? '') && completada1.importeCentavos === 3037, completada1?.texto);
+  const pago1 = eventos.find((e) => e.tipo === 'pago' && e.folio === venta1.folio);
+  v.ok('el pago dice cuánto entregó y el saldo', /^Efectivo \$50\.00 en \d{6}-01-0001 \(saldo \$0\.00\)$/.test(pago1?.texto ?? ''), pago1?.texto);
+  v.ok('cada movimiento lleva quién, en qué caja y en qué turno', eventos.every((e) => e.cajero === c.EMPLEADA.codigo && e.caja === 'c1' && e.cajaNombre === 'Caja 1' && e.turno === turnoId), JSON.stringify(eventos.find((e) => e.cajero !== c.EMPLEADA.codigo || e.caja !== 'c1') ?? {}));
+  v.ok('el cierre queda como «Turno cerrado» con lo contado', /contado \$154\.50/.test(eventos.find((e) => e.tipo === 'turno_cerrado')?.texto ?? ''), eventos.find((e) => e.tipo === 'turno_cerrado')?.texto);
+
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.screenshot({ path: `${c.SALIDA}/caja-acceso-1024.png` });
   v.terminar(errores);

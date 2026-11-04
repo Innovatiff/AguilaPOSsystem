@@ -8,6 +8,7 @@ import { formatearMonto, formatearPeso, NOMBRE_METODO, claveDia } from './ticket
 import { milisDe, formatearDuracion } from './turnos.js';
 import { reciboVenta, imprimir, fechaHora } from './recibo.js';
 import { aCSV } from './csv.js';
+import { infoEvento, horaConSegundos } from './eventos.js';
 
 export const dinero = formatearMonto;
 export { claveDia, fechaHora, formatearDuracion };
@@ -49,6 +50,19 @@ export function fechaLarga(valor) {
 export function fechaCorta(valor) {
   const fecha = typeof valor === 'string' ? inicioDia(valor) : new Date(milisDe(valor) ?? Date.now());
   return conMayuscula(formatoCorto.format(fecha));
+}
+
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
+
+/** "mié, 4 de nov 01:19 p.m." (hora local, 12 horas). */
+export function cuando(valor) {
+  const ms = milisDe(valor);
+  if (ms === null) return '—';
+  const f = new Date(ms);
+  const h24 = f.getHours();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${DIAS_CORTOS[f.getDay()]}, ${f.getDate()} de ${MESES_CORTOS[f.getMonth()]} ${String(h12).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')} ${h24 < 12 ? 'a.m.' : 'p.m.'}`;
 }
 
 /** "08:02" en hora local. */
@@ -112,8 +126,62 @@ export const csvMonto = (centavos) => (Number.isSafeInteger(centavos) ? (centavo
 
 // ------------------------------------------------------------- ficha de un ticket
 
-function filaDato(termino, valor) {
+export function filaDato(termino, valor) {
   return [h('dt', { text: termino }), h('dd', null, valor)];
+}
+
+/**
+ * Historial de auditoría: los movimientos en vivo de un ticket, en orden. `promesa`
+ * resuelve a la lista (js/pos-datos.js, historialDeVenta / historialDeCancelacion).
+ */
+export function seccionHistorial(promesa) {
+  const lista = h('ol', { class: 'historial-auditoria' }, h('li', { class: 'nota', text: 'Cargando el historial…' }));
+  const seccion = h('section', { class: 'historial-auditoria__seccion', 'aria-label': 'Historial de auditoría' },
+    h('h3', { text: 'Historial de auditoría' }), lista);
+  Promise.resolve(promesa).then((eventos) => {
+    if (!eventos?.length) {
+      lista.replaceChildren(h('li', { class: 'nota', text: 'Sin movimientos registrados para este ticket (los tickets anteriores a «Movimientos en vivo» no tienen historial).' }));
+      return;
+    }
+    lista.replaceChildren(...eventos.map((e) => {
+      const info = infoEvento(e.tipo);
+      const { hora: reloj, meridiano } = horaConSegundos(e.fecha);
+      return h('li', { class: `historial-auditoria__item${info.tono ? ` historial-auditoria__item--${info.tono}` : ''}` },
+        h('span', { class: 'historial-auditoria__hora', text: `${reloj} ${meridiano}` }),
+        chip(info.etiqueta, info.chip),
+        h('span', { class: 'historial-auditoria__texto', text: e.texto }),
+        h('span', { class: 'secundario', text: e.cajeroNombre || e.cajero }));
+    }));
+  }).catch(() => {
+    lista.replaceChildren(h('li', { class: 'nota', text: 'No se pudo cargar el historial de auditoría.' }));
+  });
+  return seccion;
+}
+
+/** Ficha de un ticket cancelado (sin recibo): quién, cuándo, cuánto y su historial. */
+export function abrirCancelacion(movimiento, { cajaNombre = '', historial = null } = {}) {
+  const datos = h('dl', { class: 'ficha ficha--compacta' },
+    filaDato('Fecha', fechaHora(movimiento.fecha)),
+    filaDato('Caja', cajaNombre || movimiento.caja),
+    filaDato('Atendió', `${movimiento.cajeroNombre} (${movimiento.cajero})`),
+    filaDato('Importe cancelado', h('strong', { text: dinero(movimiento.importeCentavos) })),
+    movimiento.motivo ? filaDato('Detalle', movimiento.motivo) : null);
+  const dialogo = h('dialog', { class: 'editor editor--ticket', 'aria-label': 'Ticket cancelado' },
+    h('div', { class: 'editor__form' },
+      h('header', { class: 'editor__cabecera' },
+        h('h2', null, 'Ticket cancelado ', chip('Anulada', 'alerta')),
+        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
+      h('div', { class: 'editor__cuerpo editor__cuerpo--simple' },
+        datos,
+        h('p', { class: 'nota', text: 'Un ticket cancelado no se cobró ni generó recibo; queda en el corte del turno como cancelación.' }),
+        historial ? seccionHistorial(historial) : null)));
+  dialogo.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cerrar]')) dialogo.close();
+  });
+  dialogo.addEventListener('close', () => dialogo.remove());
+  document.body.append(dialogo);
+  dialogo.showModal();
+  return dialogo;
 }
 
 /**
@@ -121,7 +189,7 @@ function filaDato(termino, valor) {
  * @param {object} venta documento ventas/{id}
  * @param {{ tienda?: object, config?: object, alVerTurno?: (turnoId: string) => void }} [opciones]
  */
-export function abrirTicket(venta, { tienda = null, config = {}, alVerTurno = null } = {}) {
+export function abrirTicket(venta, { tienda = null, config = {}, alVerTurno = null, historial = null } = {}) {
   const devolucion = venta.tipo === 'devolucion';
   const recibo = reciboVenta(venta, { tienda, config });
   recibo.classList.add('recibo--vista');
@@ -158,7 +226,7 @@ export function abrirTicket(venta, { tienda = null, config = {}, alVerTurno = nu
         h('h2', null, `Ticket ${venta.folio} `, devolucion ? chip('Devolución', 'alerta') : null),
         h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
       h('div', { class: 'editor__cuerpo editor__cuerpo--ticket' },
-        h('div', null, datos, lineas),
+        h('div', null, datos, lineas, historial ? seccionHistorial(historial) : null),
         h('div', { class: 'vista-recibo-bo' }, recibo)),
       h('footer', { class: 'editor__pie' },
         h('button', { type: 'button', class: 'boton', 'data-reimprimir': '', text: 'Reimprimir recibo' }),

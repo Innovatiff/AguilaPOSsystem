@@ -20,7 +20,7 @@ import {
   leerConfigPos, leerCaja, listarCajas, leerTienda, leerTurno,
   observarConfigPos, observarCaja, observarTienda, observarTurno,
   turnosAbiertosDe, abrirTurno, cerrarTurno, leerTurnoCompleto,
-  observarVentasDeTurno, observarMovimientosDeTurno, guardarVenta, registrarMovimiento,
+  observarVentasDeTurno, observarMovimientosDeTurno, guardarVenta, registrarMovimiento, registrarEvento,
   comprobarSecretoEnServidor, autorizarComoAdmin,
 } from './pos-datos.js';
 import { configConDefectos } from './config-pos.js';
@@ -398,6 +398,7 @@ async function prepararTurno(personal, nip) {
   ocupadoAcceso(true, 'Abriendo turno…');
   const turnoId = await abrirTurno({ caja, tienda, personal, fondoCentavos: fondo });
   const turno = await leerTurno(turnoId);
+  registrarEvento({ turno, personal, tipo: 'turno_abierto', texto: `Turno abierto con ${dinero(fondo)} de fondo`, importeCentavos: fondo });
   await guardarVerificadorNip(personal, turno, nip);
   imprimirSeguro(comprobanteApertura(turno, { tienda, config }));
   await iniciarVenta(turno);
@@ -417,8 +418,12 @@ async function guardarVerificadorNip(personal, turno, nip) {
 
 // ===================================================================== venta: arranque y salida
 
+/** Identificador local del ticket: une sus movimientos en vivo (eventos/) en el historial de auditoría. */
+const idTicket = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
 function nuevoTicket() {
   return {
+    id: idTicket(),
     turno: estado.turno?.id ?? null,
     lineas: [],
     descuentoTicket: null,
@@ -818,14 +823,45 @@ function cambio() {
   pintarTicket();
 }
 
+// ---------------------------------------------------------------- movimientos en vivo
+
+/** Un movimiento de la caja (ver registrarEvento). Por defecto, del ticket en curso. */
+function evento(tipo, texto, { importeCentavos = null, folio = null, ticket = estado.ticket } = {}) {
+  registrarEvento({ turno: estado.turno, personal: estado.personal, tipo, texto, importeCentavos, folio, ticket: ticket?.id ?? null });
+}
+
+/** "2× TAJIN CLASICO", "1.530 kg CHILES POBLANOS" (`piezas`: las que se agregaron, si no es toda la línea). */
+function cantidadYNombre(linea, piezas = linea.cantidad) {
+  return linea.unidad === 'peso' ? `${formatearPeso(Math.abs(linea.pesoGramos))} ${linea.nombre}` : `${Math.abs(piezas)}× ${linea.nombre}`;
+}
+
+/** Importe de la línea (o de `piezas` de ella) antes de descuentos, en positivo. */
+function importeDe(linea, piezas = null) {
+  if (piezas !== null && linea.unidad !== 'peso') return Math.abs(piezas) * linea.precioUnitarioCentavos;
+  return Math.abs(importeBruto(linea));
+}
+
+function eventoArticulo(linea, piezas = linea.cantidad) {
+  const importe = importeDe(linea, piezas);
+  evento('articulo', `${cantidadYNombre(linea, piezas)} — ${dinero(importe)}`, { importeCentavos: importe });
+}
+
+function eventoCantidad(linea) {
+  const importe = importeDe(linea);
+  evento('cantidad', `Ahora ${cantidadYNombre(linea)} — ${dinero(importe)}`, { importeCentavos: importe });
+}
+
 function agregarLinea(linea) {
   if (estado.ticket.lineas.length >= LIMITES_TICKET.lineas) throw fallo('El ticket llegó al máximo de 300 líneas: cóbralo y abre otro.');
   if (estado.cobrado) ocultarCobrado();
+  const primera = estado.ticket.lineas.length === 0 && estado.ticket.modo !== 'devolucion';
   estado.ticket.lineas.push(linea);
   estado.seleccion = linea.id;
   estado.resaltar = linea.id;
   cambio();
   sonar('ok');
+  if (primera) evento('venta_iniciada', `Venta iniciada en ${estado.turno.cajaNombre}`);
+  eventoArticulo(linea);
 }
 
 function pedirPeso(producto) {
@@ -900,6 +936,7 @@ async function agregarProducto(producto, { precioEtiqueta = null, upc = null } =
       estado.resaltar = existente.id;
       cambio();
       sonar('ok');
+      eventoArticulo(existente, cantidad);
       return;
     }
   }
@@ -990,6 +1027,7 @@ async function accionLinea(accion) {
   }
   estado.resaltar = linea.id;
   cambio();
+  eventoCantidad(linea);
   return undefined;
 }
 
@@ -1008,6 +1046,7 @@ async function cambiarCantidad(linea) {
   linea.cantidad = signo * cantidad;
   estado.resaltar = linea.id;
   cambio();
+  eventoCantidad(linea);
 }
 
 async function cambiarPeso(linea) {
@@ -1017,6 +1056,7 @@ async function cambiarPeso(linea) {
   linea.pesoGramos = signo * gramos;
   estado.resaltar = linea.id;
   cambio();
+  eventoCantidad(linea);
 }
 
 async function cambiarPrecio(linea) {
@@ -1031,9 +1071,11 @@ async function cambiarPrecio(linea) {
       const autorizado = await asegurarAutorizacion('modificacion', `Venta libre de ${dinero(nuevo)} en ${linea.nombre} (más de ${dinero(limite)})`);
       if (!autorizado) return;
     }
+    const antes = linea.precioUnitarioCentavos;
     linea.precioUnitarioCentavos = nuevo;
     estado.resaltar = linea.id;
     cambio();
+    evento('precio', `${linea.nombre}: precio tecleado corregido de ${dinero(antes)} a ${dinero(nuevo)}`, { importeCentavos: nuevo });
     return;
   }
   const original = linea.precioOriginalCentavos ?? linea.precioUnitarioCentavos;
@@ -1046,10 +1088,12 @@ async function cambiarPrecio(linea) {
   const tipo = devolucion ? 'devolucion' : 'modificacion';
   const autorizado = await asegurarAutorizacion(tipo, `Cambio de precio: ${linea.nombre} ${dinero(original)}${porKg} → ${dinero(nuevo)}${porKg}`);
   if (!autorizado) return;
+  const anterior = linea.precioUnitarioCentavos;
   linea.precioUnitarioCentavos = nuevo;
   linea.precioOriginalCentavos = nuevo === original ? null : original;
   estado.resaltar = linea.id;
   cambio();
+  evento('precio', `${linea.nombre}: ${dinero(anterior)}${porKg} → ${dinero(nuevo)}${porKg} (catálogo ${dinero(original)}${porKg})`, { importeCentavos: nuevo });
 }
 
 function pedirDescuento({ titulo, baseCentavos }) {
@@ -1132,6 +1176,7 @@ async function descuentoLinea(linea) {
       linea.descuento = null;
       estado.resaltar = linea.id;
       cambio();
+      evento('descuento', `Se quitó el descuento de ${linea.nombre}`);
       return;
     }
   }
@@ -1142,6 +1187,7 @@ async function descuentoLinea(linea) {
   linea.descuento = descuento;
   estado.resaltar = linea.id;
   cambio();
+  evento('descuento', `Descuento de ${describirDescuento(descuento)} a ${linea.nombre}`);
 }
 
 async function descuentoTicket() {
@@ -1158,6 +1204,7 @@ async function descuentoTicket() {
     if (opcion === 'quitar') {
       t.descuentoTicket = null;
       cambio();
+      evento('descuento', 'Se quitó el descuento a todo el ticket');
       return;
     }
   }
@@ -1168,6 +1215,7 @@ async function descuentoTicket() {
   if (!autorizado) return;
   t.descuentoTicket = descuento;
   cambio();
+  evento('descuento', `Descuento de ${describirDescuento(descuento)} a todo el ticket`);
 }
 
 function anularLinea(linea) {
@@ -1180,6 +1228,8 @@ function anularLinea(linea) {
   estado.seleccion = null;
   cambio();
   avisar(`Línea anulada: ${linea.nombre}`, 'info', 2200);
+  const importe = Math.abs(detalle?.importeCentavos ?? importeDe(linea));
+  evento('articulo_anulado', `${cantidadYNombre(linea)} — ${dinero(importe)}`, { importeCentavos: importe });
 }
 
 function moverSeleccion(delta) {
@@ -1203,6 +1253,7 @@ async function asegurarAutorizacion(tipo, detalle) {
   estado.ticket.autorizacion = { id: resultado.id, admin: resultado.admin, nombre: resultado.nombreAdmin, tipo };
   cambio();
   avisar(`Autorizado por ${resultado.nombreAdmin}.`, 'ok');
+  evento('autorizacion', `${resultado.nombreAdmin} autorizó: ${detalle}`);
   return true;
 }
 
@@ -1289,6 +1340,7 @@ async function alternarDevolucion() {
   cambio();
   pintarEntrada();
   avisar('Modo devolución: escanea los artículos que regresa el cliente.', 'aviso');
+  evento('devolucion_iniciada', folio ? `Devolución del ticket ${folio}` : 'Devolución sin recibo');
 }
 
 function ticketsEnEspera() {
@@ -1305,6 +1357,7 @@ function guardarEnEspera() {
   if (lista.length >= local.MAXIMO_EN_ESPERA) throw fallo(`Ya hay ${local.MAXIMO_EN_ESPERA} tickets en espera: recupera o cobra alguno.`);
   lista.push({ id: `e${Date.now().toString(36)}`, turno: estado.turno.id, guardadoEn: Date.now(), ticket: estado.ticket });
   local.guardarEspera(estado.turno.caja, lista);
+  evento('espera', `Ticket en espera — ${resumenTicket(estado.ticket)}`);
   estado.ticket = nuevoTicket();
   estado.seleccion = null;
   cambio();
@@ -1324,6 +1377,7 @@ function recuperarDeEspera(id) {
   cambio();
   pintarEntrada();
   avisar('Ticket recuperado.', 'ok');
+  evento('recuperada', `Ticket recuperado — ${resumenTicket(estado.ticket)}`);
 }
 
 async function enEspera() {
@@ -1375,6 +1429,7 @@ async function cancelarTicket() {
   });
   if (!seguro) return;
   registrarCancelacion(t, `${Math.abs(calculo.articulos)} artículo(s)`);
+  evento('venta_cancelada', `Venta cancelada — ${dinero(Math.abs(calculo.totalCentavos))} (${Math.abs(calculo.articulos)} artículos)`, { importeCentavos: Math.abs(calculo.totalCentavos), ticket: t });
   estado.ticket = nuevoTicket();
   estado.seleccion = null;
   cambio();
@@ -1440,6 +1495,7 @@ function finalizarVenta(calculo, pagos) {
     console.error(error);
     avisar(`El servidor rechazó el ticket ${venta.folio}: ${mensajeDe(error)}. Avisa a un administrador.`, 'error', 0);
   });
+  eventosDeCobro(venta, t);
   estado.ultimaVenta = { id, ...venta };
   estado.ticket = nuevoTicket();
   estado.seleccion = null;
@@ -1449,6 +1505,29 @@ function finalizarVenta(calculo, pagos) {
   pintarTicket();
   pintarEntrada();
   sonar('venta');
+}
+
+/** Movimientos en vivo del cobro: cada pago con lo que queda por cobrar, y la venta (o devolución) completada. */
+function eventosDeCobro(venta, ticket) {
+  const devolucion = venta.tipo === 'devolucion';
+  let saldo = Math.abs(venta.totalCentavos + venta.redondeoCentavos);
+  for (const p of venta.pagos) {
+    saldo = Math.max(0, saldo - Math.abs(p.importeCentavos));
+    const metodo = NOMBRE_METODO[p.metodo] ?? p.metodo;
+    const monto = Math.abs(p.metodo === 'efectivo' && p.recibidoCentavos ? p.recibidoCentavos : p.importeCentavos);
+    evento('pago', devolucion
+      ? `Reembolso en ${metodo.toLowerCase()} ${dinero(Math.abs(p.importeCentavos))} de ${venta.folio}`
+      : `${metodo} ${dinero(monto)} en ${venta.folio} (saldo ${dinero(saldo)})`, { importeCentavos: p.importeCentavos, folio: venta.folio, ticket });
+  }
+  const metodos = [...new Set(venta.pagos.map((p) => (NOMBRE_METODO[p.metodo] ?? p.metodo).toLowerCase()))].join(' + ') || 'sin pago';
+  const articulos = Math.abs(venta.articulos);
+  if (devolucion) {
+    evento('devolucion_completada', `Devolución ${venta.folio} — ${dinero(venta.totalCentavos)} (${articulos} artículos, reembolso ${metodos})${venta.ventaOriginal ? `, del ticket ${venta.ventaOriginal}` : ''}`,
+      { importeCentavos: venta.totalCentavos, folio: venta.folio, ticket });
+  } else {
+    evento('venta_completada', `Venta ${venta.folio} completada — ${dinero(venta.totalCentavos)} (${articulos} artículos, ${metodos})${venta.cambioCentavos > 0 ? `, cambio ${dinero(venta.cambioCentavos)}` : ''}`,
+      { importeCentavos: venta.totalCentavos, folio: venta.folio, ticket });
+  }
 }
 
 function imprimirVenta(venta, { copia = false } = {}) {
@@ -1559,6 +1638,7 @@ async function movimientoEfectivo(tipo) {
   movimiento.promesa.catch((error) => avisar(`No se pudo guardar el movimiento: ${mensajeDe(error)}`, 'error', 0));
   imprimirSeguro(comprobanteMovimiento(movimiento.datos, { tienda: estado.tienda, config: estado.config, turno: estado.turno }));
   avisar(`${NOMBRE_MOVIMIENTO[tipo]} de ${dinero(datos.importeCentavos)} registrado.`, 'ok');
+  evento('efectivo', `${NOMBRE_MOVIMIENTO[tipo]} de ${dinero(datos.importeCentavos)}${datos.motivo ? ` — ${datos.motivo}` : ''}`, { importeCentavos: datos.importeCentavos, ticket: null });
 }
 
 async function abrirCajon() {
@@ -1572,6 +1652,7 @@ async function abrirCajon() {
   const movimiento = registrarMovimiento({ turno: estado.turno, personal: estado.personal, tipo: 'apertura', importeCentavos: 0, motivo: motivo || null });
   movimiento.promesa.catch((error) => avisar(`No se pudo registrar la apertura: ${mensajeDe(error)}`, 'error', 0));
   imprimirSeguro(comprobanteMovimiento(movimiento.datos, { tienda: estado.tienda, config: estado.config, turno: estado.turno }));
+  evento('efectivo', `Apertura de cajón sin venta${motivo ? ` — ${motivo}` : ''}`, { importeCentavos: 0, ticket: null });
 }
 
 async function corteX() {
@@ -1644,6 +1725,13 @@ async function completarCierre({ turno, ventas, movimientos, config, tienda, con
     throw fallo(`El servidor no aceptó el cierre del turno: ${mensajeDe(error)}`);
   }
   promesa.catch((error) => avisar(`El cierre del turno no se pudo guardar: ${mensajeDe(error)}. Avisa a un administrador.`, 'error', 0));
+  registrarEvento({
+    turno,
+    personal: estado.personal,
+    tipo: 'turno_cerrado',
+    texto: `${quien !== turno.cajero ? `Turno de ${turno.cajeroNombre} cerrado por ${estado.personal?.nombre ?? quien}` : 'Turno cerrado'} — vendido ${dinero(resumen.totalCentavos)}, contado ${dinero(conteo.totalCentavos)}, diferencia ${dinero(diferencia)}`,
+    importeCentavos: conteo.totalCentavos,
+  });
   const cerrado = { ...turno, estado: 'cerrado', cerradoEn: ahora, cerradoPor: quien, cierreForzado: quien !== turno.cajero, efectivoContadoCentavos: conteo.totalCentavos };
   const imprimirZ = () => imprimirSeguro(reciboTurno(cerrado, resumen, { tienda, config, tipo: 'Z', contadoCentavos: conteo.totalCentavos, ahora }));
   imprimirZ();
@@ -1686,6 +1774,7 @@ async function cerrarMiTurno() {
     const movimientos = [...estado.movimientos];
     for (const t of espera) {
       const m = registrarCancelacion(t.ticket, 'Ticket en espera cancelado al cerrar el turno');
+      evento('venta_cancelada', `Ticket en espera cancelado al cerrar el turno — ${dinero(m.datos.importeCentavos)}`, { importeCentavos: m.datos.importeCentavos, ticket: t.ticket });
       if (!movimientos.some((x) => x.id === m.id)) movimientos.push({ id: m.id, ...m.datos });
     }
     local.borrarEspera(estado.turno.caja);

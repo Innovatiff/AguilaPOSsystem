@@ -55,8 +55,8 @@ const CAPTURA = '078949000115';
   await page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
   v.ok('con el permiso entra con su correo y su NIP al Catálogo («Productos · Águila Catálogo»)', (await page.title()) === 'Productos · Águila Catálogo');
   const enlaces = await page.$$eval('#navegacion a', (l) => l.map((a) => a.pathname));
-  v.ok('el menú solo tiene el Catálogo: Productos, Captura rápida, Etiquetas y Mis solicitudes; nada del back office',
-    JSON.stringify(enlaces) === JSON.stringify(['/catalogo/index.html', '/catalogo/index.html', '/catalogo/captura.html', '/catalogo/etiquetas.html', '/catalogo/solicitudes.html']), enlaces.join(' '));
+  v.ok('el menú solo tiene el Catálogo: Productos, Recibir mercancía, Captura rápida, Etiquetas y Mis solicitudes; nada del back office',
+    JSON.stringify(enlaces) === JSON.stringify(['/catalogo/index.html', '/catalogo/index.html', '/catalogo/inventario.html', '/catalogo/captura.html', '/catalogo/etiquetas.html', '/catalogo/solicitudes.html']), enlaces.join(' '));
   v.ok('arriba dice Catálogo y abajo su nombre y correo, con Cerrar sesión', /Catálogo/.test(await page.textContent('.marca__sub')) && /María López/.test(await page.textContent('.usuario__nombre')) && /maria@aguila\.test/.test(await page.textContent('.usuario__nombre')));
   v.ok('el botón de alta dice «Pedir alta de producto»', /Pedir alta de producto/.test(await page.textContent('#btn-nuevo')));
   await page.screenshot({ path: `${c.SALIDA}/catalogo-productos.png` });
@@ -181,6 +181,48 @@ const CAPTURA = '078949000115';
   let tajinImpreso = null;
   for (let i = 0; i < 20 && tajinImpreso?.ultimoPrecioImpresoCentavos !== 499; i += 1) { tajinImpreso = await c.leerDoc('products/p-tajin'); if (tajinImpreso?.ultimoPrecioImpresoCentavos !== 499) await new Promise((r) => setTimeout(r, 300)); }
   v.ok('imprime etiquetas: queda anotado el precio impreso (el vigente), sin tocar el precio', tajinImpreso?.ultimoPrecioImpresoCentavos === 499 && tajinImpreso.precioCentavos === 499 && tajinImpreso.actualizadoPor === c.EMPLEADA.codigo, JSON.stringify({ impreso: tajinImpreso?.ultimoPrecioImpresoCentavos, por: tajinImpreso?.actualizadoPor }));
+
+  // ---- recibir mercancía: el personal registra lo que llegó; anularlo es del admin
+  await page.click('#navegacion a[href$="catalogo/inventario.html"]');
+  await page.waitForURL(/\/catalogo\/inventario\.html$/);
+  await page.waitForSelector('#contenido:not([hidden])');
+  await page.waitForTimeout(1500); // el catálogo se sincroniza
+  v.ok('«Recibir mercancía» abre en el Catálogo («Recibir mercancía · Águila Catálogo»)', (await page.title()) === 'Recibir mercancía · Águila Catálogo' && (await page.textContent('h1')) === 'Recibir mercancía', await page.title());
+  await page.fill('#r-codigo', '6*633148100013');
+  await page.press('#r-codigo', 'Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 1, null, { timeout: 10000 });
+  await page.fill('#r-proveedor', 'Distribuidora del Sur');
+  await page.fill('#r-referencia', 'REM-77');
+  await page.click('#btn-registrar');
+  await page.waitForFunction(() => /Entrada registrada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const recibida = [...(await c.leerColeccion('recepciones')).entries()][0];
+  v.ok('registra la entrega firmada con su número (las reglas la aceptan)', recibida?.[1].recibidoPor === c.EMPLEADA.codigo && recibida[1].piezas === 6 && recibida[1].lineas[0].producto === 'p-tajin' && recibida[1].proveedor === 'Distribuidora del Sur', JSON.stringify(recibida ?? []).slice(0, 240));
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-entregas tbody tr').length === 1, null, { timeout: 15000 });
+  v.ok('ve lo que llegó por producto', /TAJIN CLASICO[\s\S]*6 piezas/.test(await page.textContent('#tabla-productos tbody')));
+  await page.click('#tabla-entregas tbody tr');
+  await page.waitForSelector('dialog.editor--entrega[open]');
+  v.ok('abre la entrega pero sin «Anular entrada»', /REM-77/.test(await page.textContent('dialog.editor--entrega')) && (await page.$$('#btn-anular-entrega')).length === 0);
+  await page.screenshot({ path: `${c.SALIDA}/catalogo-recibir.png`, fullPage: true });
+  await page.click('dialog.editor--entrega [data-cerrar]');
+  const anularPersonal = await page.evaluate(async (id) => {
+    const { db, doc, updateDoc, serverTimestamp } = await import('/js/firebase.js');
+    try {
+      await updateDoc(doc(db, 'recepciones', id), { anulada: true, anuladaPor: '100123', anuladaEn: serverTimestamp() });
+      return 'aceptado';
+    } catch (error) {
+      return error.code;
+    }
+  }, recibida?.[0]);
+  v.ok('con el SDK de la página, anular la entrega se rechaza (reglas)', anularPersonal === 'permission-denied', anularPersonal);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.fill('#r-codigo', '049000006346');
+  await page.press('#r-codigo', 'Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 1, null, { timeout: 10000 });
+  const desborde = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  v.ok('en el teléfono, «Recibir mercancía» cabe sin desplazarse de lado', desborde <= 0, String(desborde));
+  await page.screenshot({ path: `${c.SALIDA}/catalogo-recibir-movil.png`, fullPage: true });
+  await page.click('#btn-descartar');
+  await page.setViewportSize({ width: 1280, height: 820 });
 
   // ---- mis solicitudes
   await page.click('#navegacion a[href$="catalogo/solicitudes.html"]');

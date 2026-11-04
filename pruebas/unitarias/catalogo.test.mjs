@@ -16,9 +16,9 @@ describe('app Catálogo: páginas generadas', () => {
     assert.match(html, /<title>Productos · Águila Catálogo<\/title>/);
   });
   it('ninguna página del Catálogo enlaza al back office', () => {
-    for (const ruta of ['catalogo/index.html', 'catalogo/captura.html', 'catalogo/etiquetas.html', 'catalogo/solicitudes.html', 'catalogo/entrar.html']) {
+    for (const ruta of ['catalogo/index.html', 'catalogo/captura.html', 'catalogo/etiquetas.html', 'catalogo/inventario.html', 'catalogo/solicitudes.html', 'catalogo/entrar.html']) {
       const html = readFileSync(ruta, 'utf8');
-      assert.doesNotMatch(html, /href="(\.\.\/)?(index|ventas|turnos|reportes|productos|captura|imprimir|solicitudes|cuenta)\.html"/, ruta);
+      assert.doesNotMatch(html, /href="(\.\.\/)?(index|ventas|movimientos|transacciones|inventario|turnos|reportes|productos|captura|imprimir|solicitudes|cuenta)\.html"/, ruta);
       assert.doesNotMatch(html, /href="(\.\.\/)?gestion\//, ruta);
     }
   });

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Movimientos en vivo · Águila POS</title>
+  <link rel="icon" href="icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <script type="module" src="js/bo-movimientos.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <form class="filtros" id="filtros" novalidate>
+      <div class="campo">
+        <label for="f-dia">Día</label>
+        <input id="f-dia" type="date" required>
+      </div>
+      <div class="filtros__presets" role="group" aria-label="Día rápido">
+        <button type="button" class="boton boton--chip" data-dia="0">Hoy</button>
+        <button type="button" class="boton boton--chip" data-dia="-1">Ayer</button>
+      </div>
+      <div class="campo">
+        <label for="f-caja">Caja</label>
+        <select id="f-caja"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-cajero">Asociado</label>
+        <select id="f-cajero"><option value="">Todos</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-grupo">Tipo</label>
+        <select id="f-grupo"><option value="">Todos</option></select>
+      </div>
+    </form>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="panel panel--12 movimientos-panel" aria-labelledby="titulo-movimientos">
+      <header class="movimientos-panel__cabecera">
+        <div>
+          <h1 id="titulo-movimientos">Movimientos en vivo <span class="en-vivo" id="en-vivo">En vivo</span></h1>
+          <p class="nota">Cada movimiento de las cajas conforme ocurre. Lo más reciente primero.</p>
+        </div>
+        <button type="button" class="boton boton--claro" id="btn-todos">Ver todos los movimientos</button>
+      </header>
+      <ol class="movimientos" id="lista-movimientos" aria-live="polite"></ol>
+      <p class="nota" id="vacio" hidden>Todavía no hay movimientos.</p>
+      <p class="nota movimientos__pie" id="pie"></p>
+    </section>
+  </main>
+</body>
+</html>

@@ -10,9 +10,9 @@ Four apps share the site, the data and the service worker:
 
 | app | where | who | what |
 |---|---|---|---|
-| **Back office** | site root (`index.html`, `ventas.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `gestion/`) | **admins only** | today's sales live, sales journal and reprints, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, employees, registers, stores, POS settings |
+| **Back office** | site root (`index.html`, `movimientos.html`, `transacciones.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `inventario.html`, `gestion/`) | **admins only** | today's sales live, **live register activity**, **transactions with receipts and audit history**, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, **inventory: what came in and how much**, employees, registers, stores, POS settings |
 | **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours |
-| **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
+| **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, **receive deliveries** (what came in, how many), and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
 | **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner) |
 
 ## Layout
@@ -20,12 +20,14 @@ Four apps share the site, the data and the service worker:
 | path | what |
 |---|---|
 | `index.html`, `js/inicio.js` | back office home: sold today, tickets, average ticket, HST, sales by hour, payment methods, registers with an open shift, latest tickets |
-| `ventas.html`, `js/bo-ventas.js` | sales journal of a day: filters, search by receipt number (or scan the receipt), ticket detail with reprint, CSV |
+| `movimientos.html`, `js/bo-movimientos.js`, `js/eventos.js` | live register activity (`eventos/`): every sale started, item added, price change, discount, void, approval, payment, completed sale, cancellation, return, cash movement and shift open/close, newest first, as it happens |
+| `transacciones.html`, `js/bo-transacciones.js` | every completed, voided (cancelled ticket) or returned transaction of a date range: filters (associate, register, status, audit flags, payment method), search by receipt number or item name (or scan the receipt), receipt with reprint and its audit history, CSV. `ventas.html` redirects here |
+| `inventario.html`, `js/pantalla-inventario.js`, `js/inventario.js`, `js/recepciones.js` | receive deliveries (scan or search products, pieces or kg, supplier, invoice) and see what came in: per product (how much, in how many deliveries, last one, suppliers) and per delivery; admins can void a delivery; CSV. Also in the Catálogo app as **Recibir mercancía** |
 | `turnos.html`, `js/bo-turnos.js` | open shifts now and shifts of a period: hours, sales, expected/counted cash, over/short; shift detail with its Z (or X) report, verification against the sales, admin close |
 | `reportes.html`, `js/bo-reportes.js` | reports of a period from the shift summaries: totals, tax, by day, payment methods, by person (hours), by register, top products, department sales, control counters; print and CSV |
 | `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees (email, PIN, Catálogo permission), CSV import/export |
 | `solicitudes.html`, `js/gestion-solicitudes.js`, `js/solicitudes.js` | requests from the Catálogo app: add a product (the admin sets price and tax class) or remove one; badge with the pending count in the sidebar |
-| `catalogo/`, `js/catalogo-solicitudes.js`, `herramientas/paginas-catalogo.mjs` | the staff Catálogo app: `entrar.html` (email + PIN), products, quick capture, tags, my requests. Its products, capture and tags pages are generated from the back office ones (`node herramientas/paginas-catalogo.mjs`; a unit test checks they are up to date); the shared screens switch to staff mode by app and role |
+| `catalogo/`, `js/catalogo-solicitudes.js`, `herramientas/paginas-catalogo.mjs` | the staff Catálogo app: `entrar.html` (email + PIN), products, receive deliveries, quick capture, tags, my requests. Its products, inventory, capture and tags pages are generated from the back office ones (`node herramientas/paginas-catalogo.mjs`; a unit test checks they are up to date); the shared screens switch to staff mode by app and role |
 | `js/nip.js`, `js/clave-caja.js` | PIN-only sign-in at the register: HMAC of the PIN with the register key (`secretos/caja`) |
 | `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
 | `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
@@ -167,11 +169,26 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
   ticket, HST collected, sales by hour (chart with its table), payment methods,
   which registers have a shift open and how much they sold, the latest tickets.
   Live, and it rolls over to the new day at midnight.
-- **Ventas**: every ticket of a day, live, with totals; filters by register,
-  person, type (sales, returns, approved, discounted) and payment method. Search
-  by receipt number, or scan the barcode printed on the receipt, to open any
-  ticket of any day: lines, payments, change, who approved, the receipt as it
-  printed, **Reimprimir** (marked COPIA). CSV export of the day.
+- **Movimientos en vivo**: each register action as it happens, newest first:
+  time with seconds, what happened (Venta iniciada, Artículo agregado, Pago,
+  Venta completada, Venta cancelada, Artículo anulado, Precio cambiado,
+  Descuento, Autorización, Devolución, Efectivo, Turno abierto/cerrado), who,
+  which register and the detail ("Venta 261104-01-0001 completada — $17.51 (4
+  artículos, efectivo), cambio $0.49"). Completed sales and payments in green,
+  voids and cancellations in red; new rows slide in highlighted. Filters by
+  day, register, associate and type; by default the latest 60 of the day,
+  **Ver todos los movimientos** brings the whole day. A row with a receipt
+  opens its transaction.
+- **Transacciones**: every completed, voided (cancelled ticket, no receipt) or
+  returned transaction of a range (Hoy, 7 días, 14 días or any dates, up to 31
+  days), live: receipt, when ("mié, 4 de nov 01:19 p.m."), associate, register,
+  items, payment methods, audit flags (discount, price change, voided items,
+  approved, open-price sale, return without receipt), status and total.
+  Filters for each column and a search by receipt number or item name; scan
+  the receipt barcode to open any ticket of any day. A transaction opens its
+  receipt as printed, **Reimprimir** (marked COPIA) and its **audit history**:
+  every live movement of that ticket, in order. CSV export.
+  (`ventas.html` now redirects here.)
 - **Turnos**: shifts open right now, and the shifts of a period with hours at
   the register, tickets, sales, expected cash, counted cash and the difference
   (over/short). The detail shows the Z report (X if still open), the tickets and
@@ -186,8 +203,22 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
   control counters (voided lines, cancelled tickets, discounts, price changes,
   approvals, drawer openings, cash drops, payouts). Print or CSV. Shifts still
   open are listed and join the report when they close.
-- **Catálogo**: Productos, Captura rápida, Etiquetas, Prueba de etiquetas,
-  Importar / exportar (unchanged, see below).
+- **Catálogo**: Productos, Solicitudes, Captura rápida, Etiquetas, Prueba de
+  etiquetas, Importar / exportar (see below), and **Inventario**:
+  - *Recibir mercancía*: store, supplier, invoice or delivery note, note; scan
+    each product with the USB scanner (or the phone camera) or find it by PLU
+    or name. Scanning the same product again adds one piece; `24*` before the
+    code adds 24. Weighed products ask for the kilos. A barcode that is not in
+    the catalog can still be received with a typed name ("sin registrar").
+    What has been scanned survives a page reload until it is registered.
+  - *Lo que llegó*: for Hoy, 7 or 30 days or any dates (up to 92), filtered by
+    store, supplier or a search: deliveries, pieces, kilos and distinct
+    products; **por producto** how much came in, in how many deliveries, the
+    last one and from which suppliers; and each **entrega** with its lines.
+    An admin can **Anular entrada** (it stays visible, struck through, and
+    stops counting). CSV export, one row per line.
+  Deliveries do not change the products' `existencias`: the catalog schema is
+  untouched.
 - **Empleados**, **Cajas**, **Tiendas**, **Configuración** (see setup).
 
 ## The register (`/caja/`)
@@ -285,6 +316,8 @@ back office catalog, in staff mode:
   An unknown barcode offers **Pedir alta con este UPC**: the form has no price;
   the product enters the catalog when an admin sets its price.
 - **Captura rápida**: scan, name, brand, size, Enter: the request is sent.
+- **Recibir mercancía**: the back office Inventario screen: register what
+  came in and see what came in. Voiding a delivery is for admins only.
 - **Etiquetas**: print pending shelf tags (the printed price is recorded).
 - **Mis solicitudes**: each request with its status and the admin's note.
 

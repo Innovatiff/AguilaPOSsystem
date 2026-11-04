@@ -25,6 +25,9 @@ const ICONOS = {
   configuracion: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
   caja: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
   solicitudes: 'M4 13h4l2 3h4l2-3h4M4 13l2.5-8h11L20 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z',
+  movimientos: 'M3 12h4l3-8 4 16 3-8h4',
+  transacciones: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
+  inventario: 'M2 6h12v10H2zM14 9h4l4 4v3h-8M6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
 };
 
 /** Secciones del back office, en grupos. */
@@ -33,7 +36,8 @@ const GRUPOS = [
   {
     titulo: 'Ventas',
     secciones: [
-      { href: 'ventas.html', texto: 'Ventas', icono: 'ventas' },
+      { href: 'movimientos.html', texto: 'Movimientos en vivo', icono: 'movimientos' },
+      { href: 'transacciones.html', texto: 'Transacciones', icono: 'transacciones' },
       { href: 'turnos.html', texto: 'Turnos', icono: 'turnos' },
       { href: 'reportes.html', texto: 'Reportes', icono: 'reportes' },
     ],
@@ -43,6 +47,7 @@ const GRUPOS = [
     secciones: [
       { href: 'productos.html', texto: 'Productos', icono: 'productos' },
       { href: 'solicitudes.html', texto: 'Solicitudes', icono: 'solicitudes', contador: true },
+      { href: 'inventario.html', texto: 'Inventario', icono: 'inventario' },
       { href: 'captura.html', texto: 'Captura rápida', icono: 'captura' },
       { href: 'imprimir.html', texto: 'Etiquetas', icono: 'etiquetas' },
       { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas', icono: 'prueba' },
@@ -66,6 +71,7 @@ const GRUPOS_CATALOGO = [
     titulo: 'Catálogo',
     secciones: [
       { href: 'catalogo/index.html', texto: 'Productos', icono: 'productos' },
+      { href: 'catalogo/inventario.html', texto: 'Recibir mercancía', icono: 'inventario' },
       { href: 'catalogo/captura.html', texto: 'Captura rápida', icono: 'captura' },
       { href: 'catalogo/etiquetas.html', texto: 'Etiquetas', icono: 'etiquetas' },
       { href: 'catalogo/solicitudes.html', texto: 'Mis solicitudes', icono: 'solicitudes' },

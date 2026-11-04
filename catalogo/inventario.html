@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<!-- Generada por herramientas/paginas-catalogo.mjs a partir de la página del back office. No editar a mano. -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Recibir mercancía · Águila Catálogo</title>
+  <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Catálogo">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/base.css">
+  <script type="module" src="../js/pantalla-inventario.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1 id="titulo-pagina">Inventario</h1>
+        <p class="nota">Lo que llega a la tienda: registra cada entrega y consulta qué llegó y cuánto.</p>
+      </div>
+    </div>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="panel panel--12 recepcion" aria-labelledby="titulo-recibir">
+      <header class="panel__cabecera">
+        <h2 id="titulo-recibir">Recibir mercancía</h2>
+        <span class="panel__nota">Escanea cada producto o búscalo por nombre o PLU. «24*» antes del código suma 24 piezas.</span>
+      </header>
+
+      <form id="form-datos" class="recepcion__datos" novalidate>
+        <div class="campo">
+          <label for="r-tienda">Tienda</label>
+          <select id="r-tienda"><option value="">Sin especificar</option></select>
+        </div>
+        <div class="campo">
+          <label for="r-proveedor">Proveedor</label>
+          <input id="r-proveedor" list="lista-proveedores" maxlength="80" autocomplete="off">
+          <datalist id="lista-proveedores"></datalist>
+        </div>
+        <div class="campo">
+          <label for="r-referencia">Factura o remisión</label>
+          <input id="r-referencia" maxlength="60" autocomplete="off">
+        </div>
+        <div class="campo recepcion__nota">
+          <label for="r-nota">Nota</label>
+          <input id="r-nota" maxlength="200" autocomplete="off">
+        </div>
+      </form>
+
+      <form id="form-codigo" class="recepcion__agregar" novalidate>
+        <div class="campo campo--grande recepcion__codigo">
+          <label for="r-codigo">Producto</label>
+          <input id="r-codigo" type="search" autocomplete="off" enterkeyhint="enter" spellcheck="false"
+                 placeholder="Escanea el código o escribe el PLU o el nombre" aria-controls="sugerencias" aria-autocomplete="list">
+        </div>
+        <button id="btn-camara" type="button" class="boton boton--secundario" hidden>Escanear con la cámara</button>
+      </form>
+      <ul id="sugerencias" class="recepcion__sugerencias" role="listbox" aria-label="Productos encontrados" hidden></ul>
+
+      <form id="form-nuevo" class="recepcion__nuevo" novalidate hidden>
+        <p id="nuevo-texto"></p>
+        <div class="campo">
+          <label for="nuevo-nombre">¿Qué llegó? (nombre)</label>
+          <input id="nuevo-nombre" maxlength="120" autocomplete="off">
+        </div>
+        <div class="acciones">
+          <button type="submit" class="boton">Agregar sin registrar</button>
+          <button type="button" class="boton boton--secundario" id="nuevo-cancelar">Cancelar</button>
+        </div>
+      </form>
+
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta recepcion__lineas" id="tabla-lineas" hidden>
+          <thead>
+            <tr><th>Producto</th><th class="num">Cantidad</th><th><span class="visualmente-oculto">Quitar</span></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota recepcion__vacio" id="lineas-vacio">Todavía no hay productos en esta entrada.</p>
+
+      <footer class="recepcion__pie">
+        <strong id="lineas-total" aria-live="polite"></strong>
+        <div class="acciones">
+          <button type="button" class="boton boton--secundario" id="btn-descartar" disabled>Descartar</button>
+          <button type="button" class="boton" id="btn-registrar" disabled>Registrar entrada</button>
+        </div>
+      </footer>
+    </section>
+
+    <h2 class="subtitulo-bo" id="titulo-llego">Lo que llegó</h2>
+    <form class="filtros filtros--inventario" id="filtros" novalidate>
+      <div class="segmentado" role="group" aria-label="Periodo rápido">
+        <button type="button" data-rango="1">Hoy</button>
+        <button type="button" data-rango="7">7 días</button>
+        <button type="button" data-rango="30">30 días</button>
+      </div>
+      <div class="campo">
+        <label for="f-desde">Desde</label>
+        <input id="f-desde" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-hasta">Hasta</label>
+        <input id="f-hasta" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-tienda">Tienda</label>
+        <select id="f-tienda"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-proveedor">Proveedor</label>
+        <select id="f-proveedor"><option value="">Todos</option></select>
+      </div>
+      <div class="campo campo--buscar">
+        <label for="f-buscar">Buscar</label>
+        <input id="f-buscar" type="search" autocomplete="off" placeholder="Producto, código, proveedor o factura">
+      </div>
+      <button type="button" class="boton boton--claro" id="btn-exportar">Exportar CSV</button>
+    </form>
+
+    <div class="kpis kpis--compactos inventario__kpis" id="kpis"></div>
+
+    <section class="panel panel--12 panel--separado" aria-labelledby="titulo-productos">
+      <header class="panel__cabecera">
+        <h2 id="titulo-productos">Por producto</h2>
+        <span class="panel__nota" id="contador-productos"></span>
+      </header>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--inventario" id="tabla-productos">
+          <thead>
+            <tr><th>Producto</th><th>Código</th><th class="num">Llegó</th><th class="num">Entregas</th><th>Última entrada</th><th>Proveedores</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio-productos" hidden>No llegó nada con esos filtros.</p>
+    </section>
+
+    <section class="panel panel--12" aria-labelledby="titulo-entregas">
+      <header class="panel__cabecera">
+        <h2 id="titulo-entregas">Entregas</h2>
+        <span class="panel__nota" id="contador-entregas"></span>
+      </header>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic tabla--inventario" id="tabla-entregas">
+          <thead>
+            <tr><th>Cuándo</th><th>Tienda</th><th>Proveedor</th><th>Factura o remisión</th><th>Recibió</th><th class="num">Productos</th><th class="num">Cantidad</th><th>Estado</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio-entregas" hidden>No hay entregas con esos filtros.</p>
+    </section>
+  </main>
+
+  <dialog id="escaner" class="escaner" aria-labelledby="escaner-titulo">
+    <header class="escaner__cabecera">
+      <h2 id="escaner-titulo">Escanear código</h2>
+      <button id="escaner-cerrar" class="boton boton--secundario" type="button">Cerrar</button>
+    </header>
+    <div class="escaner__visor">
+      <video id="escaner-video" playsinline muted autoplay></video>
+      <div class="escaner__marco" aria-hidden="true"></div>
+    </div>
+    <p id="escaner-estado" class="escaner__estado" role="status" aria-live="polite">Iniciando cámara…</p>
+    <div class="escaner__acciones">
+      <button id="escaner-linterna" class="boton boton--secundario" type="button" aria-pressed="false" hidden>Linterna</button>
+    </div>
+  </dialog>
+</body>
+</html>

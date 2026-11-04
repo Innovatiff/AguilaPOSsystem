@@ -288,6 +288,49 @@ large open-price sales; `devolucion` for returns), `turno`, `caja`, `cajero`,
 `admin`, `fecha` (server time), `detalle`. Only for an open shift of that
 cashier on that register. Immutable.
 
+### `eventos/{eventoId}`
+Live register activity for **Movimientos en vivo** and the audit history of
+each transaction. One document per action, written by the cashier's session
+(fire and forget: a failed write never blocks a sale) and immutable. Admins
+read; nobody updates or deletes. Fields, exactly:
+
+| field | type | notes |
+|---|---|---|
+| tipo | string | `venta_iniciada`, `articulo`, `cantidad`, `precio`, `descuento`, `articulo_anulado`, `autorizacion`, `espera`, `recuperada`, `venta_cancelada`, `pago`, `venta_completada`, `devolucion_iniciada`, `devolucion_completada`, `efectivo`, `turno_abierto`, `turno_cerrado` |
+| turno, caja, cajaNombre, numeroCaja, tienda | | the shift and register |
+| cajero, cajeroNombre | string | must be the signed-in user |
+| ticket | string \| null | local id of the ticket in progress (links every movement of one sale) |
+| folio | string \| null | receipt number, on `pago` and `venta_completada` / `devolucion_completada` |
+| texto | string ≤ 200 | what the feed shows: "Venta 261104-01-0001 completada — $17.51 (4 artículos, efectivo), cambio $0.49" |
+| importeCentavos | integer \| null | |
+| fecha | timestamp | register clock, strictly increasing per register (order within a ticket); not in the future |
+| registradoEn | timestamp | server time (`== request.time`); the feed orders by it |
+
+The history of a sale is found by its `folio` (→ `ticket` → every movement of
+that ticket); the history of a cancelled ticket (`movimientosCaja` tipo
+`cancelacion`) by the `venta_cancelada` movement of the same shift and amount.
+
+## Inventory
+
+### `recepciones/{recepcionId}`
+A delivery that came in (**Inventario → Recibir mercancía**, also in the
+Catálogo app). Created by an admin or staff with the Catálogo permission;
+read by both; only an admin can void it (once); nobody deletes it. It does
+**not** change the products' `existencias`. Fields, exactly:
+
+| field | type | notes |
+|---|---|---|
+| tienda | string \| null | store id |
+| proveedor | string \| null, ≤ 80 | supplier |
+| referencia | string \| null, ≤ 60 | invoice or delivery note |
+| nota | string \| null, ≤ 200 | |
+| lineas | list, 1–300 | `{ producto, nombre, upc, plu, cantidad, pesoGramos }`: `producto` is the product id or null for something not in the catalog yet (received with its barcode and a typed name); pieces in `cantidad` (integer 1–99 999, `pesoGramos` null) or weight in `pesoGramos` (integer grams, `cantidad` null). The app validates and merges the lines (`js/inventario.js`); the rules cannot loop over lists |
+| productos | integer | `== lineas.size()` |
+| piezas, gramos | integer ≥ 0 | totals of the lines |
+| recibidoPor, recibidoPorNombre | string | must be the signed-in user |
+| fecha | timestamp | server time (`== request.time`) |
+| anulada, anuladaPor, anuladaEn | bool, string \| null, timestamp \| null | `false, null, null` on create; an admin sets `true`, themself and server time |
+
 ### What stays on the register computer (localStorage)
 Which register the computer is, the ticket in progress and held tickets (they
 survive a reload or a power cut), the day's receipt counter of that register,
@@ -312,6 +355,9 @@ the client. UPC lookup is a separate exact match on `upc`.
 
 The POS queries need no composite index: they use equality filters only
 (`ventas` by `dia`, by `folio`, or by `turno` + `cajero`; `turnos` by
-`estado`, or `cajero` + `estado`; `movimientosCaja` by `turno` + `cajero`),
-which Firestore serves by merging single-field indexes, or a single-field
-range (`turnos` by `abiertoEn`).
+`estado`, or `cajero` + `estado`; `movimientosCaja` by `turno` + `cajero`;
+`eventos` by `ticket`, by `folio`, or by `turno` + `tipo`), which Firestore
+serves by merging single-field indexes, or a range on a single field
+(`turnos` by `abiertoEn`; `ventas` by `dia`; `movimientosCaja` by
+`registradoEn`; `eventos` by `registradoEn`, ordered by it; `recepciones` by
+`fecha`, ordered by it).

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Transacciones · Águila POS</title>
+  <link rel="icon" href="icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/recibo.css">
+  <script type="module" src="js/bo-transacciones.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina">
+      <div>
+        <h1>Transacciones</h1>
+        <p class="nota">Cada venta completada, anulada o devuelta con su recibo completo e historial de auditoría.</p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <button type="button" class="boton boton--claro" id="btn-exportar">Exportar CSV</button>
+      </div>
+    </div>
+
+    <form class="filtros filtros--transacciones" id="filtros" novalidate>
+      <div class="segmentado" role="group" aria-label="Periodo rápido">
+        <button type="button" data-rango="1">Hoy</button>
+        <button type="button" data-rango="7">7 días</button>
+        <button type="button" data-rango="14">14 días</button>
+      </div>
+      <div class="campo">
+        <label for="f-desde">Desde</label>
+        <input id="f-desde" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-hasta">Hasta</label>
+        <input id="f-hasta" type="date" required>
+      </div>
+      <div class="campo">
+        <label for="f-cajero">Asociado</label>
+        <select id="f-cajero"><option value="">Todos</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-caja">Caja</label>
+        <select id="f-caja"><option value="">Todas</option></select>
+      </div>
+      <div class="campo">
+        <label for="f-estado">Estado</label>
+        <select id="f-estado">
+          <option value="">Todos</option>
+          <option value="completada">Completada</option>
+          <option value="devuelta">Devuelta</option>
+          <option value="devolucion">Devolución</option>
+          <option value="anulada">Anulada</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="f-marca">Marca</label>
+        <select id="f-marca">
+          <option value="">Cualquiera</option>
+          <option value="descuento">Con descuento</option>
+          <option value="precio">Con cambio de precio</option>
+          <option value="anuladas">Con artículos anulados</option>
+          <option value="autorizada">Autorizada por un admin</option>
+          <option value="libre">Con venta libre (sin código)</option>
+          <option value="sin-recibo">Devolución sin recibo</option>
+          <option value="ninguna">Sin marcas</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="f-pago">Forma de pago</label>
+        <select id="f-pago">
+          <option value="">Cualquiera</option>
+          <option value="efectivo">Efectivo</option>
+          <option value="debito">Débito</option>
+          <option value="credito">Crédito</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="campo campo--buscar">
+        <label for="f-buscar">Buscar</label>
+        <input id="f-buscar" type="search" autocomplete="off" placeholder="Número de recibo o nombre del artículo">
+      </div>
+    </form>
+
+    <p id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+    <section class="panel panel--12" aria-labelledby="titulo-transacciones">
+      <header class="panel__cabecera">
+        <h2 id="titulo-transacciones">Transacciones</h2>
+        <span class="panel__nota" id="contador"></span>
+      </header>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic tabla--transacciones" id="tabla-transacciones">
+          <thead>
+            <tr><th>Recibo</th><th>Cuándo</th><th>Asociado</th><th>Caja</th><th class="num">Artículos</th><th>Formas de pago</th><th>Marcas</th><th>Estado</th><th class="num">Total</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio" hidden>No hay transacciones con esos filtros.</p>
+    </section>
+  </main>
+</body>
+</html>

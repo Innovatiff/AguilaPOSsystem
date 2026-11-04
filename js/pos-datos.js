@@ -17,6 +17,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   writeBatch,
   serverTimestamp,
@@ -272,6 +273,103 @@ export function guardarVenta(venta) {
 }
 
 /** Retiro, entrada, pago desde caja, apertura de cajón o ticket cancelado. */
+/**
+ * Movimientos en vivo (eventos/): cada acción de la caja conforme ocurre, a
+ * nombre de quien la hace. Alimentan la página «Movimientos en vivo» y el
+ * historial de auditoría de cada ticket. No se espera al servidor (sin
+ * conexión quedan en cola) y un fallo no detiene la venta: son informativos;
+ * lo que cuenta para el dinero son ventas, turnos y movimientos de caja.
+ */
+let ultimoEvento = 0; // la hora de cada movimiento crece siempre: el pago va antes que «venta completada» aunque caigan en el mismo milisegundo
+
+export function registrarEvento({ turno, personal, tipo, texto, importeCentavos = null, ticket = null, folio = null }) {
+  if (!turno?.id || !personal?.usuario) return;
+  ultimoEvento = Math.max(Date.now(), ultimoEvento + 1);
+  const datos = {
+    tipo,
+    turno: turno.id,
+    caja: turno.caja,
+    cajaNombre: String(turno.cajaNombre ?? '').slice(0, 40),
+    numeroCaja: Number.isInteger(turno.numeroCaja) ? turno.numeroCaja : 0,
+    tienda: String(turno.tienda ?? '').slice(0, 40),
+    cajero: personal.usuario,
+    cajeroNombre: String(personal.nombre ?? '').slice(0, 80),
+    ticket: ticket ? String(ticket).slice(0, 40) : null,
+    folio: folio ?? null,
+    texto: String(texto ?? '').slice(0, 200),
+    importeCentavos: Number.isSafeInteger(importeCentavos) ? importeCentavos : null,
+    fecha: Timestamp.fromMillis(ultimoEvento),
+    registradoEn: serverTimestamp(),
+  };
+  setDoc(doc(collection(db, 'eventos')), datos).catch((error) => console.warn('No se registró el movimiento en vivo', error?.code ?? error));
+}
+
+// ------------------------------------------------------------- back office: movimientos, transacciones
+
+const conDatos = (d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) });
+const milisDeFecha = (v) => (typeof v?.toMillis === 'function' ? v.toMillis() : 0);
+
+/**
+ * Movimientos en vivo entre dos instantes (Date; `hasta` excluido), los más
+ * recientes primero. `limite`: los últimos N (null = todos los del rango).
+ * Una sola condición de rango sobre registradoEn: no necesita índice compuesto.
+ * `alCambiar(lista, { desdeCache })`: la primera lista puede venir de la caché
+ * local; `desdeCache` false dice que ya es la del servidor.
+ */
+export function observarEventos({ desde, hasta, limite = null }, alCambiar, alFallar) {
+  const condiciones = [
+    where('registradoEn', '>=', Timestamp.fromDate(desde)),
+    where('registradoEn', '<', Timestamp.fromDate(hasta)),
+    orderBy('registradoEn', 'desc'),
+  ];
+  if (limite) condiciones.push(limit(limite));
+  return onSnapshot(query(collection(db, 'eventos'), ...condiciones), { includeMetadataChanges: true },
+    (r) => alCambiar(r.docs.map(conDatos), { desdeCache: r.metadata.fromCache }), alFallar);
+}
+
+/** Los movimientos de un ticket (por su identificador local), en el orden en que ocurrieron. */
+export async function eventosDeTicket(ticket) {
+  if (!ticket) return [];
+  const r = await getDocs(query(collection(db, 'eventos'), where('ticket', '==', ticket)));
+  return r.docs.map(conDatos).sort((a, b) => milisDeFecha(a.fecha) - milisDeFecha(b.fecha) || milisDeFecha(a.registradoEn) - milisDeFecha(b.registradoEn));
+}
+
+/** Historial de auditoría de una venta o devolución: sus movimientos, localizados por el folio. */
+export async function historialDeVenta(folio) {
+  const r = await getDocs(query(collection(db, 'eventos'), where('folio', '==', folio)));
+  const ticket = r.docs.map((d) => d.data().ticket).find(Boolean);
+  return ticket ? eventosDeTicket(ticket) : r.docs.map(conDatos);
+}
+
+/**
+ * Historial de un ticket cancelado (movimientosCaja tipo cancelacion): el
+ * movimiento en vivo «venta cancelada» del mismo turno con el mismo importe y
+ * la hora más cercana, y con él todos los del ticket. Dos igualdades: Firestore
+ * las resuelve uniendo índices simples.
+ */
+export async function historialDeCancelacion({ turno, importeCentavos, fecha }) {
+  const r = await getDocs(query(collection(db, 'eventos'), where('turno', '==', turno), where('tipo', '==', 'venta_cancelada')));
+  const objetivo = milisDeFecha(fecha);
+  const candidatos = r.docs.map(conDatos).filter((e) => e.importeCentavos === importeCentavos)
+    .sort((a, b) => Math.abs(milisDeFecha(a.fecha) - objetivo) - Math.abs(milisDeFecha(b.fecha) - objetivo));
+  return candidatos[0]?.ticket ? eventosDeTicket(candidatos[0].ticket) : [];
+}
+
+/** Ventas y devoluciones de un rango de días ("AAAA-MM-DD", ambos incluidos), en vivo. */
+export function observarVentasEntre(desde, hasta, alCambiar, alFallar) {
+  return onSnapshot(query(collection(db, 'ventas'), where('dia', '>=', desde), where('dia', '<=', hasta)), { includeMetadataChanges: true }, (r) => {
+    alCambiar(r.docs.map((d) => ({ ...conDatos(d), pendiente: d.metadata.hasPendingWrites })));
+  }, alFallar);
+}
+
+/** Tickets cancelados (movimientosCaja tipo cancelacion) registrados entre dos instantes (Date). */
+export function observarCancelacionesEntre(desde, hasta, alCambiar, alFallar) {
+  return onSnapshot(query(collection(db, 'movimientosCaja'),
+    where('registradoEn', '>=', Timestamp.fromDate(desde)), where('registradoEn', '<', Timestamp.fromDate(hasta))), (r) => {
+    alCambiar(r.docs.map(conDatos).filter((m) => m.tipo === 'cancelacion'));
+  }, alFallar);
+}
+
 export function registrarMovimiento({ turno, personal, tipo, importeCentavos = 0, motivo = null }) {
   const ref = doc(collection(db, 'movimientosCaja'));
   const datos = {

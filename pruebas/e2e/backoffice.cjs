@@ -1,9 +1,12 @@
 /**
- * Back office (solo administradores): inicio con las ventas de hoy, diario
- * de ventas con ficha y reimpresión, turnos (verificar y cerrar uno abierto),
- * reportes de un periodo, cajas, configuración del POS y datos del recibo en
- * tiendas. Las ventas y turnos se siembran con los mismos módulos que usa la
- * caja (js/ticket.js y js/turnos.js).
+ * Back office (solo administradores): inicio con las ventas de hoy,
+ * transacciones (filtros, ficha con recibo, reimpresión e historial de
+ * auditoría, tickets cancelados), movimientos en vivo (y uno que llega
+ * mientras se mira), turnos (verificar y cerrar uno abierto), reportes de un
+ * periodo, cajas, configuración del POS, datos del recibo en tiendas e
+ * inventario (recibir una entrega escaneando, lo que llegó, anular). Las
+ * ventas y turnos se siembran con los mismos módulos que usa la caja
+ * (js/ticket.js y js/turnos.js).
  */
 const c = require('./comun.cjs');
 
@@ -130,6 +133,30 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   const totalHoy = [...luisHoy.ventas, ...mariaHoy.ventas].reduce((acc, x) => acc + x.totalCentavos, 0);
   const ventaAyer = (await c.leerDoc('ventas/turno-ayer-maria-v2'));
 
+  // Movimientos en vivo de hoy: el turno de María, su primera venta (historial de auditoría) y un ticket cancelado.
+  const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime();
+  const haceMin = (minutos) => new Date(Math.max(inicioHoy + 1000 + (120 - minutos) * 10, Date.now() - minutos * 60000 - 5000));
+  const ventaConHistorial = mariaHoy.ventas[0];
+  const folioHistorial = ventaConHistorial.folio;
+  const dinero = m.ticket.formatearMonto;
+  const eventoBase = { turno: 'turno-hoy-maria', caja: 'talbot-1', cajaNombre: 'Caja 1', numeroCaja: 1, tienda: 'talbot', cajero: MARIA.codigo, cajeroNombre: MARIA.nombre, ticket: null, folio: null, importeCentavos: null };
+  const eventosHoy = [
+    { id: 'ev-01', tipo: 'turno_abierto', texto: 'Turno abierto con $150.00 de fondo', importeCentavos: 15000, fecha: haceMin(120) },
+    { id: 'ev-02', tipo: 'venta_iniciada', ticket: 't-demo1', texto: 'Venta iniciada', fecha: haceMin(60) },
+    { id: 'ev-03', tipo: 'articulo', ticket: 't-demo1', texto: '2× COCA-COLA COCA COLA — $3.98', importeCentavos: 398, fecha: haceMin(59) },
+    { id: 'ev-04', tipo: 'articulo', ticket: 't-demo1', texto: '1× TAJIN CLASICO — $4.99', importeCentavos: 499, fecha: haceMin(58) },
+    { id: 'ev-05', tipo: 'pago', ticket: 't-demo1', folio: folioHistorial, texto: `Efectivo $20.00 en ${folioHistorial} (saldo $0.00)`, importeCentavos: ventaConHistorial.totalCentavos, fecha: haceMin(57) },
+    { id: 'ev-06', tipo: 'venta_completada', ticket: 't-demo1', folio: folioHistorial, texto: `Venta ${folioHistorial} completada — ${dinero(ventaConHistorial.totalCentavos)} (3 artículos, efectivo)`, importeCentavos: ventaConHistorial.totalCentavos, fecha: haceMin(56) },
+    { id: 'ev-07', tipo: 'venta_iniciada', ticket: 't-demo2', texto: 'Venta iniciada', fecha: haceMin(30) },
+    { id: 'ev-08', tipo: 'articulo', ticket: 't-demo2', texto: '2× TAJIN CLASICO — $9.98', importeCentavos: 998, fecha: haceMin(29) },
+    { id: 'ev-09', tipo: 'venta_cancelada', ticket: 't-demo2', texto: 'Venta cancelada — $11.28 (2 artículos)', importeCentavos: 1128, fecha: haceMin(28) },
+  ];
+  for (const { id, ...e } of eventosHoy) await c.rest('PATCH', `eventos/${id}`, c.campos({ ...eventoBase, ...e, registradoEn: e.fecha }));
+  await c.rest('PATCH', 'movimientosCaja/mov-cancelado', c.campos({
+    turno: 'turno-hoy-maria', caja: 'talbot-1', tienda: 'talbot', cajero: MARIA.codigo, cajeroNombre: MARIA.nombre,
+    tipo: 'cancelacion', importeCentavos: 1128, motivo: '2 artículo(s)', fecha: haceMin(28), registradoEn: haceMin(28),
+  }));
+
   const browser = await c.abrirNavegador();
   const { ctx, page, errores } = await c.nuevaPagina(browser, { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, acceptDownloads: true });
   await ctx.addInitScript(() => {
@@ -153,7 +180,7 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   v.ok('cuenta los tickets de hoy', (await page.textContent('#kpi-tickets')) === '7');
   v.ok('la gráfica por hora tiene columnas con su tooltip accesible', (await page.$$('#grafica-horas .grafica__barra')).length >= 5 && /^08:00: \$[\d.,]+, 1 ticket$/.test(await page.getAttribute('#grafica-horas .grafica__columna:nth-of-type(3)', 'aria-label') ?? ''), await page.getAttribute('#grafica-horas .grafica__columna:nth-of-type(3)', 'aria-label'));
   v.ok('la caja abierta aparece con su cajera', /María López/.test(await page.textContent('#lista-cajas')) && /Abierta/.test(await page.textContent('#lista-cajas')));
-  v.ok('la barra lateral muestra las secciones del back office', await page.isVisible('nav a[href$="ventas.html"]') && await page.isVisible('nav a[href$="gestion/configuracion.html"]') && await page.isVisible('.nav-caja'));
+  v.ok('la barra lateral muestra las secciones del back office', await page.isVisible('nav a[href$="movimientos.html"]') && await page.isVisible('nav a[href$="transacciones.html"]') && await page.isVisible('nav a[href$="inventario.html"]') && await page.isVisible('nav a[href$="gestion/configuracion.html"]') && await page.isVisible('.nav-caja'));
   await page.hover('#grafica-horas .grafica__columna:nth-of-type(3)');
   await page.screenshot({ path: `${c.SALIDA}/bo-inicio.png`, fullPage: true });
   await page.click('#tabla-ultimos tbody tr');
@@ -164,22 +191,96 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   v.ok('la reimpresión sale marcada como copia', /COPIA/.test(await ultimaImpresion()));
   await page.click('dialog.editor--ticket [data-cerrar]');
 
-  // ---- 3) ventas
-  await page.goto(`${c.BASE}/ventas.html`);
+  // ---- 3) transacciones
+  const filasTx = () => page.$$('#tabla-transacciones tbody tr');
+  const esperarFilasTx = (n) => page.waitForFunction((x) => document.querySelectorAll('#tabla-transacciones tbody tr').length === x, n, { timeout: 20000 });
+  await page.goto(`${c.BASE}/transacciones.html`);
   await page.waitForSelector('#contenido:not([hidden])');
-  await page.waitForFunction(() => document.querySelectorAll('#tabla-ventas tbody tr').length === 7, null, { timeout: 20000 });
-  v.ok('el diario muestra los 7 tickets de hoy', true);
+  await esperarFilasTx(8);
+  const estados = await page.$$eval('#tabla-transacciones tbody tr td:nth-child(8)', (celdas) => celdas.map((td) => td.textContent.trim()));
+  v.ok('transacciones de hoy: los 7 tickets completados y el cancelado como «Anulada»', estados.filter((e) => e === 'Completada').length === 7 && estados.filter((e) => e === 'Anulada').length === 1, estados.join());
+  const primera = await page.$$eval('#tabla-transacciones tbody tr:first-child td', (celdas) => celdas.map((td) => td.textContent.trim()));
+  v.ok('cada fila: recibo, cuándo («mié, 4 de nov 01:19 p.m.»), asociado, caja, artículos, formas de pago, marcas, estado y total',
+    /^(\d{6}-0[12]-\d{4}|Sin recibo)/.test(primera[0]) && /^(dom|lun|mar|mié|jue|vie|sáb), \d{1,2} de [a-z]+ \d\d:\d\d [ap]\.m\.$/.test(primera[1]) && /^-?\$[\d,]+\.\d\d$/.test(primera[8]), primera.join(' | '));
   await page.selectOption('#f-caja', 'talbot-2');
-  v.ok('el filtro por caja deja los de Caja 2', (await page.$$('#tabla-ventas tbody tr')).length === 2 && /2 de 7/.test(await page.textContent('#contador')));
+  v.ok('el filtro por caja deja los de Caja 2', (await filasTx()).length === 2 && /2 de 8/.test(await page.textContent('#contador')), await page.textContent('#contador'));
   await page.selectOption('#f-caja', '');
-  await page.screenshot({ path: `${c.SALIDA}/bo-ventas.png`, fullPage: true });
-  await page.fill('#f-folio', ventaAyer.folio.replace(/-/g, ''));
-  await page.press('#f-folio', 'Enter');
+  await page.selectOption('#f-pago', 'credito');
+  v.ok('el filtro por forma de pago deja los dos pagados con crédito', (await filasTx()).length === 2);
+  await page.selectOption('#f-pago', '');
+  await page.selectOption('#f-estado', 'anulada');
+  v.ok('el filtro por estado deja el ticket anulado', (await filasTx()).length === 1);
+  await page.click('#tabla-transacciones tbody tr');
+  await page.waitForSelector('dialog[aria-label="Ticket cancelado"][open]');
+  await page.waitForFunction(() => document.querySelectorAll('dialog[open] .historial-auditoria__item').length === 3, null, { timeout: 15000 });
+  v.ok('el ticket anulado abre su ficha con quién, cuánto y su historial (iniciada, artículo, cancelada)',
+    /\$11\.28/.test(await page.textContent('dialog[open]')) && /María López/.test(await page.textContent('dialog[open]'))
+    && /Venta iniciada[\s\S]*Artículo agregado[\s\S]*Venta cancelada/.test(await page.textContent('dialog[open] .historial-auditoria')));
+  await page.click('dialog[open] [data-cerrar]');
+  await page.selectOption('#f-estado', '');
+  await page.click('[data-rango="7"]');
+  await esperarFilasTx(14);
+  v.ok('«7 días» suma los 6 tickets de ayer y marca el botón', (await page.getAttribute('[data-rango="7"]', 'aria-pressed')) === 'true');
+  const conAguacate = [...(await c.leerColeccion('ventas')).values()].filter((x) => x.lineas.some((l) => /aguacate/i.test(l.nombre))).length;
+  await page.fill('#f-buscar', 'aguacate');
+  v.ok('buscar por nombre de artículo', (await filasTx()).length === conAguacate && conAguacate > 0, `${(await filasTx()).length} vs ${conAguacate}`);
+  await page.fill('#f-buscar', '');
+  await page.screenshot({ path: `${c.SALIDA}/bo-transacciones.png`, fullPage: true });
+  await page.click(`#tabla-transacciones tbody tr:has-text("${folioHistorial}")`);
+  await page.waitForSelector('dialog.editor--ticket[open]');
+  await page.waitForFunction(() => document.querySelectorAll('dialog.editor--ticket[open] .historial-auditoria__item').length === 5, null, { timeout: 15000 });
+  const historial = await page.$$eval('dialog.editor--ticket[open] .historial-auditoria__item .chip', (chips) => chips.map((x) => x.textContent));
+  v.ok('una venta abre su recibo con el historial de auditoría en orden', historial.join() === 'Venta iniciada,Artículo agregado,Artículo agregado,Pago,Venta completada'
+    && /EL ÁGUILA MARKET/i.test(await page.textContent('dialog.editor--ticket .recibo')), historial.join());
+  await page.screenshot({ path: `${c.SALIDA}/bo-transaccion-historial.png` });
+  await page.click('dialog.editor--ticket [data-cerrar]');
+  await page.click('[data-rango="1"]');
+  await esperarFilasTx(8);
+  await page.fill('#f-buscar', ventaAyer.folio.replace(/-/g, ''));
+  await page.press('#f-buscar', 'Enter');
   await page.waitForSelector('dialog.editor--ticket[open]', { timeout: 15000 });
-  v.ok('escanear el folio de un recibo de ayer lo encuentra y cambia de día', (await page.inputValue('#f-dia')) === ventaAyer.dia && new RegExp(ventaAyer.folio).test(await page.textContent('dialog.editor--ticket h2')));
+  v.ok('escanear el folio de un recibo de ayer lo encuentra y cambia el periodo a ese día',
+    (await page.inputValue('#f-desde')) === ventaAyer.dia && (await page.inputValue('#f-hasta')) === ventaAyer.dia && new RegExp(ventaAyer.folio).test(await page.textContent('dialog.editor--ticket h2')));
   await page.click('dialog.editor--ticket [data-cerrar]');
   const [descarga] = await Promise.all([page.waitForEvent('download'), page.click('#btn-exportar')]);
-  v.ok('exporta el día a CSV', /ventas-\d{4}-\d{2}-\d{2}\.csv/.test(descarga.suggestedFilename()));
+  v.ok('exporta las transacciones a CSV', /^transacciones-\d{4}-\d{2}-\d{2}\.csv$/.test(descarga.suggestedFilename()), descarga.suggestedFilename());
+  await page.goto(`${c.BASE}/ventas.html?dia=${ventaAyer.dia}`);
+  await page.waitForURL(/transacciones\.html\?(.*&)?(dia|desde)=/, { timeout: 15000 });
+  await page.waitForSelector('#contenido:not([hidden])');
+  v.ok('la antigua página de ventas lleva a transacciones (con su día)', (await page.inputValue('#f-desde')) === ventaAyer.dia, page.url());
+
+  // ---- 3b) movimientos en vivo
+  await page.goto(`${c.BASE}/movimientos.html`);
+  await page.waitForSelector('#contenido:not([hidden])');
+  await page.waitForFunction((n) => document.querySelectorAll('#lista-movimientos li').length === n, eventosHoy.length, { timeout: 20000 });
+  const filasMov = () => page.$$eval('#lista-movimientos li', (lis) => lis.map((li) => ({
+    tipo: li.dataset.tipo, clase: li.className, hora: li.querySelector('.movimiento__hora').innerText.replace(/\s+/g, ' ').trim(),
+    texto: li.querySelector('.movimiento__texto').textContent, chip: li.querySelector('.chip').textContent, enlace: li.querySelector('a.movimiento__fila')?.getAttribute('href') ?? null,
+  })));
+  let movs = await filasMov();
+  const ordenEsperado = [...eventosHoy].sort((a, b) => b.fecha - a.fecha).map((e) => e.tipo);
+  v.ok('movimientos en vivo: los de hoy, lo más reciente primero', JSON.stringify(movs.map((x) => x.tipo)) === JSON.stringify(ordenEsperado), movs.map((x) => x.tipo).join());
+  const completada = movs.find((x) => x.tipo === 'venta_completada');
+  v.ok('cada fila: hora con segundos y a.m./p.m., tipo, quién, caja y el detalle; las ventas completadas en verde con enlace al recibo',
+    /^\d\d:\d\d:\d\d [ap]\.m\.$/.test(completada.hora) && completada.chip === 'Venta completada' && /movimiento--ok/.test(completada.clase)
+    && completada.enlace === `transacciones.html?folio=${encodeURIComponent(folioHistorial)}` && /María López[\s\S]*Caja 1/.test(await page.textContent('#lista-movimientos li[data-tipo="venta_completada"]')), JSON.stringify(completada));
+  v.ok('la cancelación se marca en rojo', /movimiento--alerta/.test(movs.find((x) => x.tipo === 'venta_cancelada').clase));
+  v.ok('el indicador «En vivo» se ve en el día de hoy', await page.isVisible('#en-vivo'));
+  await page.screenshot({ path: `${c.SALIDA}/bo-movimientos.png`, fullPage: true });
+  await c.rest('PATCH', 'eventos/ev-10', c.campos({ ...eventoBase, tipo: 'efectivo', texto: 'Entrada de efectivo $20.00 — cambio para la caja', importeCentavos: 2000, fecha: new Date(), registradoEn: new Date() }));
+  await page.waitForFunction((n) => document.querySelectorAll('#lista-movimientos li').length === n, eventosHoy.length + 1, { timeout: 20000 });
+  movs = await filasMov();
+  v.ok('un movimiento nuevo aparece solo, arriba y resaltado', movs[0].tipo === 'efectivo' && /movimiento--nuevo/.test(movs[0].clase), JSON.stringify(movs[0]));
+  await page.selectOption('#f-grupo', 'pagos');
+  v.ok('el filtro por tipo deja solo los pagos', JSON.stringify((await filasMov()).map((x) => x.tipo)) === '["pago"]');
+  await page.selectOption('#f-grupo', '');
+  await page.click('#btn-todos');
+  await page.waitForFunction(() => /^10 movimientos del día/.test(document.getElementById('pie').textContent), null, { timeout: 15000 });
+  v.ok('«Ver todos los movimientos» trae el día completo', (await page.textContent('#btn-todos')) === 'Ver solo los últimos' && /^10 movimientos del día/.test(await page.textContent('#pie')), await page.textContent('#pie'));
+  await page.click('#lista-movimientos li[data-tipo="venta_completada"] a');
+  await page.waitForSelector('dialog.editor--ticket[open]', { timeout: 15000 });
+  v.ok('una venta completada abre su transacción con el recibo', /transacciones\.html/.test(page.url()) && new RegExp(folioHistorial).test(await page.textContent('dialog.editor--ticket h2')));
+  await page.click('dialog.editor--ticket [data-cerrar]');
 
   // ---- 4) turnos
   await page.goto(`${c.BASE}/turnos.html`);
@@ -257,14 +358,77 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   await page.waitForFunction(() => /guardada/.test(document.getElementById('t-mensaje').textContent), null, { timeout: 15000 });
   v.ok('la tienda guarda los datos del encabezado del recibo', (await c.leerDoc('stores/talbot')).telefono === '519-555-0100');
 
+  // ---- 8b) inventario: recibir una entrega y ver lo que llegó
+  await page.goto(`${c.BASE}/inventario.html`);
+  await page.waitForSelector('#contenido:not([hidden])');
+  await page.waitForTimeout(1500); // el catálogo se sincroniza
+  v.ok('inventario: sin entregas todavía', await page.isVisible('#vacio-entregas') && await page.isVisible('#lineas-vacio') && await page.isDisabled('#btn-registrar'));
+  const escanear = async (texto) => {
+    await page.fill('#r-codigo', texto);
+    await page.press('#r-codigo', 'Enter');
+  };
+  const cantidades = () => page.$$eval('#tabla-lineas tbody tr', (filas) => filas.map((f) => `${f.querySelector('.recepcion__nombre').textContent}=${f.querySelector('input').value}`));
+  await escanear('633148100013');
+  await escanear('633148100013');
+  await escanear('24*074734040014');
+  v.ok('escanear el mismo producto suma una pieza y «24*» suma 24', JSON.stringify(await cantidades()) === JSON.stringify(['MASECA HARINA DE MAIZ 1.8kg=24', 'TAJIN CLASICO 142g=2']), (await cantidades()).join());
+  await page.fill('#r-codigo', 'guaji');
+  await page.waitForSelector('#sugerencias:not([hidden]) li');
+  await page.press('#r-codigo', 'Enter');
+  await page.waitForFunction(() => document.activeElement?.classList.contains('recepcion__cantidad') && document.activeElement.dataset.clave === 'p:p-chile');
+  v.ok('un producto por peso se busca por nombre y pide los kilos', await page.isDisabled('#btn-registrar') && /falta 1 cantidad/.test(await page.textContent('#lineas-total')));
+  await page.keyboard.type('12.5');
+  await page.keyboard.press('Enter');
+  await escanear('036000291452');
+  await page.waitForSelector('#form-nuevo:not([hidden])');
+  await page.fill('#nuevo-nombre', 'Salsa Valentina 1L');
+  await page.press('#nuevo-nombre', 'Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 4);
+  v.ok('lo que no está en el catálogo entra con su código y el nombre tecleado', /Salsa Valentina 1L[\s\S]*Sin registrar/.test(await page.textContent('#tabla-lineas tbody tr:first-child')));
+  v.ok('el total de la entrada: productos, piezas y kilos', (await page.textContent('#lineas-total')) === '4 productos · 27 piezas · 12.500 kg', await page.textContent('#lineas-total'));
+  await page.fill('#r-proveedor', 'Bimbo');
+  await page.fill('#r-referencia', 'F-1001');
+  await page.reload();
+  await page.waitForSelector('#contenido:not([hidden])');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 4, null, { timeout: 15000 });
+  v.ok('si la página se recarga, la entrada sin registrar se recupera', (await page.inputValue('#r-proveedor')) === 'Bimbo' && /Se recuperó/.test(await page.textContent('#mensaje')));
+  await page.screenshot({ path: `${c.SALIDA}/bo-inventario-recibir.png`, fullPage: true });
+  await page.click('#btn-registrar');
+  await page.waitForFunction(() => /Entrada registrada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const entregas = [...(await c.leerColeccion('recepciones')).entries()];
+  const [idEntrega, entrega] = entregas[0] ?? [];
+  v.ok('la entrada queda en Firestore (las reglas la aceptan) con sus líneas en el orden escaneado',
+    entregas.length === 1 && entrega.productos === 4 && entrega.piezas === 27 && entrega.gramos === 12500 && entrega.proveedor === 'Bimbo' && entrega.referencia === 'F-1001'
+    && entrega.recibidoPor === c.ADMIN.correo && entrega.anulada === false && entrega.lineas[0].producto === 'p-tajin' && entrega.lineas[2].pesoGramos === 12500
+    && entrega.lineas[3].producto === null && entrega.lineas[3].upc === '036000291452', JSON.stringify(entrega ?? {}).slice(0, 300));
+  v.ok('después de registrar, la captura queda vacía', await page.isVisible('#lineas-vacio') && (await page.inputValue('#r-proveedor')) === '');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-entregas tbody tr').length === 1 && document.querySelectorAll('#tabla-productos tbody tr').length === 4, null, { timeout: 15000 });
+  const kpis = await page.$$eval('#kpis .kpi', (k) => k.map((x) => `${x.querySelector('.kpi__etiqueta').textContent}=${x.querySelector('.kpi__valor').textContent}`));
+  v.ok('lo que llegó: entregas, piezas, kilos y productos distintos', kpis.join() === 'Entregas=1,Piezas recibidas=27,Kilos recibidos=12.500 kg,Productos distintos=4', kpis.join());
+  await page.fill('#f-buscar', 'tajin');
+  v.ok('por producto: cuánto llegó de cada uno', /TAJIN CLASICO 142g[\s\S]*2 piezas[\s\S]*Bimbo/.test(await page.textContent('#tabla-productos tbody')) && (await page.$$('#tabla-productos tbody tr')).length === 1);
+  await page.fill('#f-buscar', '');
+  const [csvEntradas] = await Promise.all([page.waitForEvent('download'), page.click('#btn-exportar')]);
+  v.ok('exporta lo que llegó a CSV', /^entradas-\d{4}-\d{2}-\d{2}-a-\d{4}-\d{2}-\d{2}\.csv$/.test(csvEntradas.suggestedFilename()), csvEntradas.suggestedFilename());
+  await page.screenshot({ path: `${c.SALIDA}/bo-inventario.png`, fullPage: true });
+  await page.click('#tabla-entregas tbody tr');
+  await page.waitForSelector('dialog.editor--entrega[open]');
+  v.ok('una entrega abre su detalle con las 4 líneas', (await page.$$('dialog.editor--entrega tbody tr')).length === 4 && /F-1001/.test(await page.textContent('dialog.editor--entrega')));
+  await page.click('#btn-anular-entrega');
+  await page.waitForFunction(() => /Entrada anulada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const anulada = await c.leerDoc(`recepciones/${idEntrega}`);
+  await page.waitForFunction(() => /Anulada/.test(document.querySelector('#tabla-entregas tbody tr')?.textContent ?? ''), null, { timeout: 15000 });
+  v.ok('el admin anula la entrada: queda a la vista, tachada, y deja de contar', anulada.anulada === true && anulada.anuladaPor === c.ADMIN.correo
+    && /Entregas=0/.test((await page.$$eval('#kpis .kpi', (k) => k.map((x) => `${x.querySelector('.kpi__etiqueta').textContent}=${x.querySelector('.kpi__valor').textContent}`))).join()) && await page.isVisible('#vacio-productos'));
+
   // ---- 9) pantalla ancha: el contenido llena todo el ancho junto a la barra lateral
   await page.setViewportSize({ width: 2048, height: 1100 });
   const paginasAnchas = [
-    ['index.html', 'inicio'], ['ventas.html', 'ventas'], ['turnos.html', 'turnos'],
+    ['index.html', 'inicio'], ['movimientos.html', 'movimientos'], ['transacciones.html', 'transacciones'], ['turnos.html', 'turnos'],
     [`reportes.html?desde=${m.ticket.claveDia(en(1, 0))}&hasta=${m.ticket.claveDia(hoy)}`, 'reportes'],
     ['productos.html', 'productos'], ['captura.html', 'captura'], ['imprimir.html', 'imprimir'],
     ['gestion/empleados.html', 'empleados'], ['gestion/cajas.html', 'cajas'], ['gestion/configuracion.html', 'configuracion'],
-    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'], ['solicitudes.html', 'solicitudes'],
+    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'], ['solicitudes.html', 'solicitudes'], ['inventario.html', 'inventario'],
     ['cuenta.html', 'cuenta', { angosta: true }], // formulario corto: columna de lectura a propósito
   ];
   const fueraDeAncho = [];
