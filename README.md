@@ -11,7 +11,7 @@ Four apps share the site, the data and the service worker:
 | app | where | who | what |
 |---|---|---|---|
 | **Back office** | site root (`index.html`, `movimientos.html`, `transacciones.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `inventario.html`, `gestion/`) | **admins only** | today's sales live, **live register activity**, **transactions with receipts and audit history**, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, **inventory: what came in and how much**, employees, registers, stores, POS settings |
-| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours |
+| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours. **Customer display** on a second screen: `caja/cliente.html` |
 | **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, **receive deliveries** (what came in, how many), and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
 | **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner) |
 
@@ -32,6 +32,7 @@ Four apps share the site, the data and the service worker:
 | `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
 | `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
 | `caja/consulta.html`, `js/consulta.js` | staff price check and PIN change |
+| `caja/cliente.html`, `js/cliente.js`, `js/pantalla-cliente.js`, `css/cliente.css` | customer display: the register's second screen facing the customer (items as they are scanned, prices, total, payment, change), fed by the register on the same computer |
 | `js/ticket.js` | ticket math in integer cents: lines, discounts, HST once per ticket, Canadian cash rounding, payments, receipt number (pure, unit tested) |
 | `js/turnos.js` | shift summary (X/Z), cash count, summing shifts for reports (pure, unit tested) |
 | `js/recibo.js`, `css/recibo.css`, `js/code128.js` | thermal receipts (80/58 mm) and reports printed through the browser; Code 128 barcode of the receipt number |
@@ -263,7 +264,7 @@ Designed for a 1024 × 768 touch screen and up, with keyboard and USB scanner.
    recibo"), get the approval, scan the items, refund in cash or to the card.
 5. **Other functions** (F9): reprint, tickets of the shift, open drawer, cash
    drop to the safe, cash in, payout from the drawer, X report (mid-shift),
-   lock, close shift, full screen, keyboard shortcuts. **En espera** (F6) holds
+   lock, close shift, customer display, full screen, keyboard shortcuts. **En espera** (F6) holds
    up to 6 tickets. Cancelled tickets and voided lines are recorded.
 6. **Lock** when stepping away (button or Ctrl+B); the PIN unlocks it.
    Reloading the page or a power cut keeps the shift and the ticket in progress,
@@ -297,6 +298,38 @@ and are sent when the connection comes back (the status pill in the top bar
 shows how many are pending), the PIN unlocks against a local hash (never the
 PIN itself), and the shift can be closed. Opening a shift, admin approvals and
 signing in need the internet.
+
+### Customer display (`/caja/cliente.html`)
+
+A second screen facing the customer: welcome with the store name; while
+selling, the last item scanned in large print (name, quantity × price or
+kilos × price per kg, amount), every item of the ticket with its amount, and
+the total (with the cash total when the 5 ¢ rounding changes it), items, HST
+and discounts ("Usted ahorra"); while paying, what has been paid and what is
+still owed; when the sale is done, "¡Gracias por su compra!" (the receipt
+message from Configuración), what was paid and **the change** in large green
+print, then back to the welcome. Returns are marked DEVOLUCIÓN. A register
+with no open shift shows "Caja cerrada". It shows the cashier's first name only.
+
+Setup, once per register:
+
+1. Plug the customer screen into the register PC as an **extended** display
+   (Windows: Win+P → Extend), any size from 7" (800 × 480) up.
+2. On the register: **Más funciones (F9) → Pantalla del cliente**. A window
+   opens. Chrome or Edge may ask to "manage windows on all your displays":
+   allow it and the window moves to the customer screen by itself; otherwise
+   drag it there.
+3. Touch **Pantalla completa** on it (or double-click it). Its cursor hides
+   and the screen is kept awake.
+
+It can also be opened by its address, `https://<your site>/caja/cliente.html`,
+**in the same browser on the same computer** as the register, for example to
+start it with Windows next to the register:
+`chrome --app=https://<your site>/caja/cliente.html --window-position=1920,0 --start-fullscreen`
+(the position is where the second screen starts). It needs no sign-in and no
+internet: the register talks to it inside the browser (`BroadcastChannel`),
+nothing goes through Firestore, and nobody outside that computer can write to
+it. If the register is closed or reloading, it goes back to the welcome.
 
 ## Price check (`/caja/consulta.html`)
 

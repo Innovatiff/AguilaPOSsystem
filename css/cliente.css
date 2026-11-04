@@ -1,0 +1,564 @@
+/* =====================================================================
+   Águila POS · pantalla del cliente (segunda pantalla de la caja)
+   Se lee de lejos: letra grande que crece con la pantalla (de 7" a 24"),
+   el último artículo y el total siempre a la vista.
+   ===================================================================== */
+@font-face {
+  font-family: "Oswald";
+  src: url("../fonts/Oswald-Variable.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --cl-fondo: #eef1f4;
+  --cl-panel: #ffffff;
+  --cl-oscuro: #1c1f24;
+  --cl-oscuro-2: #2b3038;
+  --cl-texto: #1b1f24;
+  --cl-suave: #5d6876;
+  --cl-linea: #e3e7ec;
+  --cl-marca: #e8791d;
+  --cl-marca-claro: #fff1e2;
+  --cl-exito: #1d8a4b;
+  --cl-exito-claro: #e7f6ed;
+  --cl-peligro: #c62828;
+  --cl-radio: clamp(10px, 1.6vh, 18px);
+  --cl-hueco: clamp(8px, 1.8vh, 22px);
+  --cl-cifras: "Oswald", "Arial Narrow", "Bahnschrift SemiCondensed", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body.cliente {
+  height: 100%;
+}
+
+body.cliente {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  margin: 0;
+  overflow: hidden;
+  background: var(--cl-fondo);
+  color: var(--cl-texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.sin-cursor,
+body.sin-cursor * {
+  cursor: none !important;
+}
+
+/* ---------------------------------------------------------------- barra */
+.cliente__barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  padding: clamp(6px, 1.3vh, 16px) clamp(12px, 2.4vw, 40px);
+  background: var(--cl-oscuro);
+  color: #fff;
+  font-size: clamp(14px, 2.6vh, 30px);
+}
+
+.cliente__marca {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.cliente__marca span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cliente__logo {
+  width: 1.7em;
+  height: 1.7em;
+  flex: none;
+  border-radius: 0.35em;
+}
+
+.cliente__info {
+  display: flex;
+  gap: 1.2em;
+  color: #c9ced6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- pie */
+.cliente__pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  min-height: clamp(26px, 4.4vh, 52px);
+  padding: 0 clamp(12px, 2.4vw, 40px);
+  color: var(--cl-suave);
+  font-size: clamp(12px, 2.1vh, 24px);
+}
+
+.cliente__completa {
+  padding: 0.35em 0.9em;
+  border: 1px solid #c3c9d0;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--cl-texto);
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- avisos: bienvenida, cerrada, esperando */
+.aviso-cliente {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: clamp(8px, 2vh, 24px);
+  padding: 4vh 6vw;
+  text-align: center;
+}
+
+.aviso-cliente__logo {
+  width: clamp(90px, 26vh, 300px);
+  height: clamp(90px, 26vh, 300px);
+  border-radius: 22%;
+  box-shadow: 0 10px 30px rgba(232, 121, 29, 0.25);
+}
+
+.aviso-cliente h1 {
+  margin: 0;
+  font-size: clamp(30px, 9vh, 110px);
+  line-height: 1.05;
+}
+
+.aviso-cliente p {
+  max-width: 34em;
+  margin: 0;
+  color: var(--cl-suave);
+  font-size: clamp(18px, 4.2vh, 48px);
+}
+
+.aviso-cliente[data-tipo="configurar"] h1,
+.aviso-cliente[data-tipo="error"] h1 {
+  font-size: clamp(24px, 6vh, 64px);
+}
+
+.aviso-cliente[data-tipo="configurar"] p,
+.aviso-cliente[data-tipo="error"] p {
+  font-size: clamp(15px, 2.8vh, 30px);
+}
+
+.aviso-cliente[data-tipo="cerrada"] h1 {
+  color: var(--cl-suave);
+}
+
+/* ---------------------------------------------------------------- ticket en curso */
+.venta-cliente {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "destacado totales"
+    "lineas    totales";
+  gap: var(--cl-hueco) clamp(10px, 2vw, 32px);
+  min-height: 0;
+  padding: var(--cl-hueco) clamp(12px, 2.4vw, 40px) 0;
+}
+
+.venta-cliente--devolucion {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "modo      totales"
+    "destacado totales"
+    "lineas    totales";
+}
+
+.venta-cliente__modo {
+  grid-area: modo;
+  margin: 0;
+  padding: 0.3em 0.8em;
+  border-radius: var(--cl-radio);
+  background: var(--cl-peligro);
+  color: #fff;
+  font-size: clamp(16px, 3.4vh, 38px);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.destacado {
+  display: grid;
+  grid-area: destacado;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.2em 1em;
+  padding: clamp(10px, 2vh, 26px) clamp(12px, 1.8vw, 30px);
+  border-left: clamp(6px, 0.8vw, 12px) solid var(--cl-marca);
+  border-radius: var(--cl-radio);
+  background: var(--cl-panel);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.07);
+}
+
+.destacado__nombre {
+  grid-column: 1;
+  font-size: clamp(20px, 4.6vh, 54px);
+  font-weight: 700;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.destacado__detalle {
+  grid-column: 1;
+  color: var(--cl-suave);
+  font-size: clamp(15px, 3vh, 34px);
+  font-variant-numeric: tabular-nums;
+}
+
+.destacado__importe {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-family: var(--cl-cifras);
+  font-size: clamp(30px, 8vh, 96px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.destacado--nuevo {
+  animation: llega 0.9s ease-out;
+}
+
+@keyframes llega {
+  from {
+    background: #ffe2bf;
+  }
+}
+
+.lineas-cliente {
+  grid-area: lineas;
+  min-height: 0;
+  margin: 0;
+  padding: 0.4vh 0;
+  overflow-y: auto;
+  border-radius: var(--cl-radio);
+  background: var(--cl-panel);
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.lineas-cliente::-webkit-scrollbar {
+  display: none;
+}
+
+.linea-cliente {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1em 1em;
+  padding: clamp(6px, 1.2vh, 14px) clamp(10px, 1.4vw, 24px);
+  border-bottom: 1px solid var(--cl-linea);
+  font-size: clamp(15px, 2.9vh, 32px);
+}
+
+.linea-cliente:last-child {
+  border-bottom: 0;
+}
+
+.linea-cliente__nombre {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.linea-cliente__importe {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.linea-cliente__importe s {
+  color: var(--cl-suave);
+  font-size: 0.8em;
+  font-weight: 400;
+}
+
+.linea-cliente__detalle {
+  grid-column: 1 / -1;
+  color: var(--cl-suave);
+  font-size: 0.82em;
+  font-variant-numeric: tabular-nums;
+}
+
+.linea-cliente__descuento {
+  color: var(--cl-exito);
+  font-weight: 700;
+}
+
+.linea-cliente--ultima {
+  background: var(--cl-marca-claro);
+}
+
+.linea-cliente--negativa .linea-cliente__importe {
+  color: var(--cl-peligro);
+}
+
+.lineas-cliente__ocultas {
+  padding: 0.6em 1.4vw;
+  color: var(--cl-suave);
+  font-size: clamp(13px, 2.2vh, 24px);
+}
+
+/* ---------------------------------------------------------------- totales y cobro */
+.totales-cliente {
+  display: flex;
+  grid-area: totales;
+  flex-direction: column;
+  gap: var(--cl-hueco);
+  min-height: 0;
+  padding: clamp(12px, 2.4vh, 32px) clamp(14px, 2vw, 34px);
+  border-radius: var(--cl-radio);
+  background: var(--cl-oscuro);
+  color: #fff;
+}
+
+.totales-cliente__filas {
+  display: grid;
+  gap: 0.35em;
+  margin: 0;
+  font-size: clamp(15px, 3vh, 34px);
+}
+
+.totales-cliente__filas div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.totales-cliente__filas dt {
+  color: #c9ced6;
+}
+
+.totales-cliente__filas dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.total-cliente {
+  display: grid;
+  gap: 0.15em;
+  margin-top: auto;
+  padding-top: var(--cl-hueco);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.total-cliente__nombre {
+  color: #c9ced6;
+  font-size: clamp(16px, 3.4vh, 38px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.total-cliente__cifra {
+  overflow: hidden;
+  color: #fff;
+  font-family: var(--cl-cifras);
+  font-size: clamp(44px, 14vh, 170px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.total-cliente__efectivo {
+  color: #ffd0a3;
+  font-size: clamp(15px, 3vh, 34px);
+  font-variant-numeric: tabular-nums;
+}
+
+.cobro-cliente {
+  display: grid;
+  gap: 0.4em;
+  padding-top: var(--cl-hueco);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: clamp(16px, 3.2vh, 36px);
+}
+
+.cobro-cliente div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.cobro-cliente span {
+  color: #c9ced6;
+}
+
+.cobro-cliente strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.cobro-cliente__falta strong {
+  color: var(--cl-marca);
+  font-family: var(--cl-cifras);
+  font-size: 1.9em;
+  font-weight: 600;
+}
+
+.cobro-cliente__indicacion {
+  margin: 0;
+  color: #c9ced6;
+  font-size: 0.75em;
+}
+
+.ahorro-cliente {
+  margin: 0;
+  color: #8fe0b0;
+  font-size: clamp(14px, 2.6vh, 30px);
+  font-weight: 700;
+}
+
+body.cliente--cobrando .total-cliente__cifra {
+  font-size: clamp(36px, 10vh, 120px);
+}
+
+/* ---------------------------------------------------------------- gracias */
+.gracias-cliente {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: clamp(10px, 2.4vh, 30px);
+  padding: 3vh 6vw;
+  text-align: center;
+}
+
+.gracias-cliente h1 {
+  margin: 0;
+  color: var(--cl-exito);
+  font-size: clamp(30px, 8.5vh, 100px);
+  line-height: 1.05;
+}
+
+.gracias-cliente__cifras {
+  display: grid;
+  gap: 0.4em;
+  min-width: min(90vw, 15em);
+  margin: 0;
+  font-size: clamp(18px, 4vh, 46px);
+}
+
+.gracias-cliente__cifras div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.2em;
+}
+
+.gracias-cliente__cifras dt {
+  color: var(--cl-suave);
+}
+
+.gracias-cliente__cifras dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gracias-cliente__cambio {
+  margin-top: 0.3em;
+  padding: 0.35em 0.7em;
+  border-radius: var(--cl-radio);
+  background: var(--cl-exito-claro);
+}
+
+.gracias-cliente__cambio dt {
+  align-self: center;
+  color: var(--cl-exito) !important;
+  font-weight: 700;
+}
+
+.gracias-cliente__cambio dd {
+  color: var(--cl-exito);
+  font-family: var(--cl-cifras);
+  font-size: 2em;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.gracias-cliente__ahorro {
+  margin: 0;
+  color: var(--cl-exito);
+  font-size: clamp(16px, 3.2vh, 36px);
+  font-weight: 700;
+}
+
+.gracias-cliente__folio {
+  margin: 0;
+  color: var(--cl-suave);
+  font-size: clamp(13px, 2.2vh, 24px);
+}
+
+/* ---------------------------------------------------------------- pantallas verticales o muy angostas */
+@media (max-aspect-ratio: 1/1), (max-width: 640px) {
+  .venta-cliente {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "destacado"
+      "totales"
+      "lineas";
+  }
+
+  .venta-cliente--devolucion {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "modo"
+      "destacado"
+      "totales"
+      "lineas";
+  }
+
+  .totales-cliente {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .totales-cliente__filas,
+  .cobro-cliente,
+  .ahorro-cliente {
+    grid-column: 1 / -1;
+  }
+
+  .total-cliente {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+
+  .total-cliente__cifra {
+    font-size: clamp(40px, 9vh, 120px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .destacado--nuevo {
+    animation: none;
+  }
+}

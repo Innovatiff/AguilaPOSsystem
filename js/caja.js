@@ -44,6 +44,7 @@ import { normalizarUPC } from './upca.js';
 import { palabras } from './esquema.js';
 import { centavosDesdeTexto } from './precios.js';
 import { esNIP } from './identidad.js';
+import { CANAL_CLIENTE, LATIDO_MS, estadoCliente } from './pantalla-cliente.js';
 
 const $ = (id) => document.getElementById(id);
 const PANTALLAS = ['cargando', 'configurar', 'acceso', 'venta'];
@@ -143,6 +144,7 @@ function mostrar(pantalla) {
   estado.pantalla = pantalla;
   for (const nombre of PANTALLAS) $(`pantalla-${nombre}`).hidden = nombre !== pantalla;
   pintarBarra();
+  avisarCliente();
 }
 
 function pintarBarra() {
@@ -823,6 +825,74 @@ function cambio() {
   pintarTicket();
 }
 
+// ---------------------------------------------------------------- pantalla del cliente
+
+/**
+ * Canal con la pantalla del cliente (caja/cliente.html, js/cliente.js) abierta
+ * en esta misma computadora: en cada cambio del ticket, del cobro o de la
+ * pantalla de la caja se le manda lo que debe ver el cliente, y cada
+ * LATIDO_MS otra vez (así sabe que la caja sigue abierta). Si no hay pantalla
+ * del cliente abierta, nadie escucha y no pasa nada.
+ */
+const canalCliente = typeof BroadcastChannel === 'function' ? new BroadcastChannel(CANAL_CLIENTE) : null;
+let cobroCliente = null; // lo que muestra el diálogo de cobro mientras está abierto
+let ultimaCliente = null; // id de la última línea agregada o cambiada: la pantalla la muestra en grande
+
+function estadoParaCliente() {
+  const base = {
+    tienda: estado.tienda?.nombre ?? estado.turno?.tiendaNombre ?? estado.asignacion?.tiendaNombre ?? '',
+    caja: estado.asignacion?.nombre ?? '',
+    atiende: estado.personal?.nombre ?? null,
+    config: estado.config,
+  };
+  if (estado.pantalla !== 'venta' || !estado.turno || !estado.ticket) return estadoCliente({ ...base, fase: 'cerrada' });
+  const t = estado.ticket;
+  if (t.lineas.length === 0) {
+    return estado.cobrado ? estadoCliente({ ...base, fase: 'cobrado', venta: estado.cobrado }) : estadoCliente({ ...base, fase: 'libre' });
+  }
+  return estadoCliente({ ...base, fase: cobroCliente ? 'cobro' : 'venta', ticket: t, calculo: calcular(), ultima: ultimaCliente, cobro: cobroCliente });
+}
+
+function avisarCliente() {
+  if (!canalCliente) return;
+  try {
+    canalCliente.postMessage({ tipo: 'estado', estado: estadoParaCliente() });
+  } catch (error) {
+    console.warn('No se pudo avisar a la pantalla del cliente', error);
+  }
+}
+
+if (canalCliente) {
+  canalCliente.addEventListener('message', ({ data }) => {
+    if (data?.tipo === 'hola') avisarCliente(); // una pantalla recién abierta pide lo de ahora
+  });
+  setInterval(avisarCliente, LATIDO_MS);
+  window.addEventListener('pagehide', () => canalCliente.postMessage({ tipo: 'adios' }));
+}
+
+/** Abre la pantalla del cliente en otra ventana y, si el navegador lo permite, la lleva a la otra pantalla. */
+function abrirPantallaCliente() {
+  const ventana = window.open(new URL('cliente.html', window.location.href).href, 'aguila-pantalla-cliente', 'popup=yes,width=1024,height=640');
+  if (!ventana) throw fallo('El navegador bloqueó la ventana: permite las ventanas emergentes para la caja, o abre caja/cliente.html en la pantalla del cliente.');
+  llevarAOtraPantalla(ventana);
+  avisarCliente();
+  avisar('Pantalla del cliente abierta. Llévala a la pantalla que ve el cliente y toca «Pantalla completa».', 'info', 7000);
+}
+
+/** Chrome y Edge, con el permiso de «administración de ventanas»: la ventana va sola a la otra pantalla, a lo ancho. */
+async function llevarAOtraPantalla(ventana) {
+  try {
+    if (!('getScreenDetails' in window)) return;
+    const detalles = await Promise.race([window.getScreenDetails(), new Promise((_, rechazar) => { setTimeout(() => rechazar(new Error('sin respuesta')), 20000); })]);
+    const otra = detalles.screens.find((s) => s !== detalles.currentScreen);
+    if (!otra || ventana.closed) return;
+    ventana.moveTo(otra.availLeft, otra.availTop);
+    ventana.resizeTo(otra.availWidth, otra.availHeight);
+  } catch {
+    // sin permiso o una sola pantalla: la ventana queda donde la abrió el navegador
+  }
+}
+
 // ---------------------------------------------------------------- movimientos en vivo
 
 /** Un movimiento de la caja (ver registrarEvento). Por defecto, del ticket en curso. */
@@ -1448,8 +1518,22 @@ async function cobrarTicket() {
   if (!devolucion && calculo.totalCentavos < 0) throw fallo('El total no puede ser negativo.');
   let pagos = [];
   if (calculo.totalCentavos !== 0) {
-    pagos = await cobrar({ totalCentavos: calculo.totalCentavos, devolucion });
-    if (pagos === null) return;
+    try {
+      pagos = await cobrar({
+        totalCentavos: calculo.totalCentavos,
+        devolucion,
+        alCambiar: (cobro) => {
+          cobroCliente = cobro;
+          avisarCliente();
+        },
+      });
+    } finally {
+      cobroCliente = null;
+    }
+    if (pagos === null) {
+      avisarCliente();
+      return;
+    }
   } else {
     const seguro = await confirmar({ titulo: 'Ticket sin importe', texto: 'El total es $0.00. ¿Registrar el ticket así?', aceptar: 'Registrar' });
     if (!seguro) return;
@@ -1998,6 +2082,7 @@ const MENU_MAS = [
   { valor: 'x', texto: 'Corte parcial (X)', icono: 'reloj' },
   { valor: 'bloquear', texto: 'Bloquear caja', icono: 'candado' },
   { valor: 'cerrar', texto: 'Cerrar turno', icono: 'cerrar', peligro: true },
+  { valor: 'cliente', texto: 'Pantalla del cliente', icono: 'pantalla' },
   { valor: 'pantalla', texto: 'Pantalla completa', icono: 'flecha' },
   { valor: 'ayuda', texto: 'Atajos de teclado', icono: 'etiqueta' },
 ];
@@ -2035,6 +2120,7 @@ async function menuMas() {
     case 'x': return corteX();
     case 'bloquear': return bloquear();
     case 'cerrar': return cerrarMiTurno();
+    case 'cliente': return abrirPantallaCliente();
     case 'pantalla': return pantallaCompleta();
     case 'ayuda': return ayuda();
     default: return undefined;
@@ -2115,7 +2201,9 @@ function pintarTicket() {
   funciones.querySelector('[data-accion="espera"] span').textContent = espera ? `En espera (${espera})` : 'En espera';
 
   if (estado.resaltar || estado.seleccion) lista.querySelector('.linea--seleccionada, .linea--nueva')?.scrollIntoView({ block: 'nearest' });
+  if (estado.resaltar) ultimaCliente = estado.resaltar;
   estado.resaltar = null;
+  avisarCliente();
 }
 
 function pintarDepartamentos() {

@@ -103,6 +103,24 @@ const totalTicket = (page) => page.textContent('#tot-total');
   v.ok('se imprimió el comprobante de apertura', /APERTURA DE TURNO[\s\S]*FONDO INICIAL[\s\S]*\$150\.00/.test(await ultimaImpresion()));
   v.ok('la barra muestra la caja y quién atiende', /Caja 1/.test(await page.textContent('#barra-caja')) && /María/.test(await page.textContent('#barra-cajera')));
 
+  // ---- 2b) pantalla del cliente: la caja la abre en otra ventana (Más funciones)
+  await page.keyboard.press('F9');
+  await page.waitForSelector('dialog[open] .menu-funciones');
+  const [cliente] = await Promise.all([
+    ctx.waitForEvent('page'),
+    abierto(page).locator('.menu-funciones button', { hasText: 'Pantalla del cliente' }).click(),
+  ]);
+  cliente.on('console', (m) => { if (m.type() === 'error') errores.push(`[cliente] ${m.text()}`); });
+  cliente.on('pageerror', (e) => errores.push(`[cliente] ${e.message}`));
+  await cliente.waitForLoadState('domcontentloaded');
+  await cliente.setViewportSize({ width: 1024, height: 600 });
+  await page.bringToFront();
+  await cliente.waitForFunction(() => document.getElementById('aviso-titulo')?.textContent === '¡Bienvenido!', null, { timeout: 15000 });
+  v.ok('«Pantalla del cliente» abre la ventana del cliente: bienvenida con la tienda, la caja y quién atiende',
+    /\/caja\/cliente\.html$/.test(cliente.url()) && /El Águila Market/.test(await cliente.textContent('#aviso-texto')) && (await cliente.textContent('#caja')) === 'Caja 1'
+    && (await cliente.textContent('#atiende')) === 'Le atiende María', `${cliente.url()} · ${await cliente.textContent('#atiende')}`);
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-bienvenida.png` });
+
   // ---- 3) vender
   await page.waitForTimeout(400);
   await escribirEnCaja(page, '633148100013');
@@ -136,6 +154,24 @@ const totalTicket = (page) => page.textContent('#tot-total');
   v.ok('totales con HST solo sobre lo gravado', (await page.textContent('#tot-subtotal')) === '$40.80' && (await page.textContent('#tot-impuesto')) === '$2.07' && (await totalTicket(page)) === '$42.87');
   v.ok('el total en efectivo se redondea a 5 ¢', (await page.textContent('#tot-efectivo')) === '$42.85');
   await page.screenshot({ path: `${c.SALIDA}/caja-venta.png` });
+  await cliente.waitForFunction(() => document.querySelectorAll('#lineas .linea-cliente').length === 5, null, { timeout: 10000 });
+  const lineasCliente = await cliente.$$eval('#lineas .linea-cliente', (lis) => lis.map((li) => `${li.querySelector('.linea-cliente__nombre').textContent}|${li.querySelector('.linea-cliente__detalle').textContent}|${li.querySelector('.linea-cliente__importe').textContent}`));
+  v.ok('el cliente ve cada artículo conforme se escanea: nombre, cantidad × precio e importe',
+    lineasCliente[0] === 'TAJIN CLASICO 142g|2 × $4.99|$9.98' && lineasCliente[1] === 'COCA-COLA COCA COLA 355mL|3 × $1.99|$5.97' && lineasCliente[3] === 'AGUACATE HASS|1.250 kg × $5.49/kg|$6.86', lineasCliente.join(' · '));
+  v.ok('el último artículo sale en grande, y el total (con su total en efectivo) es el de la caja',
+    /Carnicería/.test(await cliente.textContent('#destacado-nombre')) && (await cliente.textContent('#destacado-importe')) === '$12.50'
+    && (await cliente.textContent('#t-total')) === '$42.87' && (await cliente.textContent('#t-impuesto')) === '$2.07' && (await cliente.textContent('#t-efectivo')) === 'En efectivo: $42.85'
+    && (await cliente.textContent('#t-articulos')) === '8');
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-venta.png` });
+  await cliente.setViewportSize({ width: 600, height: 1024 });
+  await cliente.waitForTimeout(150);
+  v.ok('en una pantalla vertical cabe todo sin desplazar la página', await cliente.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-venta-vertical.png` });
+  await cliente.setViewportSize({ width: 800, height: 480 });
+  await cliente.waitForTimeout(150);
+  v.ok('en una pantalla chica de 7" (800 × 480) también', await cliente.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth && document.getElementById('t-total').getBoundingClientRect().bottom <= innerHeight));
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-venta-7.png` });
+  await cliente.setViewportSize({ width: 1024, height: 600 });
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.waitForTimeout(200);
   v.ok('en la pantalla de 1024 × 768 todo cabe sin desplazar la página', await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight && document.documentElement.scrollWidth <= window.innerWidth));
@@ -148,16 +184,26 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await page.click('#acciones-linea [data-accion="anular-linea"]');
   await page.waitForFunction(() => document.querySelectorAll('#ticket-lineas .linea').length === 4);
   v.ok('anular la línea la quita del total', (await totalTicket(page)) === '$30.37');
+  await cliente.waitForFunction(() => document.getElementById('t-total').textContent === '$30.37', null, { timeout: 10000 });
+  v.ok('y en la pantalla del cliente desaparece al momento', (await cliente.$$('#lineas .linea-cliente')).length === 4 && !/Carnicería/.test(await cliente.textContent('#lineas')));
 
   // cobrar en efectivo con $50
   await page.keyboard.press('F10');
   await page.waitForSelector('dialog[open] .pago');
   v.ok('el cobro muestra lo que falta en efectivo redondeado', /\$30\.35/.test(await abierto(page).textContent('.pago__cifra--falta')));
+  await cliente.waitForSelector('#cobro:not([hidden])', { timeout: 10000 });
+  v.ok('durante el cobro, el cliente ve lo pagado y lo que falta', (await cliente.textContent('#c-falta')) === '$30.35' && (await cliente.textContent('#c-pagado')) === '$0.00');
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-cobro.png` });
   await page.screenshot({ path: `${c.SALIDA}/caja-cobro.png` });
   await abierto(page).locator('.rapidos button', { hasText: '$50.00' }).click();
   await esperarSinDialogo(page);
   await page.waitForSelector('#ticket-cobrado:not([hidden])');
   v.ok('muestra el cambio en grande', (await page.textContent('#cobrado-cambio')) === '$19.65');
+  await cliente.waitForSelector('#vista-gracias:not([hidden])', { timeout: 10000 });
+  v.ok('al cobrar, el cliente ve el gracias, lo que pagó y su cambio',
+    (await cliente.textContent('#g-cambio')) === '$19.65' && (await cliente.textContent('#g-total')) === '$30.35' && (await cliente.textContent('#g-pagos')) === 'Efectivo $50.00'
+    && /Gracias por su compra/.test(await cliente.textContent('#g-mensaje')));
+  await cliente.screenshot({ path: `${c.SALIDA}/cliente-gracias.png` });
   v.ok('se imprimió el recibo con encabezado de la tienda, HST y código de barras', await (async () => {
     const r = await ultimaImpresion();
     return /EL ÁGUILA MARKET[\s\S]*42 Erie St S[\s\S]*519-322-4222[\s\S]*HST # 81234 5678 RT0001[\s\S]*TOTAL[\s\S]*\$30\.37[\s\S]*CAMBIO[\s\S]*\$19\.65/i.test(r);

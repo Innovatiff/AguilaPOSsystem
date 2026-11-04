@@ -24,10 +24,12 @@ export function montosRapidos(pendienteEfectivo) {
 
 /**
  * Diálogo de cobro.
- * @param {{ totalCentavos: number, devolucion?: boolean }} datos
+ * @param {{ totalCentavos: number, devolucion?: boolean, alCambiar?: Function }} datos
+ *   `alCambiar` recibe, cada vez que cambia, lo que se está cobrando (para la
+ *   pantalla del cliente): { totalCentavos, pagos, metodo, pendienteCentavos, pendienteEfectivoCentavos }.
  * @returns {Promise<Array|null>} pagos (completos) o null si se cancela
  */
-export function cobrar({ totalCentavos, devolucion = false }) {
+export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) {
   const pagos = [];
   let metodo = 'efectivo';
 
@@ -73,6 +75,7 @@ export function cobrar({ totalCentavos, devolucion = false }) {
     const estado = estadoCobro(totalCentavos, pagos);
     const pendiente = Math.abs(estado.pendienteCentavos);
     const pendienteEfectivo = Math.abs(estado.pendienteEfectivoCentavos);
+    alCambiar?.({ totalCentavos, pagos: [...pagos], metodo, pendienteCentavos: estado.pendienteCentavos, pendienteEfectivoCentavos: estado.pendienteEfectivoCentavos });
     cifraFalta.textContent = dinero(metodo === 'efectivo' ? pendienteEfectivo : pendiente);
     filaFalta.dataset.completo = String(estado.completo);
     cifraEfectivo.textContent = dinero(pendienteEfectivo);

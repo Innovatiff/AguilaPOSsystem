@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pantalla del cliente · Águila POS</title>
+  <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <meta name="theme-color" content="#1c1f24">
+  <script type="module" src="../js/pwa.js"></script>
+  <link rel="stylesheet" href="../css/cliente.css">
+  <script type="module" src="../js/cliente.js"></script>
+</head>
+<body class="cliente" data-vista="aviso">
+  <header class="cliente__barra">
+    <div class="cliente__marca">
+      <img class="cliente__logo" src="../icons/aguila.svg" alt="">
+      <span id="tienda">Águila Marketplace</span>
+    </div>
+    <div class="cliente__info">
+      <span id="caja"></span>
+      <time id="reloj"></time>
+    </div>
+  </header>
+
+  <!-- Bienvenida, caja cerrada o (sin caja todavía) cómo se usa -->
+  <section class="aviso-cliente" id="vista-aviso" aria-live="polite">
+    <img class="aviso-cliente__logo" src="../icons/aguila.svg" alt="">
+    <h1 id="aviso-titulo">Pantalla del cliente</h1>
+    <p id="aviso-texto">Esperando a la caja…</p>
+  </section>
+
+  <!-- Ticket en curso y cobro -->
+  <main class="venta-cliente" id="vista-venta" hidden>
+    <p class="venta-cliente__modo" id="modo" hidden>Devolución</p>
+    <section class="destacado" id="destacado" aria-live="polite" aria-label="Último artículo">
+      <div class="destacado__nombre" id="destacado-nombre"></div>
+      <div class="destacado__detalle" id="destacado-detalle"></div>
+      <div class="destacado__importe" id="destacado-importe"></div>
+    </section>
+    <ol class="lineas-cliente" id="lineas" aria-label="Artículos"></ol>
+    <aside class="totales-cliente" aria-label="Total">
+      <dl class="totales-cliente__filas">
+        <div><dt>Artículos</dt><dd id="t-articulos"></dd></div>
+        <div><dt>Subtotal</dt><dd id="t-subtotal"></dd></div>
+        <div id="fila-descuento" hidden><dt>Descuento</dt><dd id="t-descuento"></dd></div>
+        <div><dt id="t-impuesto-nombre">HST</dt><dd id="t-impuesto"></dd></div>
+      </dl>
+      <div class="total-cliente">
+        <span class="total-cliente__nombre" id="t-total-nombre">Total</span>
+        <strong class="total-cliente__cifra" id="t-total"></strong>
+        <span class="total-cliente__efectivo" id="t-efectivo" hidden></span>
+      </div>
+      <div class="cobro-cliente" id="cobro" hidden>
+        <div><span>Pagado</span><strong id="c-pagado"></strong></div>
+        <div class="cobro-cliente__falta"><span id="c-falta-nombre">Falta</span><strong id="c-falta"></strong></div>
+        <p class="cobro-cliente__indicacion" id="c-indicacion"></p>
+      </div>
+      <p class="ahorro-cliente" id="t-ahorro" hidden></p>
+    </aside>
+  </main>
+
+  <!-- Venta registrada: gracias y su cambio -->
+  <section class="gracias-cliente" id="vista-gracias" hidden aria-live="polite">
+    <h1 id="g-mensaje">¡Gracias por su compra!</h1>
+    <dl class="gracias-cliente__cifras">
+      <div><dt id="g-total-nombre">Total</dt><dd id="g-total"></dd></div>
+      <div><dt id="g-pagos-nombre">Pagó</dt><dd id="g-pagos"></dd></div>
+      <div class="gracias-cliente__cambio" id="g-cambio-fila"><dt>Su cambio</dt><dd id="g-cambio"></dd></div>
+    </dl>
+    <p class="gracias-cliente__ahorro" id="g-ahorro" hidden></p>
+    <p class="gracias-cliente__folio" id="g-folio"></p>
+  </section>
+
+  <footer class="cliente__pie">
+    <span id="atiende"></span>
+    <button type="button" class="cliente__completa" id="btn-completa">Pantalla completa</button>
+  </footer>
+</body>
+</html>
