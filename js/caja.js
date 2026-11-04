@@ -14,7 +14,7 @@
 import { auth, onAuthStateChanged, Timestamp } from './firebase.js';
 import { iniciarSesion, iniciarSesionConNip, fichaEfectiva, usuarioActual, mensajeError, cerrarSesionSilenciosa } from './auth.js';
 import { obtenerClaveCaja } from './clave-caja.js';
-import { claveCajaValida } from './nip.js';
+import { claveCajaValida, huellaPantalla } from './nip.js';
 import { observarCatalogo, buscarPorUPC, esperarConfirmacion } from './productos.js';
 import {
   leerConfigPos, leerCaja, listarCajas, leerTienda, leerTurno,
@@ -44,7 +44,8 @@ import { normalizarUPC } from './upca.js';
 import { palabras } from './esquema.js';
 import { centavosDesdeTexto } from './precios.js';
 import { esNIP } from './identidad.js';
-import { CANAL_CLIENTE, LATIDO_MS, estadoCliente } from './pantalla-cliente.js';
+import { CANAL_CLIENTE, LATIDO_MS, RETRASO_TABLETA_MS, REVISAR_TABLETA_MS, estadoCliente } from './pantalla-cliente.js';
+import { hayTableta, actualizarPantalla } from './pantalla-remota.js';
 
 const $ = (id) => document.getElementById(id);
 const PANTALLAS = ['cargando', 'configurar', 'acceso', 'venta'];
@@ -257,6 +258,7 @@ async function configurar(evento) {
 
 async function asignar(caja, tiendaNombre) {
   estado.asignacion = { id: caja.id, nombre: caja.nombre, numero: caja.numero, tienda: caja.tienda, tiendaNombre: tiendaNombre ?? caja.tienda };
+  Object.assign(tableta, { id: null, activa: false, enviado: '' }); // otra caja, otra pantalla del cliente
   local.guardarAsignacion(estado.asignacion);
   await cerrarSesionSilenciosa().catch(() => {});
   mostrarAcceso();
@@ -497,6 +499,7 @@ async function iniciarVenta(turno, { bloqueada = false } = {}) {
   pintarDepartamentos();
   pintarTicket();
   pintarEntrada();
+  revisarTableta();
   if (bloqueada) bloquear();
 }
 
@@ -525,6 +528,8 @@ async function salir({ turnoCerrado = false, mensaje = null, tipo = 'info' } = {
   if (estado.saliendo) return;
   estado.saliendo = true;
   const cajaId = estado.asignacion?.id;
+  // La tableta del cliente queda en «Caja cerrada» ahora, que aún hay sesión para escribirle.
+  await Promise.race([publicarTableta({ inmediato: true, cerrada: true }), new Promise((listo) => { setTimeout(listo, 2500); })]);
   detenerVenta();
   if (turnoCerrado && cajaId) {
     local.borrarTicket(cajaId);
@@ -838,14 +843,14 @@ const canalCliente = typeof BroadcastChannel === 'function' ? new BroadcastChann
 let cobroCliente = null; // lo que muestra el diálogo de cobro mientras está abierto
 let ultimaCliente = null; // id de la última línea agregada o cambiada: la pantalla la muestra en grande
 
-function estadoParaCliente() {
+function estadoParaCliente({ cerrada = false } = {}) {
   const base = {
     tienda: estado.tienda?.nombre ?? estado.turno?.tiendaNombre ?? estado.asignacion?.tiendaNombre ?? '',
     caja: estado.asignacion?.nombre ?? '',
     atiende: estado.personal?.nombre ?? null,
     config: estado.config,
   };
-  if (estado.pantalla !== 'venta' || !estado.turno || !estado.ticket) return estadoCliente({ ...base, fase: 'cerrada' });
+  if (cerrada || estado.pantalla !== 'venta' || !estado.turno || !estado.ticket) return estadoCliente({ ...base, fase: 'cerrada' });
   const t = estado.ticket;
   if (t.lineas.length === 0) {
     return estado.cobrado ? estadoCliente({ ...base, fase: 'cobrado', venta: estado.cobrado }) : estadoCliente({ ...base, fase: 'libre' });
@@ -854,13 +859,88 @@ function estadoParaCliente() {
 }
 
 function avisarCliente() {
-  if (!canalCliente) return;
-  try {
-    canalCliente.postMessage({ tipo: 'estado', estado: estadoParaCliente() });
-  } catch (error) {
-    console.warn('No se pudo avisar a la pantalla del cliente', error);
+  if (canalCliente) {
+    try {
+      canalCliente.postMessage({ tipo: 'estado', estado: estadoParaCliente() });
+    } catch (error) {
+      console.warn('No se pudo avisar a la pantalla del cliente', error);
+    }
   }
+  publicarTableta();
 }
+
+/**
+ * Tableta del cliente (pantallas/{huella} en Firestore, js/pantalla-remota.js):
+ * si un administrador emparejó una tableta con esta caja, lo mismo se le manda
+ * por internet. Agrupado (como mucho una escritura cada RETRASO_TABLETA_MS) y
+ * solo si cambió: el latido no escribe nada. Sin conexión no se encola nada
+ * (lo de hace un rato no le sirve al cliente); al volver la señal se manda lo
+ * de ese momento.
+ */
+const tableta = { id: null, activa: false, enviado: '', temporizador: null, revisando: null };
+
+async function idTableta() {
+  if (tableta.id) return tableta.id;
+  const clave = local.leerClaveCaja();
+  if (!estado.asignacion?.id || !claveCajaValida(clave)) return null;
+  tableta.id = await huellaPantalla(clave, estado.asignacion.id);
+  return tableta.id;
+}
+
+/**
+ * ¿Hay una tableta emparejada con esta caja? Al entrar a vender, al abrir
+ * «Pantalla del cliente» y, mientras no tiene, cada REVISAR_TABLETA_MS. Con
+ * tableta no hace falta mirar: si la desconectan, la siguiente escritura falla.
+ */
+function revisarTableta() {
+  if (tableta.revisando) return tableta.revisando;
+  tableta.revisando = (async () => {
+    try {
+      const id = await idTableta();
+      if (!id || !navigator.onLine) return tableta.activa;
+      const antes = tableta.activa;
+      tableta.activa = await hayTableta(id);
+      if (tableta.activa && !antes) {
+        tableta.enviado = '';
+        publicarTableta();
+      }
+    } catch (error) {
+      console.warn('Pantalla del cliente (tableta)', error?.code ?? error);
+    } finally {
+      tableta.revisando = null;
+    }
+    return tableta.activa;
+  })();
+  return tableta.revisando;
+}
+
+function publicarTableta({ inmediato = false, cerrada = false } = {}) {
+  if (!tableta.activa || !tableta.id || !estado.personal || !estado.asignacion || !navigator.onLine) return Promise.resolve();
+  clearTimeout(tableta.temporizador);
+  const enviar = () => {
+    if (!tableta.activa || !estado.personal) return Promise.resolve();
+    const contenido = estadoParaCliente({ cerrada });
+    const firma = JSON.stringify(contenido);
+    if (firma === tableta.enviado) return Promise.resolve();
+    tableta.enviado = firma;
+    return actualizarPantalla(tableta.id, { caja: estado.asignacion.id, cajero: estado.personal.usuario, estado: contenido }).catch((error) => {
+      tableta.enviado = '';
+      if (error?.code === 'not-found') tableta.activa = false; // un administrador desconectó la tableta
+      else console.warn('Pantalla del cliente (tableta)', error?.code ?? error);
+    });
+  };
+  if (inmediato) return enviar();
+  tableta.temporizador = setTimeout(enviar, RETRASO_TABLETA_MS);
+  return Promise.resolve();
+}
+
+window.addEventListener('online', () => {
+  tableta.enviado = '';
+  publicarTableta();
+});
+setInterval(() => {
+  if (estado.pantalla === 'venta' && !tableta.activa) revisarTableta();
+}, REVISAR_TABLETA_MS);
 
 if (canalCliente) {
   canalCliente.addEventListener('message', ({ data }) => {
@@ -868,6 +948,40 @@ if (canalCliente) {
   });
   setInterval(avisarCliente, LATIDO_MS);
   window.addEventListener('pagehide', () => canalCliente.postMessage({ tipo: 'adios' }));
+}
+
+/**
+ * «Pantalla del cliente»: abrirla en esta computadora (segunda pantalla) y,
+ * para una tableta, si ya hay una emparejada y cómo emparejarla.
+ */
+function pantallaDelCliente() {
+  const direccion = new URL('cliente.html', window.location.href).href;
+  const estadoTableta = h('p', { class: 'dlg__texto', id: 'estado-tableta', text: 'Tableta: comprobando…' });
+  revisarTableta().then((activa) => {
+    estadoTableta.textContent = activa
+      ? `Tableta: emparejada con ${estado.asignacion?.nombre ?? 'esta caja'}. Lo que se escanea se ve también en la tableta.`
+      : 'Tableta: ninguna emparejada con esta caja.';
+    estadoTableta.dataset.activa = String(activa);
+  });
+  return abrirDialogo({
+    titulo: 'Pantalla del cliente',
+    clase: 'dlg--ancho',
+    cuerpo: [
+      h('p', { class: 'dlg__texto', text: 'En esta computadora: una segunda pantalla conectada a la caja. Se abre en otra ventana que se lleva a esa pantalla.' }),
+      estadoTableta,
+      h('p', { class: 'dlg__nota' }, 'Para usar una tableta: en la tableta abre ', h('strong', { text: direccion }),
+        ', toca «Usar en una tableta» y un administrador elige esta caja. Solo se hace una vez.'),
+    ],
+    botones: [
+      { texto: 'Volver', valor: null, cerrar: true },
+      { texto: 'Abrir en esta computadora', valor: 'ventana', principal: true },
+    ],
+    alPulsar: (valor, ctx) => {
+      if (valor !== 'ventana') return;
+      abrirPantallaCliente(); // dentro del toque: el navegador deja abrir la ventana
+      ctx.cerrar(valor);
+    },
+  });
 }
 
 /** Abre la pantalla del cliente en otra ventana y, si el navegador lo permite, la lleva a la otra pantalla. */
@@ -2120,7 +2234,7 @@ async function menuMas() {
     case 'x': return corteX();
     case 'bloquear': return bloquear();
     case 'cerrar': return cerrarMiTurno();
-    case 'cliente': return abrirPantallaCliente();
+    case 'cliente': return pantallaDelCliente();
     case 'pantalla': return pantallaCompleta();
     case 'ayuda': return ayuda();
     default: return undefined;

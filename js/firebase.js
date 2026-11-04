@@ -56,19 +56,23 @@ export const VERSION_SDK = '12.19.0';
 /**
  * Nombre de la instancia (cada una con su propia sesión y su caché local):
  * "caja" en la caja registradora (/caja/), "consulta" en la consulta de
- * precios (/caja/consulta.html), "catalogo" en la app Catálogo del personal
- * (/catalogo/) y la predeterminada en el back office.
+ * precios (/caja/consulta.html), "cliente" en la pantalla del cliente
+ * (/caja/cliente.html: nunca comparte la sesión de la cajera), "catalogo" en
+ * la app Catálogo del personal (/catalogo/) y la predeterminada en el back office.
  */
 function nombreDeApp(ruta) {
   if (/\/caja\/(index\.html)?$/.test(ruta)) return 'caja';
   if (/\/caja\/consulta\.html$/.test(ruta)) return 'consulta';
+  if (/\/caja\/cliente\.html$/.test(ruta)) return 'cliente';
   if (/\/catalogo\//.test(ruta)) return 'catalogo';
   return '[DEFAULT]';
 }
 export const NOMBRE_APP = typeof location !== 'undefined' ? nombreDeApp(location.pathname) : '[DEFAULT]';
 export const app = getApps().find((a) => a.name === NOMBRE_APP)
   ?? (NOMBRE_APP === '[DEFAULT]' ? initializeApp(firebaseConfig) : initializeApp(firebaseConfig, NOMBRE_APP));
-export const auth = getAuth(app);
+// La pantalla del cliente nunca guarda una sesión en el aparato: la del
+// administrador que empareja una tableta vive solo en memoria y se cierra al terminar.
+export const auth = NOMBRE_APP === 'cliente' ? initializeAuth(app, { persistence: inMemoryPersistence }) : getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });

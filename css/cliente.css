@@ -562,3 +562,167 @@ body.cliente--cobrando .total-cliente__cifra {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------- botones, pie y sin conexión */
+.cliente__botones {
+  display: flex;
+  gap: 0.5em;
+  margin-left: auto;
+}
+
+.cliente__sin-red {
+  padding: 0.15em 0.7em;
+  border-radius: 999px;
+  background: #fdecec;
+  color: var(--cl-peligro);
+  font-weight: 700;
+}
+
+.boton-cliente {
+  min-height: 48px;
+  padding: 0.55em 1.2em;
+  border: 1px solid #c3c9d0;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--cl-texto);
+  font: inherit;
+  font-size: clamp(15px, 2.4vh, 20px);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.boton-cliente--principal {
+  border-color: var(--cl-marca);
+  background: var(--cl-marca);
+  color: #fff;
+}
+
+.boton-cliente:focus-visible,
+.configurar-cliente input:focus-visible {
+  outline: 3px solid var(--cl-marca);
+  outline-offset: 2px;
+}
+
+.boton-cliente:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* ---------------------------------------------------------------- tableta: configurar */
+.configurar-cliente {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  min-height: 0;
+  padding: 3vh 16px;
+  overflow-y: auto;
+}
+
+.configurar-cliente__tarjeta {
+  display: grid;
+  gap: 10px;
+  width: min(560px, calc(100vw - 32px));
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: var(--cl-panel);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 16px rgba(16, 24, 40, 0.07);
+}
+
+.configurar-cliente__tarjeta h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.configurar-cliente__tarjeta p {
+  margin: 0;
+  color: var(--cl-suave);
+  font-size: 16px;
+}
+
+.configurar-cliente__actual:empty {
+  display: none;
+}
+
+.configurar-cliente label {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.configurar-cliente input {
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #c3c9d0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 18px;
+  user-select: text;
+}
+
+.configurar-cliente__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.configurar-cliente__cajas {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.configurar-cliente__caja {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--cl-linea);
+  border-radius: 12px;
+}
+
+.configurar-cliente__datos {
+  display: grid;
+  flex: 1 1 180px;
+  gap: 2px;
+}
+
+.configurar-cliente__datos strong {
+  font-size: 18px;
+}
+
+.configurar-cliente__datos span,
+.configurar-cliente__datos small {
+  color: var(--cl-suave);
+  font-size: 14px;
+}
+
+.configurar-cliente__mensaje {
+  width: min(560px, calc(100vw - 32px));
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fdecec;
+  color: var(--cl-peligro);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.configurar-cliente__mensaje[data-tipo="info"] {
+  background: #eaf1fd;
+  color: #2459b8;
+}
+
+.configurar-cliente__mensaje[data-tipo="ok"] {
+  background: var(--cl-exito-claro);
+  color: var(--cl-exito);
+}
+
+.aviso-cliente .boton-cliente {
+  margin-top: 1vh;
+}

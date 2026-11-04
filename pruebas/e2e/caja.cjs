@@ -106,9 +106,13 @@ const totalTicket = (page) => page.textContent('#tot-total');
   // ---- 2b) pantalla del cliente: la caja la abre en otra ventana (Más funciones)
   await page.keyboard.press('F9');
   await page.waitForSelector('dialog[open] .menu-funciones');
+  await abierto(page).locator('.menu-funciones button', { hasText: 'Pantalla del cliente' }).click();
+  await page.waitForFunction(() => document.getElementById('estado-tableta')?.dataset.activa === 'false', null, { timeout: 10000 });
+  v.ok('«Pantalla del cliente» ofrece abrirla en esta computadora y dice que no hay tableta emparejada',
+    /ninguna/.test(await page.textContent('#estado-tableta')) && /cliente\.html/.test(await abierto(page).textContent('.dlg__nota')));
   const [cliente] = await Promise.all([
     ctx.waitForEvent('page'),
-    abierto(page).locator('.menu-funciones button', { hasText: 'Pantalla del cliente' }).click(),
+    pulsarEnDialogo(page, 'Abrir en esta computadora'),
   ]);
   cliente.on('console', (m) => { if (m.type() === 'error') errores.push(`[cliente] ${m.text()}`); });
   cliente.on('pageerror', (e) => errores.push(`[cliente] ${e.message}`));
@@ -120,6 +124,45 @@ const totalTicket = (page) => page.textContent('#tot-total');
     /\/caja\/cliente\.html$/.test(cliente.url()) && /El Águila Market/.test(await cliente.textContent('#aviso-texto')) && (await cliente.textContent('#caja')) === 'Caja 1'
     && (await cliente.textContent('#atiende')) === 'Le atiende María', `${cliente.url()} · ${await cliente.textContent('#atiende')}`);
   await cliente.screenshot({ path: `${c.SALIDA}/cliente-bienvenida.png` });
+
+  // ---- 2c) pantalla del cliente en una tableta: otro aparato (otro contexto del navegador), la empareja un administrador
+  const ctxTableta = await browser.newContext({ viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1, hasTouch: true });
+  const tableta = await ctxTableta.newPage();
+  tableta.on('console', (m) => { if (m.type() === 'error') errores.push(`[tableta] ${m.text().slice(0, 200)}`); });
+  tableta.on('pageerror', (e) => errores.push(`[tableta] ${e.message}`));
+  tableta.on('dialog', (d) => d.accept());
+  await tableta.goto(`${c.BASE}/caja/cliente.html`);
+  await tableta.waitForSelector('#btn-tableta:not([hidden])');
+  v.ok('una tableta sin emparejar ofrece «Usar en una tableta»', /tableta/.test(await tableta.textContent('#aviso-texto')));
+  await tableta.click('#btn-tableta');
+  await tableta.fill('#t-identificador', c.EMPLEADA.correo);
+  await tableta.fill('#t-secreto', c.EMPLEADA.nip);
+  await tableta.click('#t-entrar');
+  await tableta.waitForFunction(() => /Solo un administrador/.test(document.getElementById('t-mensaje').textContent), null, { timeout: 15000 });
+  v.ok('una empleada no puede emparejar la tableta', await tableta.isVisible('#form-tableta'));
+  await tableta.fill('#t-identificador', JEFA.correo);
+  await tableta.fill('#t-secreto', JEFA.nip);
+  await tableta.click('#t-entrar');
+  await tableta.waitForSelector('#t-cajas:not([hidden]) li', { timeout: 15000 });
+  v.ok('el administrador entra con su correo y NIP y elige entre las cajas activas', (await tableta.$$('#t-lista li')).length === 2 && /Sin tableta/.test(await tableta.textContent('#t-lista')));
+  await tableta.screenshot({ path: `${c.SALIDA}/tableta-emparejar.png` });
+  await tableta.click('#t-lista li:has-text("Caja 1") button:has-text("Mostrar esta caja")');
+  await tableta.waitForFunction(() => document.getElementById('aviso-titulo')?.textContent === '¡Bienvenido!' && !document.getElementById('vista-aviso').hidden, null, { timeout: 15000 });
+  const emparejada = await tableta.evaluate(() => JSON.parse(localStorage.getItem('aguila.cliente.tableta')));
+  const pantallas = [...(await c.leerColeccion('pantallas')).keys()];
+  const almacenTableta = await tableta.evaluate(() => JSON.stringify({ ...localStorage }));
+  v.ok('emparejada con Caja 1: guarda solo el id de su pantalla (nunca la clave de caja) y existe pantallas/{id}',
+    emparejada?.caja === 'c1' && emparejada.cajaNombre === 'Caja 1' && /^[0-9a-f]{64}$/.test(emparejada.pantalla) && pantallas.length === 1 && pantallas[0] === emparejada.pantalla
+    && !almacenTableta.includes(c.CLAVE_CAJA), JSON.stringify({ emparejada, pantallas }));
+  v.ok('y no deja ninguna sesión abierta en la tableta (lee sin sesión)', await tableta.evaluate(async () => (await import('/js/firebase.js')).auth.currentUser === null));
+  await page.bringToFront();
+  await page.keyboard.press('F9');
+  await page.waitForSelector('dialog[open] .menu-funciones');
+  await abierto(page).locator('.menu-funciones button', { hasText: 'Pantalla del cliente' }).click();
+  await page.waitForFunction(() => document.getElementById('estado-tableta')?.dataset.activa === 'true', null, { timeout: 10000 });
+  v.ok('en la caja, «Pantalla del cliente» ya dice que tiene tableta', /emparejada con Caja 1/.test(await page.textContent('#estado-tableta')));
+  await pulsarEnDialogo(page, 'Volver');
+  await esperarSinDialogo(page);
 
   // ---- 3) vender
   await page.waitForTimeout(400);
@@ -163,6 +206,10 @@ const totalTicket = (page) => page.textContent('#tot-total');
     && (await cliente.textContent('#t-total')) === '$42.87' && (await cliente.textContent('#t-impuesto')) === '$2.07' && (await cliente.textContent('#t-efectivo')) === 'En efectivo: $42.85'
     && (await cliente.textContent('#t-articulos')) === '8');
   await cliente.screenshot({ path: `${c.SALIDA}/cliente-venta.png` });
+  await tableta.waitForFunction(() => document.querySelectorAll('#lineas .linea-cliente').length === 5 && document.getElementById('t-total').textContent === '$42.87', null, { timeout: 15000 });
+  v.ok('la tableta muestra lo mismo por internet: el último artículo, cada precio y el total',
+    /Carnicería/.test(await tableta.textContent('#destacado-nombre')) && (await tableta.textContent('#t-efectivo')) === 'En efectivo: $42.85' && (await tableta.textContent('#atiende')) === 'Le atiende María');
+  await tableta.screenshot({ path: `${c.SALIDA}/tableta-venta.png` });
   await cliente.setViewportSize({ width: 600, height: 1024 });
   await cliente.waitForTimeout(150);
   v.ok('en una pantalla vertical cabe todo sin desplazar la página', await cliente.evaluate(() => document.documentElement.scrollHeight <= innerHeight && document.documentElement.scrollWidth <= innerWidth));
@@ -204,6 +251,8 @@ const totalTicket = (page) => page.textContent('#tot-total');
     (await cliente.textContent('#g-cambio')) === '$19.65' && (await cliente.textContent('#g-total')) === '$30.35' && (await cliente.textContent('#g-pagos')) === 'Efectivo $50.00'
     && /Gracias por su compra/.test(await cliente.textContent('#g-mensaje')));
   await cliente.screenshot({ path: `${c.SALIDA}/cliente-gracias.png` });
+  await tableta.waitForSelector('#vista-gracias:not([hidden])', { timeout: 15000 });
+  v.ok('y en la tableta, el gracias y su cambio', (await tableta.textContent('#g-cambio')) === '$19.65' && (await tableta.textContent('#g-total')) === '$30.35');
   v.ok('se imprimió el recibo con encabezado de la tienda, HST y código de barras', await (async () => {
     const r = await ultimaImpresion();
     return /EL ÁGUILA MARKET[\s\S]*42 Erie St S[\s\S]*519-322-4222[\s\S]*HST # 81234 5678 RT0001[\s\S]*TOTAL[\s\S]*\$30\.37[\s\S]*CAMBIO[\s\S]*\$19\.65/i.test(r);
@@ -356,6 +405,23 @@ const totalTicket = (page) => page.textContent('#tot-total');
   v.ok('el turno queda cerrado con su resumen y la caja libre', cerrado?.estado === 'cerrado' && cerrado.efectivoContadoCentavos === 15450 && cerrado.diferenciaCentavos === -20
     && cerrado.resumen?.ventas === 2 && cerrado.resumen?.devoluciones === 1 && cerrado.resumen?.cancelaciones === 1 && cajaLibre.turnoActual === null, JSON.stringify({ e: cerrado?.estado, d: cerrado?.diferenciaCentavos, r: cerrado?.resumen?.ventas }));
   v.ok('vuelve a la pantalla de acceso, sin sesión', /Turno cerrado/.test(await page.textContent('#acceso-mensaje')));
+  await tableta.waitForFunction(() => document.getElementById('aviso-titulo')?.textContent === 'Caja cerrada' && !document.getElementById('vista-aviso').hidden, null, { timeout: 15000 });
+  v.ok('al cerrar el turno, la tableta dice «Caja cerrada»', true);
+  const escriturasTableta = (await c.leerDoc(`pantallas/${emparejada.pantalla}`));
+  v.ok('la última escritura de la tableta es de la cajera (las reglas la aceptan)', escriturasTableta?.cajero === c.EMPLEADA.codigo && escriturasTableta.estado?.fase === 'cerrada');
+  await tableta.click('#btn-configurar');
+  await tableta.fill('#t-identificador', JEFA.correo);
+  await tableta.fill('#t-secreto', JEFA.nip);
+  await tableta.click('#t-entrar');
+  await tableta.waitForSelector('#t-cajas:not([hidden]) li', { timeout: 15000 });
+  v.ok('para cambiarla, el administrador ve qué caja ya tiene tableta', /Ya tiene una tableta/.test(await tableta.textContent('#t-lista li:has-text("Caja 1")')));
+  await tableta.click('#t-lista li:has-text("Caja 1") button:has-text("Desconectar tableta")');
+  await tableta.waitForFunction(() => /ya no tiene tableta/.test(document.getElementById('t-mensaje').textContent), null, { timeout: 15000 });
+  await tableta.click('#t-volver');
+  await tableta.waitForFunction(() => document.getElementById('aviso-titulo')?.textContent === 'Tableta sin caja', null, { timeout: 15000 });
+  v.ok('desconectada por el administrador: se borra su pantalla y la tableta lo dice', (await c.leerColeccion('pantallas')).size === 0
+    && await tableta.evaluate(async () => (await import('/js/firebase.js')).auth.currentUser === null));
+  await tableta.screenshot({ path: `${c.SALIDA}/tableta-desconectada.png` });
 
   // ---- 9) movimientos en vivo: cada paso de la caja queda registrado para el back office
   const eventos = [...(await c.leerColeccion('eventos')).values()].sort((a, b) => Date.parse(a.fecha) - Date.parse(b.fecha));

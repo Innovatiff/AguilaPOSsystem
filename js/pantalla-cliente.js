@@ -28,6 +28,14 @@ export const GRACIAS_MS = 25000;
 /** Cuántas líneas se mandan (las últimas): en la pantalla no caben más. */
 export const MAXIMO_LINEAS = 60;
 
+// Tableta (por internet, js/pantalla-remota.js)
+/** La caja agrupa los cambios: como mucho una escritura en Firestore cada tanto. */
+export const RETRASO_TABLETA_MS = 350;
+/** Mientras no tiene tableta, cada cuánto la caja mira si le emparejaron una (una lectura). */
+export const REVISAR_TABLETA_MS = 60 * 1000;
+/** En la tableta, un ticket sin cambios en tanto tiempo es de una caja que se quedó así: bienvenida. */
+export const ANTIGUEDAD_MAXIMA_MS = 20 * 60 * 1000;
+
 export const FASES = Object.freeze(['cerrada', 'libre', 'venta', 'cobro', 'cobrado']);
 
 const dinero = formatearMonto;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generarClaveCaja, claveCajaValida, huellaNip, esHuella, BYTES_CLAVE } from '../../js/nip.js';
+import { generarClaveCaja, claveCajaValida, huellaNip, huellaPantalla, esHuella, BYTES_CLAVE } from '../../js/nip.js';
 
 describe('NIP de caja: huella con la clave de caja', () => {
   it('la clave es base64 de 32 bytes aleatorios', () => {
@@ -26,5 +26,17 @@ describe('NIP de caja: huella con la clave de caja', () => {
   });
   it('rechaza una clave inválida', async () => {
     await assert.rejects(() => huellaNip('no', '482913'), /Clave de caja/);
+    await assert.rejects(() => huellaPantalla('no', 'talbot-1'), /Clave de caja/);
+  });
+  it('la pantalla del cliente de cada caja tiene su id: HMAC de la caja, distinto por caja y nunca igual a una huella de NIP', async () => {
+    const { createHmac } = await import('node:crypto');
+    const clave = generarClaveCaja();
+    const p1 = await huellaPantalla(clave, 'talbot-1');
+    assert.ok(esHuella(p1));
+    assert.equal(p1, createHmac('sha256', Buffer.from(clave, 'base64')).update('pantalla:talbot-1').digest('hex'));
+    assert.equal(await huellaPantalla(clave, 'talbot-1'), p1, 'la caja y la tableta calculan lo mismo');
+    assert.notEqual(await huellaPantalla(clave, 'talbot-2'), p1);
+    assert.notEqual(await huellaPantalla(generarClaveCaja(), 'talbot-1'), p1, 'sin la clave no se puede calcular');
+    assert.notEqual(await huellaNip(clave, 'talbot-1'), p1);
   });
 });

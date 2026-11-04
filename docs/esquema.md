@@ -310,6 +310,23 @@ The history of a sale is found by its `folio` (→ `ticket` → every movement o
 that ticket); the history of a cancelled ticket (`movimientosCaja` tipo
 `cancelacion`) by the `venta_cancelada` movement of the same shift and amount.
 
+### `pantallas/{huella}`
+The customer display of one register on a **tablet** (the second-screen
+version on the register computer needs nothing in Firestore). The id is
+`HMAC-SHA-256(register key, "pantalla:" + cajaId)` in hex (`js/nip.js`,
+`huellaPantalla`): only a configured register or an admin can work it out.
+Anyone can `get` it by its id (the paired tablet reads without signing in);
+nobody can list the collection. An admin **creates** it when pairing a tablet
+and **deletes** it to disconnect; while it exists, the cashier updates it.
+Fields, exactly:
+
+| field | type | notes |
+|---|---|---|
+| caja | string | the register id |
+| cajero | string | who wrote it last: must be the signed-in user |
+| estado | map | what the customer sees, built by `js/pantalla-cliente.js` (`estadoCliente`): `v` (1), `fase` (`cerrada`, `libre`, `venta`, `cobro`, `cobrado`), store, register, first name of the cashier, lines with formatted prices, totals, payment and change. Display text only: no ids of people, no codes |
+| actualizadoEn | timestamp | server time (`== request.time`) |
+
 ## Inventory
 
 ### `recepciones/{recepcionId}`

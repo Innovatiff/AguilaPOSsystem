@@ -6,7 +6,13 @@
   <title>Pantalla del cliente · Águila POS</title>
   <link rel="icon" href="../icons/aguila.svg" type="image/svg+xml">
   <link rel="icon" href="../icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="../icons/icono-180.png">
+  <link rel="manifest" href="cliente.webmanifest">
   <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Pantalla cliente">
   <script type="module" src="../js/pwa.js"></script>
   <link rel="stylesheet" href="../css/cliente.css">
   <script type="module" src="../js/cliente.js"></script>
@@ -23,11 +29,12 @@
     </div>
   </header>
 
-  <!-- Bienvenida, caja cerrada o (sin caja todavía) cómo se usa -->
+  <!-- Bienvenida, caja cerrada o (todavía sin caja) cómo se usa -->
   <section class="aviso-cliente" id="vista-aviso" aria-live="polite">
     <img class="aviso-cliente__logo" src="../icons/aguila.svg" alt="">
     <h1 id="aviso-titulo">Pantalla del cliente</h1>
     <p id="aviso-texto">Esperando a la caja…</p>
+    <button type="button" class="boton-cliente boton-cliente--principal" id="btn-tableta" hidden>Usar en una tableta</button>
   </section>
 
   <!-- Ticket en curso y cobro -->
@@ -72,9 +79,38 @@
     <p class="gracias-cliente__folio" id="g-folio"></p>
   </section>
 
+  <!-- Tableta: un administrador la empareja con una caja -->
+  <section class="configurar-cliente" id="vista-configurar" hidden>
+    <form class="configurar-cliente__tarjeta" id="form-tableta" novalidate>
+      <h1>Pantalla del cliente en una tableta</h1>
+      <p>Un administrador empareja esta tableta con una caja. Solo se hace una vez: después la tableta muestra sola lo que se escanea en esa caja.</p>
+      <p class="configurar-cliente__actual" id="t-actual"></p>
+      <label for="t-identificador">Correo o número de administrador</label>
+      <input id="t-identificador" autocomplete="username" autocapitalize="off" spellcheck="false">
+      <label for="t-secreto">NIP o contraseña</label>
+      <input id="t-secreto" type="password" autocomplete="current-password">
+      <div class="configurar-cliente__acciones">
+        <button type="button" class="boton-cliente" id="t-cancelar">Cancelar</button>
+        <button type="submit" class="boton-cliente boton-cliente--principal" id="t-entrar">Continuar</button>
+      </div>
+    </form>
+    <div class="configurar-cliente__tarjeta" id="t-cajas" hidden>
+      <h1>¿Qué caja muestra esta tableta?</h1>
+      <ul class="configurar-cliente__cajas" id="t-lista"></ul>
+      <div class="configurar-cliente__acciones">
+        <button type="button" class="boton-cliente" id="t-volver">Cancelar</button>
+      </div>
+    </div>
+    <p class="configurar-cliente__mensaje" id="t-mensaje" role="alert" hidden></p>
+  </section>
+
   <footer class="cliente__pie">
     <span id="atiende"></span>
-    <button type="button" class="cliente__completa" id="btn-completa">Pantalla completa</button>
+    <span class="cliente__sin-red" id="sin-red" hidden>Sin conexión</span>
+    <span class="cliente__botones">
+      <button type="button" class="cliente__completa" id="btn-configurar" hidden>Configurar</button>
+      <button type="button" class="cliente__completa" id="btn-completa">Pantalla completa</button>
+    </span>
   </footer>
 </body>
 </html>

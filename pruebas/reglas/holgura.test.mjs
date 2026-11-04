@@ -28,7 +28,8 @@ const bloques = Array.from({ length: MAXIMO_BLOQUES }, (_, k) => `    function r
 function reglasConRelleno(ancla, cantidad) {
   assert.ok(REGLAS.includes(ancla), `No encuentro el ancla en firestore.rules: ${ancla}`);
   const cuerpo = cantidad === 0 ? 'true' : Array.from({ length: cantidad }, (_, k) => `relleno${k}()`).join(' && ');
-  const conAncla = REGLAS.replace(ancla, `${ancla.replace(/;$/, '')} && relleno();`);
+  // Con una función: el ancla puede llevar "$'" (una expresión regular), que en un texto de reemplazo es especial.
+  const conAncla = REGLAS.replace(ancla, () => `${ancla.replace(/;$/, '')} && relleno();`);
   return conAncla.replace('match /databases/{database}/documents {', `match /databases/{database}/documents {\n    function relleno() { return ${cuerpo}; }\n${bloques}\n`);
 }
 
@@ -79,6 +80,14 @@ function loteCerrar(db, quien) {
   return lote;
 }
 
+/** Lo que manda la caja a la tableta en plena venta (js/pantalla-cliente.js). */
+const ESTADO_PANTALLA = {
+  v: 1, fase: 'venta', tienda: 'Talbot', caja: 'Caja 1', atiende: 'María', mensaje: '¡Gracias por su compra!', devolucion: false,
+  lineas: [{ id: 'l1', nombre: 'TAJIN CLASICO 142g', detalle: '2 × $4.99', importe: '$9.98', antes: null, descuento: null, negativa: false }],
+  ocultas: 0, ultima: { id: 'l1', nombre: 'TAJIN CLASICO 142g', detalle: '2 × $4.99', importe: '$9.98', antes: null, descuento: null, negativa: false },
+  articulos: 2, subtotal: '$9.98', descuento: null, ahorro: null, impuestoNombre: 'HST 13 %', impuesto: '$1.30', total: '$11.28', totalEfectivo: '$11.30',
+};
+
 const ANCLA = {
   venta: 'allow create: if crearVenta(request.resource.data);',
   abrirTurno: 'allow create: if abrirTurno(request.resource.data, turnoId);',
@@ -93,6 +102,8 @@ const ANCLA = {
   correo: 'getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data.correo == correo;',
   evento: 'allow create: if crearEvento(request.resource.data);',
   recepcion: 'allow create: if crearRecepcion(request.resource.data);',
+  emparejarPantalla: "allow create: if pantallaId.matches('^[0-9a-f]{64}$') && escribirPantalla(request.resource.data, true);",
+  pantalla: 'allow update: if escribirPantalla(request.resource.data, false);',
   historial: 'allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);',
 };
 
@@ -172,6 +183,20 @@ const ESCENARIOS = [
       tipo: 'pago', turno: 't1', caja: 'c1', cajaNombre: 'Caja 1', numeroCaja: 1, tienda: 'talbot', cajero: '100123', cajeroNombre: 'María',
       ticket: 'tk1', folio: '261104-01-0001', texto: 'Efectivo $18.00 (saldo $0.00)', importeCentavos: 1800, fecha: Timestamp.now(), registradoEn: serverTimestamp(),
     }),
+  },
+  {
+    nombre: 'emparejar la tableta de la pantalla del cliente (admin)',
+    ancla: ANCLA.emparejarPantalla,
+    datos: {},
+    quien: JEFA,
+    accion: (db) => setDoc(doc(db, `pantallas/${'a'.repeat(64)}`), { caja: 'c1', cajero: '100150', estado: ESTADO_PANTALLA, actualizadoEn: serverTimestamp() }),
+  },
+  {
+    nombre: 'pantalla del cliente en tableta (la caja la actualiza)',
+    ancla: ANCLA.pantalla,
+    datos: { [`pantallas/${'a'.repeat(64)}`]: { caja: 'c1', cajero: '100150', estado: { v: 1, fase: 'cerrada' }, actualizadoEn: AHORA } },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, `pantallas/${'a'.repeat(64)}`), { caja: 'c1', cajero: '100123', estado: ESTADO_PANTALLA, actualizadoEn: serverTimestamp() }),
   },
   {
     nombre: 'entrega de mercancía (inventario)',

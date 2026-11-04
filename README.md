@@ -11,7 +11,7 @@ Four apps share the site, the data and the service worker:
 | app | where | who | what |
 |---|---|---|---|
 | **Back office** | site root (`index.html`, `movimientos.html`, `transacciones.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `inventario.html`, `gestion/`) | **admins only** | today's sales live, **live register activity**, **transactions with receipts and audit history**, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, **inventory: what came in and how much**, employees, registers, stores, POS settings |
-| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours. **Customer display** on a second screen: `caja/cliente.html` |
+| **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours. **Customer display** on a second screen or a tablet: `caja/cliente.html` |
 | **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, **receive deliveries** (what came in, how many), and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
 | **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner) |
 
@@ -32,7 +32,8 @@ Four apps share the site, the data and the service worker:
 | `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
 | `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
 | `caja/consulta.html`, `js/consulta.js` | staff price check and PIN change |
-| `caja/cliente.html`, `js/cliente.js`, `js/pantalla-cliente.js`, `css/cliente.css` | customer display: the register's second screen facing the customer (items as they are scanned, prices, total, payment, change), fed by the register on the same computer |
+| `caja/cliente.html`, `js/cliente.js`, `js/pantalla-cliente.js`, `css/cliente.css` | customer display facing the customer (items as they are scanned, prices, total, payment, change): on a second screen of the register computer (fed inside the browser) or on a tablet |
+| `js/cliente-tableta.js`, `js/pantalla-remota.js` | customer display on a tablet: an admin pairs it with a register once; the register updates `pantallas/{id}` in Firestore and the tablet reads it without signing in |
 | `js/ticket.js` | ticket math in integer cents: lines, discounts, HST once per ticket, Canadian cash rounding, payments, receipt number (pure, unit tested) |
 | `js/turnos.js` | shift summary (X/Z), cash count, summing shifts for reports (pure, unit tested) |
 | `js/recibo.js`, `css/recibo.css`, `js/code128.js` | thermal receipts (80/58 mm) and reports printed through the browser; Code 128 barcode of the receipt number |
@@ -330,6 +331,37 @@ start it with Windows next to the register:
 internet: the register talks to it inside the browser (`BroadcastChannel`),
 nothing goes through Firestore, and nobody outside that computer can write to
 it. If the register is closed or reloading, it goes back to the welcome.
+
+#### On a tablet
+
+A tablet (Android or iPad, on the store's Wi-Fi) facing the customer shows the
+same screens, through the internet:
+
+1. On the tablet, open `https://<your site>/caja/cliente.html` and touch
+   **Usar en una tableta**.
+2. An **admin** signs in there (email or number + PIN or password) and touches
+   **Mostrar esta caja** next to the register. The admin's session is closed
+   right away: the tablet keeps only the id of that register's screen, never
+   the register key, and reads it without signing in.
+3. Add the page to the tablet's home screen (it opens full screen) and leave
+   it on: it stays awake. On the register, **Más funciones → Pantalla del
+   cliente** says whether it has a tablet (a register notices a new tablet
+   when it opens a shift, within a minute while selling, or right away from
+   that dialog).
+
+To move a tablet to another register, or to disconnect one (also a lost one),
+touch **Configurar** on any tablet or browser at that address, sign in as an
+admin and choose **Mostrar esta caja** or **Desconectar tableta**.
+
+How it works: the register writes what the customer sees to one small
+document, `pantallas/{id}`, where the id is an HMAC of the register with the
+register key, so only a configured register or an admin can work it out. The
+writes are grouped (at most one every 0.35 s, and only when something
+changed): about one write per item scanned plus a few per sale, and none at
+all for registers without a tablet. Without internet the register keeps
+selling and the tablet catches up when the connection comes back; a ticket
+that has not changed in 20 minutes is replaced by the welcome. When the shift
+closes, the tablet shows "Caja cerrada".
 
 ## Price check (`/caja/consulta.html`)
 

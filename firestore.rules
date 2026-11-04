@@ -33,6 +33,11 @@ rules_version = '2';
 //    a su nombre; son inmutables y solo los leen los administradores.
 //  - recepciones/{id}: la mercancía que llegó (inventario). La registran los
 //    administradores y el personal del Catálogo; solo un admin la anula.
+//  - pantallas/{huella}: la pantalla del cliente de una caja, para la tableta
+//    que la muestra. El id es un HMAC del id de la caja con la clave de caja:
+//    solo una caja configurada o un administrador lo pueden calcular. La
+//    tableta lo lee sin sesión (un documento, sin listar); la empareja (crea)
+//    y la desconecta (borra) un admin; la actualiza quien atiende la caja.
 //  - POS: una caja tiene a lo sumo un turno abierto; abrir y cerrar turno se
 //    hace en un lote junto con la caja. Cada venta y cada movimiento de
 //    efectivo pertenece al turno de quien lo registra, y es inmutable.
@@ -923,6 +928,38 @@ service cloud.firestore {
       allow create: if crearRecepcion(request.resource.data);
       allow update: if anularRecepcion();
       allow delete: if false;
+    }
+
+    // ----- pantallas: la pantalla del cliente en una tableta --------------------
+    // pantallas/{huella} = { caja, cajero, estado, actualizadoEn }: lo que ve el
+    // cliente de esa caja (js/pantalla-cliente.js arma `estado`). La huella es
+    // HMAC-SHA-256(clave de caja, "pantalla:" + caja): sin la clave nadie puede
+    // dar con el documento, y se lee sin sesión solo por su id (sin listar).
+    // Un admin la empareja (crea) y la desconecta (borra); la caja solo la
+    // actualiza mientras exista, a nombre de quien atiende.
+    function escribirPantalla(datos, soloAdmin) {
+      let d = datos;
+      let email = emailActual();
+      let yo = usuarioActual();
+      let ficha = fichaDe(yo);
+      return vigente(ficha, email)
+        && (!soloAdmin || ficha.rol == 'admin')
+        && exactamente(d, ['caja', 'cajero', 'estado', 'actualizadoEn'])
+        && d.cajero == yo
+        && esTextoNoVacio(d.caja, 60)
+        && d.estado is map
+        && d.estado.size() <= 40
+        && d.estado.v == 1
+        && d.estado.fase in ['cerrada', 'libre', 'venta', 'cobro', 'cobrado']
+        && d.actualizadoEn == request.time;
+    }
+
+    match /pantallas/{pantallaId} {
+      allow get: if pantallaId.matches('^[0-9a-f]{64}$');
+      allow list: if false;
+      allow create: if pantallaId.matches('^[0-9a-f]{64}$') && escribirPantalla(request.resource.data, true);
+      allow update: if escribirPantalla(request.resource.data, false);
+      allow delete: if esAdmin();
     }
   }
 }

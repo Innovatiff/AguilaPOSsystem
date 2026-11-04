@@ -34,12 +34,25 @@ export function claveCajaValida(clave) {
   }
 }
 
-/** Huella del NIP con la clave de caja: 64 caracteres hexadecimales. */
-export async function huellaNip(clave, nip) {
+async function hmacHex(clave, texto) {
   if (!claveCajaValida(clave)) throw new Error('Clave de caja inválida.');
   const llave = await crypto.subtle.importKey('raw', deBase64(clave), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const firma = await crypto.subtle.sign('HMAC', llave, new TextEncoder().encode(`nip:${String(nip).trim()}`));
-  return aHex(firma);
+  return aHex(await crypto.subtle.sign('HMAC', llave, new TextEncoder().encode(texto)));
+}
+
+/** Huella del NIP con la clave de caja: 64 caracteres hexadecimales. */
+export function huellaNip(clave, nip) {
+  return hmacHex(clave, `nip:${String(nip).trim()}`);
+}
+
+/**
+ * Id del documento de la pantalla del cliente de una caja en tableta
+ * (pantallas/{id}): HMAC(clave de caja, "pantalla:" + id de la caja). Solo lo
+ * calculan las cajas configuradas y los administradores; la tableta guarda el
+ * id (nunca la clave) cuando un administrador la empareja.
+ */
+export function huellaPantalla(clave, cajaId) {
+  return hmacHex(clave, `pantalla:${String(cajaId)}`);
 }
 
 export function esHuella(texto) {
