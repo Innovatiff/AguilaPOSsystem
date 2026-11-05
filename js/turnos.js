@@ -7,8 +7,11 @@
  * comprobarlo en cualquier momento recalculándolo desde las ventas.
  */
 import { DENOMINACIONES_CAD, METODOS_PAGO } from './ticket.js';
+import { t } from './idioma.js';
 
 export const TIPOS_MOVIMIENTO = Object.freeze(['retiro', 'entrada', 'pago', 'apertura', 'cancelacion']);
+/** Nombres en español (como se guardan en los movimientos en vivo); para mostrar, nombreMovimiento(). */
+// i18n:sin-revisar-inicio
 export const NOMBRE_MOVIMIENTO = Object.freeze({
   retiro: 'Retiro de efectivo',
   entrada: 'Entrada de efectivo',
@@ -16,6 +19,19 @@ export const NOMBRE_MOVIMIENTO = Object.freeze({
   apertura: 'Apertura de cajón',
   cancelacion: 'Ticket cancelado',
 });
+// i18n:sin-revisar-fin
+/** Movimiento de efectivo para mostrar o imprimir, en el idioma elegido. */
+export function nombreMovimiento(tipo) {
+  switch (tipo) {
+    case 'retiro': return t('Retiro de efectivo');
+    case 'entrada': return t('Entrada de efectivo');
+    case 'pago': return t('Pago desde caja');
+    case 'apertura': return t('Apertura de cajón');
+    case 'cancelacion': return t('Ticket cancelado');
+    default: return tipo;
+  }
+}
+
 /** Movimientos que mueven efectivo y en qué sentido. */
 const EFECTO_EFECTIVO = Object.freeze({ retiro: -1, entrada: 1, pago: -1, apertura: 0, cancelacion: 0 });
 

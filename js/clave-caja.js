@@ -7,6 +7,7 @@
  */
 import { db, doc, getDoc, runTransaction, serverTimestamp } from './firebase.js';
 import { generarClaveCaja, claveCajaValida } from './nip.js';
+import { t } from './idioma.js';
 
 const referencia = () => doc(db, 'secretos', 'caja');
 
@@ -28,6 +29,6 @@ export async function obtenerClaveCaja(usuario) {
     }
     transaccion.set(referencia(), { clave, creadaEn: serverTimestamp(), creadaPor: usuario });
   });
-  if (!claveCajaValida(clave)) throw Object.assign(new Error('La clave de caja guardada está dañada.'), { code: 'caja/clave-danada' });
+  if (!claveCajaValida(clave)) throw Object.assign(new Error(t('La clave de caja guardada está dañada.')), { code: 'caja/clave-danada' });
   return clave;
 }

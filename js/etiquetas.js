@@ -4,6 +4,7 @@
  */
 import { svgCodigoBarras } from './upca.js';
 import { formatearPrecio, indicadorFiscal } from './precios.js';
+import { t } from './idioma.js';
 
 export const PLANTILLA = Object.freeze({
   CON_CODIGO: 'conCodigo',
@@ -37,7 +38,7 @@ export function leerMedidaMM(propiedad, elemento = document.documentElement) {
   const crudo = getComputedStyle(elemento).getPropertyValue(propiedad).trim();
   const coincidencia = /^(-?\d*\.?\d+)\s*(mm|cm|in|px|pt|pc)?$/i.exec(crudo);
   if (!coincidencia) {
-    throw new Error(`${propiedad} debe ser una longitud, p. ej. "0.33mm"; vale "${crudo}"`);
+    throw new Error(t('{propiedad} debe ser una longitud, p. ej. "0.33mm"; vale "{crudo}"', { propiedad: String(propiedad), crudo }));
   }
   return Number(coincidencia[1]) * FACTOR_A_MM[(coincidencia[2] || 'mm').toLowerCase()];
 }

@@ -2,6 +2,8 @@
  * Avisos flotantes (esquina inferior derecha). Un solo contenedor por página.
  * Duración 0 = permanece hasta cerrarlo.
  */
+import { t } from './idioma.js';
+
 let contenedor = null;
 
 function asegurarContenedor() {
@@ -26,7 +28,7 @@ export function avisar(texto, tipo = 'ok', duracionMs = 4000) {
   const cerrar = document.createElement('button');
   cerrar.type = 'button';
   cerrar.className = 'aviso__cerrar';
-  cerrar.setAttribute('aria-label', 'Cerrar aviso');
+  cerrar.setAttribute('aria-label', t('Cerrar aviso'));
   cerrar.textContent = '×';
   cerrar.addEventListener('click', () => aviso.remove());
   aviso.append(contenido, cerrar);

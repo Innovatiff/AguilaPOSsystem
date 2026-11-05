@@ -11,12 +11,13 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
+import { t, tc } from './idioma.js';
 import {
   observarVentasEntre, observarCancelacionesEntre, buscarVentasPorFolio, observarConfigPos, observarCajas,
   historialDeVenta, historialDeCancelacion,
 } from './pos-datos.js';
 import { observarTiendas } from './productos.js';
-import { METODOS_PAGO, NOMBRE_METODO, folioDesdeTexto } from './ticket.js';
+import { METODOS_PAGO, nombreMetodo, folioDesdeTexto } from './ticket.js';
 import { milisDe } from './turnos.js';
 import { configConDefectos } from './config-pos.js';
 import { normalizarTexto } from './esquema.js';
@@ -42,30 +43,33 @@ let tiendas = new Map();
 let config = configConDefectos(null);
 const dejar = [];
 
+// «Marca» aquí es la de auditoría (en inglés «Flag»), no la de un producto («Brand», que es lo que le da la traducción de la página).
+document.querySelector('label[for="f-marca"]').textContent = tc('auditoria', 'Marca');
 $('contenido').hidden = false;
 
 // ------------------------------------------------------------- transacciones
 
-/** Marcas de auditoría de una venta: [clave, texto]. */
+/** Marcas de auditoría de una venta: [clave, texto] (texto en el idioma elegido). */
 function marcasDe(v) {
   const marcas = [];
-  if (v.descuentoLineasCentavos + v.descuentoTicketCentavos > 0) marcas.push(['descuento', 'Descuento']);
-  if (v.cambiosPrecio > 0) marcas.push(['precio', 'Cambio de precio']);
-  if (v.lineasAnuladas > 0) marcas.push(['anuladas', `${v.lineasAnuladas} ${v.lineasAnuladas === 1 ? 'anulado' : 'anulados'}`]);
-  if (v.autorizacion) marcas.push(['autorizada', 'Autorizada']);
-  if ((v.lineas ?? []).some((l) => l.departamento && !l.productoId)) marcas.push(['libre', 'Venta libre']);
-  if (v.tipo === 'devolucion' && !v.ventaOriginal) marcas.push(['sin-recibo', 'Sin recibo']);
+  if (v.descuentoLineasCentavos + v.descuentoTicketCentavos > 0) marcas.push(['descuento', t('Descuento')]);
+  if (v.cambiosPrecio > 0) marcas.push(['precio', t('Cambio de precio')]);
+  if (v.lineasAnuladas > 0) marcas.push(['anuladas', v.lineasAnuladas === 1 ? t('{n} anulado', { n: v.lineasAnuladas }) : t('{n} anulados', { n: v.lineasAnuladas })]);
+  if (v.autorizacion) marcas.push(['autorizada', t('Autorizada')]);
+  if ((v.lineas ?? []).some((l) => l.departamento && !l.productoId)) marcas.push(['libre', t('Venta libre')]);
+  if (v.tipo === 'devolucion' && !v.ventaOriginal) marcas.push(['sin-recibo', t('Sin recibo')]);
   return marcas;
 }
 
+/** estado → [texto, chip]. El texto va en el idioma elegido (también en el CSV). */
 const ESTADO = {
-  completada: ['Completada', 'abierto'],
-  devuelta: ['Devuelta', 'neutro'],
-  devolucion: ['Devolución', 'aviso'],
-  anulada: ['Anulada', 'alerta'],
+  completada: [t('Completada'), 'abierto'],
+  devuelta: [t('Devuelta'), 'neutro'],
+  devolucion: [t('Devolución'), 'aviso'],
+  anulada: [t('Anulada'), 'alerta'],
 };
 
-const textoMetodos = (v) => [...new Set((v.pagos ?? []).map((p) => NOMBRE_METODO[p.metodo] ?? p.metodo))].join(' + ') || '—';
+const textoMetodos = (v) => [...new Set((v.pagos ?? []).map((p) => nombreMetodo(p.metodo)))].join(' + ') || '—';
 
 /** Ventas, devoluciones y tickets cancelados como filas uniformes. */
 function transacciones() {
@@ -118,14 +122,14 @@ const filtros = () => ({
   buscar: normalizarTexto($('f-buscar').value).replace(/-/g, ''),
 });
 
-function cumple(t, f) {
-  if (f.cajero && t.cajero !== f.cajero) return false;
-  if (f.caja && t.caja !== f.caja) return false;
-  if (f.estado && t.estado !== f.estado) return false;
-  if (f.marca === 'ninguna' && t.marcas.length > 0) return false;
-  if (f.marca && f.marca !== 'ninguna' && !t.marcas.some(([clave]) => clave === f.marca)) return false;
-  if (f.pago && !t.pagos.includes(f.pago)) return false;
-  if (f.buscar && !f.buscar.split(' ').every((palabra) => t.buscable.includes(palabra))) return false;
+function cumple(tx, f) {
+  if (f.cajero && tx.cajero !== f.cajero) return false;
+  if (f.caja && tx.caja !== f.caja) return false;
+  if (f.estado && tx.estado !== f.estado) return false;
+  if (f.marca === 'ninguna' && tx.marcas.length > 0) return false;
+  if (f.marca && f.marca !== 'ninguna' && !tx.marcas.some(([clave]) => clave === f.marca)) return false;
+  if (f.pago && !tx.pagos.includes(f.pago)) return false;
+  if (f.buscar && !f.buscar.split(' ').every((palabra) => tx.buscable.includes(palabra))) return false;
   return true;
 }
 
@@ -137,41 +141,50 @@ function llenarSelect(select, pares, todos) {
   select.value = pares.some(([valor]) => valor === actual) ? actual : '';
 }
 
+/** «8 transacciones» o «2 de 8 transacciones» (en inglés, «1 transaction» en singular). */
+function cuantasTransacciones(n, total) {
+  if (n !== total) return t('{n} de {total} transacciones', { n, total });
+  return n === 1 ? tc('uno', '{n} transacciones', { n }) : t('{n} transacciones', { n });
+}
+
 let visibles = [];
 function pintar() {
   const todas = transacciones();
-  const personas = new Map(todas.map((t) => [t.cajero, t.cajeroNombre || t.cajero]));
-  const enCajas = new Map(todas.map((t) => [t.caja, t.cajaNombre || t.caja]));
-  llenarSelect($('f-cajero'), [...personas].sort((a, b) => a[1].localeCompare(b[1], 'es')), 'Todos');
-  llenarSelect($('f-caja'), [...enCajas].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), 'Todas');
+  const personas = new Map(todas.map((tx) => [tx.cajero, tx.cajeroNombre || tx.cajero]));
+  const enCajas = new Map(todas.map((tx) => [tx.caja, tx.cajaNombre || tx.caja]));
+  llenarSelect($('f-cajero'), [...personas].sort((a, b) => a[1].localeCompare(b[1], 'es')), t('Todos'));
+  llenarSelect($('f-caja'), [...enCajas].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), t('Todas'));
   if (parametros.get('caja') && !$('f-caja').value && enCajas.has(parametros.get('caja'))) $('f-caja').value = parametros.get('caja');
 
   const f = filtros();
-  visibles = todas.filter((t) => cumple(t, f));
+  visibles = todas.filter((tx) => cumple(tx, f));
   let vendido = 0;
   let devuelto = 0;
   let anuladas = 0;
-  for (const t of visibles) {
-    if (t.estado === 'anulada') anuladas += 1;
-    else if (t.total < 0) devuelto += -t.total;
-    else vendido += t.total;
+  for (const tx of visibles) {
+    if (tx.estado === 'anulada') anuladas += 1;
+    else if (tx.total < 0) devuelto += -tx.total;
+    else vendido += tx.total;
   }
-  $('contador').textContent = `${visibles.length === todas.length ? visibles.length : `${visibles.length} de ${todas.length}`} transacciones · vendido ${dinero(vendido)}${devuelto ? ` · devuelto ${dinero(devuelto)}` : ''}${anuladas ? ` · ${anuladas} anulada${anuladas === 1 ? '' : 's'}` : ''}`;
+  const partes = [cuantasTransacciones(visibles.length, todas.length), t('vendido {monto}', { monto: dinero(vendido) })];
+  if (devuelto) partes.push(t('devuelto {monto}', { monto: dinero(devuelto) }));
+  if (anuladas) partes.push(anuladas === 1 ? t('{n} anulada', { n: anuladas }) : t('{n} anuladas', { n: anuladas }));
+  $('contador').textContent = partes.join(' · ');
   $('vacio').hidden = visibles.length > 0;
   $('tabla-transacciones').hidden = visibles.length === 0;
-  $('tabla-transacciones').tBodies[0].replaceChildren(...visibles.map((t) => {
-    const [estadoTexto, estadoChip] = ESTADO[t.estado];
-    return h('tr', { tabindex: 0, dataset: { id: t.id }, class: t.estado === 'anulada' ? 'fila--anulada' : t.estado === 'devolucion' ? 'fila--devolucion' : null },
-      h('td', null, t.folio ? h('span', { class: 'monoespaciada', text: t.folio }) : h('span', { class: 'secundario', text: 'Sin recibo' }),
-        t.venta?.pendiente ? chip('Por enviar', 'aviso') : null),
-      h('td', { text: cuando(t.fecha) }),
-      h('td', { text: t.cajeroNombre }),
-      h('td', { text: t.cajaNombre }),
-      h('td', { class: 'num', text: String(t.articulos) }),
-      h('td', { text: t.metodos }),
-      h('td', { class: 'marcas' }, t.marcas.map(([, texto]) => chip(texto, 'neutro'))),
+  $('tabla-transacciones').tBodies[0].replaceChildren(...visibles.map((tx) => {
+    const [estadoTexto, estadoChip] = ESTADO[tx.estado];
+    return h('tr', { tabindex: 0, dataset: { id: tx.id }, class: tx.estado === 'anulada' ? 'fila--anulada' : tx.estado === 'devolucion' ? 'fila--devolucion' : null },
+      h('td', null, tx.folio ? h('span', { class: 'monoespaciada', text: tx.folio }) : h('span', { class: 'secundario', text: t('Sin recibo') }),
+        tx.venta?.pendiente ? chip(t('Por enviar'), 'aviso') : null),
+      h('td', { text: cuando(tx.fecha) }),
+      h('td', { text: tx.cajeroNombre }),
+      h('td', { text: tx.cajaNombre }),
+      h('td', { class: 'num', text: String(tx.articulos) }),
+      h('td', { text: tx.metodos }),
+      h('td', { class: 'marcas' }, tx.marcas.map(([, texto]) => chip(texto, 'neutro'))),
       h('td', null, chip(estadoTexto, estadoChip)),
-      h('td', { class: `num${t.estado === 'anulada' ? ' tachado' : ''}`, text: dinero(t.total) }));
+      h('td', { class: `num${tx.estado === 'anulada' ? ' tachado' : ''}`, text: dinero(tx.total) }));
   }));
   return visibles;
 }
@@ -182,7 +195,7 @@ function ajustarRango() {
   if (hasta < desde) [desde, hasta] = [hasta, desde];
   if (diasEntre(desde, hasta).length > MAXIMO_DIAS) {
     desde = sumarDias(hasta, -(MAXIMO_DIAS - 1));
-    mostrarMensaje($('mensaje'), 'aviso', `Se muestran como máximo ${MAXIMO_DIAS} días: desde el ${desde}.`);
+    mostrarMensaje($('mensaje'), 'aviso', t('Se muestran como máximo {n} días: desde el {desde}.', { n: MAXIMO_DIAS, desde }));
   }
   $('f-desde').value = desde;
   $('f-hasta').value = hasta;
@@ -201,11 +214,11 @@ function escuchar() {
   url.searchParams.set('desde', desde);
   url.searchParams.set('hasta', hasta);
   window.history.replaceState(null, '', url);
-  const falla = (que) => (error) => mostrarMensaje($('mensaje'), 'error', `No se pudieron cargar ${que}: ${mensajeError(error)}`);
+  const falla = (que) => (error) => mostrarMensaje($('mensaje'), 'error', t('No se pudieron cargar {que}: {error}', { que, error: mensajeError(error) }));
   dejar.push(observarVentasEntre(desde, hasta, (lista) => {
     ventas = lista;
     pintar();
-  }, falla('las ventas')));
+  }, falla(t('las ventas'))));
   dejar.push(observarCancelacionesEntre(inicioDia(desde), inicioDia(sumarDias(hasta, 1)), (lista) => {
     cancelaciones = lista;
     pintar();
@@ -213,15 +226,15 @@ function escuchar() {
   pintar();
 }
 
-function abrir(t) {
-  if (t.clase === 'cancelacion') {
-    abrirCancelacion(t.movimiento, { cajaNombre: t.cajaNombre, historial: historialDeCancelacion({ turno: t.movimiento.turno, importeCentavos: t.movimiento.importeCentavos, fecha: t.movimiento.fecha }) });
+function abrir(tx) {
+  if (tx.clase === 'cancelacion') {
+    abrirCancelacion(tx.movimiento, { cajaNombre: tx.cajaNombre, historial: historialDeCancelacion({ turno: tx.movimiento.turno, importeCentavos: tx.movimiento.importeCentavos, fecha: tx.movimiento.fecha }) });
     return;
   }
-  abrirTicket(t.venta, {
-    tienda: tiendas.get(t.venta.tienda),
+  abrirTicket(tx.venta, {
+    tienda: tiendas.get(tx.venta.tienda),
     config,
-    historial: historialDeVenta(t.venta.folio),
+    historial: historialDeVenta(tx.venta.folio),
     alVerTurno: (turno) => { window.location.href = `turnos.html?turno=${encodeURIComponent(turno)}`; },
   });
 }
@@ -253,11 +266,11 @@ $('f-buscar').addEventListener('keydown', async (e) => {
   e.preventDefault();
   const folio = folioDesdeTexto($('f-buscar').value);
   if (!folio) return;
-  const cargada = transacciones().find((t) => t.folio === folio);
+  const cargada = transacciones().find((tx) => tx.folio === folio);
   try {
     const venta = cargada?.venta ?? (await buscarVentasPorFolio(folio))[0];
     if (!venta) {
-      mostrarMensaje($('mensaje'), 'error', `No existe el recibo ${folio}.`);
+      mostrarMensaje($('mensaje'), 'error', t('No existe el recibo {folio}.', { folio }));
       return;
     }
     mostrarMensaje($('mensaje'), '', '');
@@ -269,41 +282,42 @@ $('f-buscar').addEventListener('keydown', async (e) => {
     }
     abrir({ clase: 'venta', venta });
   } catch (error) {
-    mostrarMensaje($('mensaje'), 'error', `No se pudo buscar el recibo: ${mensajeError(error)}`);
+    mostrarMensaje($('mensaje'), 'error', t('No se pudo buscar el recibo: {error}', { error: mensajeError(error) }));
   }
 });
 
 function filaElegida(e) {
   const fila = e.target.closest('tr[data-id]');
-  return fila ? visibles.find((t) => t.id === fila.dataset.id) : null;
+  return fila ? visibles.find((tx) => tx.id === fila.dataset.id) : null;
 }
 $('tabla-transacciones').addEventListener('click', (e) => {
-  const t = filaElegida(e);
-  if (t) abrir(t);
+  const tx = filaElegida(e);
+  if (tx) abrir(tx);
 });
 $('tabla-transacciones').addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  const t = filaElegida(e);
-  if (t) abrir(t);
+  const tx = filaElegida(e);
+  if (tx) abrir(tx);
 });
 
 $('btn-exportar').addEventListener('click', () => {
   const lista = pintar();
-  const filas = [['fecha', 'recibo', 'estado', 'caja', 'asociado', 'codigo', 'articulos', 'formas_de_pago', 'marcas',
-    'subtotal', 'descuentos', 'impuesto', 'total', 'efectivo', 'debito', 'credito', 'otro', 'autorizo', 'ticket_original']];
-  for (const t of [...lista].reverse()) {
-    const v = t.venta;
+  // Reporte para personas: encabezados y estados en el idioma elegido; números, fechas y códigos tal cual.
+  const filas = [[t('fecha'), t('recibo'), t('estado'), t('caja'), t('asociado'), t('codigo'), t('articulos'), t('formas_de_pago'), t('marcas'),
+    t('subtotal'), t('descuentos'), t('impuesto'), t('total'), t('efectivo'), t('debito'), t('credito'), t('otro'), t('autorizo'), t('ticket_original')]];
+  for (const tx of [...lista].reverse()) {
+    const v = tx.venta;
     filas.push([
-      fechaHora(t.fecha), t.folio ?? '', ESTADO[t.estado][0], t.cajaNombre, t.cajeroNombre, t.cajero, t.articulos, t.metodos === '—' ? '' : t.metodos,
-      t.marcas.map(([, texto]) => texto).join('; '),
+      fechaHora(tx.fecha), tx.folio ?? '', ESTADO[tx.estado][0], tx.cajaNombre, tx.cajeroNombre, tx.cajero, tx.articulos, tx.metodos === '—' ? '' : tx.metodos,
+      tx.marcas.map(([, texto]) => texto).join('; '),
       v ? csvMonto(v.subtotalCentavos) : '', v ? csvMonto(v.descuentoLineasCentavos + v.descuentoTicketCentavos) : '', v ? csvMonto(v.impuestoCentavos) : '',
-      csvMonto(t.total), ...METODOS_PAGO.map((m) => (v ? csvMonto(v.porMetodo?.[m] ?? 0) : '')), v?.autorizadoPor ?? '', v?.ventaOriginal ?? '',
+      csvMonto(tx.total), ...METODOS_PAGO.map((m) => (v ? csvMonto(v.porMetodo?.[m] ?? 0) : '')), v?.autorizadoPor ?? '', v?.ventaOriginal ?? '',
     ]);
   }
-  descargarCSV(`transacciones-${desde}${hasta !== desde ? `-a-${hasta}` : ''}.csv`, filas);
+  descargarCSV(hasta !== desde ? t('transacciones-{desde}-a-{hasta}.csv', { desde, hasta }) : t('transacciones-{desde}.csv', { desde }), filas);
 });
 
-observarTiendas((lista) => { tiendas = new Map(lista.map((t) => [t.id, t])); }, () => {});
+observarTiendas((lista) => { tiendas = new Map(lista.map((tienda) => [tienda.id, tienda])); }, () => {});
 observarCajas((lista) => {
   cajas = new Map(lista.map((c) => [c.id, c]));
   pintar();

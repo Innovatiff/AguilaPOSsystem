@@ -6,6 +6,7 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { avisar } from './avisos.js';
+import { t } from './idioma.js';
 import { observarCatalogo, observarTiendas, marcarImpresos, esperarConfirmacion } from './productos.js';
 import { pendienteImpresion, agruparPorTienda, coincideBusqueda, pareceUPC } from './esquema.js';
 import { normalizarUPC } from './upca.js';
@@ -52,11 +53,12 @@ function crear(etiqueta, clase, texto) {
 observarCatalogo(
   ({ catalogo: mapa, desdeCache, pendientes }) => {
     catalogo = mapa;
-    const origen = desdeCache ? (pendientes ? 'datos locales, con cambios por enviar' : 'datos locales') : 'sincronizado';
-    $('estado-catalogo').textContent = `${mapa.size} producto${mapa.size === 1 ? '' : 's'} · ${origen}`;
+    const origen = desdeCache ? (pendientes ? t('datos locales, con cambios por enviar') : t('datos locales')) : t('sincronizado');
+    const n = mapa.size;
+    $('estado-catalogo').textContent = `${n === 1 ? t('{n} producto', { n }) : t('{n} productos', { n })} · ${origen}`;
     if (modo === 'seleccion') pintarSeleccion();
   },
-  (error) => avisar(`No se pudo cargar el catálogo: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudo cargar el catálogo: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 observarTiendas(
@@ -64,7 +66,7 @@ observarTiendas(
     tiendas = lista;
     if (modo === 'seleccion') pintarSeleccion();
   },
-  (error) => avisar(`No se pudieron cargar las tiendas: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudieron cargar las tiendas: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 $('contenido').hidden = false;
@@ -74,11 +76,11 @@ function calcularGrupos() {
   const pendientes = [...catalogo.values()].filter(pendienteImpresion);
   const lista = agruparPorTienda(pendientes, tiendas).map((g) => ({
     id: g.tienda ? g.tienda.id : SIN_TIENDA,
-    titulo: g.tienda ? g.tienda.nombre : 'Sin tienda asignada',
+    titulo: g.tienda ? g.tienda.nombre : t('Sin tienda asignada'),
     productos: g.productos,
   }));
   const aMano = [...manuales.keys()].map((id) => catalogo.get(id)).filter((p) => p && p.activo).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  if (aMano.length > 0) lista.push({ id: MANUAL, titulo: 'Añadidos a mano', productos: aMano });
+  if (aMano.length > 0) lista.push({ id: MANUAL, titulo: t('Añadidos a mano'), productos: aMano });
   return lista;
 }
 
@@ -104,7 +106,8 @@ function seccionGrupo(grupo) {
   const seccion = crear('section', 'grupo');
   seccion.dataset.grupo = grupo.id;
   const titulo = crear('h2', 'grupo__titulo');
-  titulo.append(crear('span', '', grupo.titulo), crear('span', 'contador', `${grupo.productos.length} etiqueta${grupo.productos.length === 1 ? '' : 's'}`));
+  const n = grupo.productos.length;
+  titulo.append(crear('span', '', grupo.titulo), crear('span', 'contador', n === 1 ? t('{n} etiqueta', { n }) : t('{n} etiquetas', { n })));
   const todas = crear('label', 'casilla');
   const casillaTodas = document.createElement('input');
   casillaTodas.type = 'checkbox';
@@ -119,14 +122,14 @@ function seccionGrupo(grupo) {
     }
     pintarSeleccion();
   });
-  todas.append(casillaTodas, ' Todas');
+  todas.append(casillaTodas, ' ' + t('Todas'));
   titulo.append(todas);
   seccion.append(titulo);
 
   const tabla = crear('table', 'tabla tabla--seleccion');
   const cabeza = crear('thead');
   const filaCabeza = crear('tr');
-  for (const t of ['', 'Producto', 'Código', 'Precio actual', 'Última etiqueta', '']) filaCabeza.append(crear('th', '', t));
+  for (const encabezado of ['', t('Producto'), t('Código'), t('Precio actual'), t('Última etiqueta'), '']) filaCabeza.append(crear('th', '', encabezado));
   cabeza.append(filaCabeza);
   const cuerpo = crear('tbody');
   for (const p of grupo.productos) cuerpo.append(filaProducto(grupo, p));
@@ -142,7 +145,7 @@ function filaProducto(grupo, p) {
   const casilla = document.createElement('input');
   casilla.type = 'checkbox';
   casilla.checked = seleccion.has(c);
-  casilla.setAttribute('aria-label', `Imprimir ${nombreCompleto(p)}`);
+  casilla.setAttribute('aria-label', t('Imprimir {nombre}', { nombre: nombreCompleto(p) }));
   casilla.addEventListener('change', () => {
     if (casilla.checked) seleccion.add(c);
     else seleccion.delete(c);
@@ -156,11 +159,11 @@ function filaProducto(grupo, p) {
   if (secundario) nombre.append(crear('span', 'secundario', secundario));
 
   const ultima = p.ultimoPrecioImpresoCentavos == null
-    ? 'Nunca impresa'
+    ? t('Nunca impresa')
     : `${formatearPrecio(p.ultimoPrecioImpresoCentavos)} · ${p.fechaUltimaImpresion ?? '—'}`;
   const acciones = crear('td');
   if (grupo.id === MANUAL) {
-    const quitar = crear('button', 'boton boton--pequeno', 'Quitar');
+    const quitar = crear('button', 'boton boton--pequeno', t('Quitar'));
     quitar.type = 'button';
     quitar.addEventListener('click', (evento) => {
       evento.stopPropagation();
@@ -181,7 +184,7 @@ function filaProducto(grupo, p) {
 
 function actualizarContador() {
   const n = seleccion.size;
-  contador.textContent = `${n} etiqueta${n === 1 ? '' : 's'} seleccionada${n === 1 ? '' : 's'}`;
+  contador.textContent = n === 1 ? t('{n} etiqueta seleccionada', { n }) : t('{n} etiquetas seleccionadas', { n });
   btnVista.disabled = n === 0;
 }
 
@@ -197,7 +200,7 @@ $('btn-nada').addEventListener('click', () => {
 // ------------------------------------------------------------- añadir a mano
 function anadirManual(producto) {
   if (!producto.activo) {
-    avisar(`«${nombreCompleto(producto)}» está inactivo; reactívalo en Productos antes de imprimirlo.`, 'error');
+    avisar(t('«{nombre}» está inactivo; reactívalo en Productos antes de imprimirlo.', { nombre: nombreCompleto(producto) }), 'error');
     return;
   }
   manuales.set(producto.id, true);
@@ -205,7 +208,7 @@ function anadirManual(producto) {
   agregar.value = '';
   sugerencias.hidden = true;
   pintarSeleccion();
-  avisar(`«${nombreCompleto(producto)}» añadido a la impresión.`, 'ok', 2500);
+  avisar(t('«{nombre}» añadido a la impresión.', { nombre: nombreCompleto(producto) }), 'ok', 2500);
   agregar.focus();
 }
 
@@ -225,7 +228,7 @@ function pintarSugerencias() {
   const lista = candidatos(texto);
   sugerencias.replaceChildren(
     ...(lista.length === 0
-      ? [crear('span', 'nota', 'Sin coincidencias.')]
+      ? [crear('span', 'nota', t('Sin coincidencias.'))]
       : lista.map((p) => {
         const b = crear('button', 'boton boton--pequeno', `${nombreCompleto(p)} · ${precioTexto(p)}`);
         b.type = 'button';
@@ -262,7 +265,7 @@ agregar.addEventListener('keydown', (evento) => {
     }
     const producto = [...catalogo.values()].find((p) => p.upc === codigo);
     if (!producto) {
-      avisar(`No hay ningún producto con el UPC ${codigo}. Créalo en Productos.`, 'error');
+      avisar(t('No hay ningún producto con el UPC {codigo}. Créalo en Productos.', { codigo }), 'error');
       agregar.select();
       return;
     }
@@ -271,7 +274,7 @@ agregar.addEventListener('keydown', (evento) => {
   }
   const lista = candidatos(texto);
   if (lista.length === 0) {
-    avisar(`Sin coincidencias para «${texto}».`, 'error');
+    avisar(t('Sin coincidencias para «{texto}».', { texto }), 'error');
     return;
   }
   anadirManual(lista[0]);
@@ -318,8 +321,13 @@ function mostrarVista() {
     }
   }
   for (const etiqueta of hoja.querySelectorAll('.etiqueta')) ajustarEtiqueta(etiqueta);
-  if (fallidas > 0) avisar(`${fallidas} etiqueta${fallidas === 1 ? '' : 's'} no se pudo generar; revisa el UPC de esos productos.`, 'error', 0);
-  $('titulo-vista').textContent = `Vista previa · ${hoja.childElementCount} etiqueta${hoja.childElementCount === 1 ? '' : 's'}`;
+  if (fallidas > 0) {
+    avisar(fallidas === 1
+      ? t('{n} etiqueta no se pudo generar; revisa el UPC de esos productos.', { n: fallidas })
+      : t('{n} etiquetas no se pudo generar; revisa el UPC de esos productos.', { n: fallidas }), 'error', 0);
+  }
+  const n = hoja.childElementCount;
+  $('titulo-vista').textContent = n === 1 ? t('Vista previa · {n} etiqueta', { n }) : t('Vista previa · {n} etiquetas', { n });
   $('btn-imprimir').focus();
 }
 
@@ -343,7 +351,9 @@ function pedirConfirmacion() {
   if (modo !== 'vista' || !impresion) return;
   modo = 'confirmar';
   const n = hoja.childElementCount;
-  $('confirmacion-texto').textContent = `¿Salieron bien las ${n} etiqueta${n === 1 ? '' : 's'}? Al confirmar se registra el precio impreso de cada producto.`;
+  $('confirmacion-texto').textContent = n === 1
+    ? t('¿Salieron bien las {n} etiqueta? Al confirmar se registra el precio impreso de cada producto.', { n })
+    : t('¿Salieron bien las {n} etiquetas? Al confirmar se registra el precio impreso de cada producto.', { n });
   confirmacion.hidden = false;
   $('btn-confirmar').focus();
 }
@@ -356,11 +366,12 @@ async function confirmarImpresion() {
     const { promesa, cantidad, fecha } = marcarImpresos(items, personal.usuario);
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa, 4000);
-    if (resultado === 'pendiente') promesa.catch((error) => avisar(`No se pudo registrar la impresión: ${mensajeError(error)}`, 'error', 0));
+    if (resultado === 'pendiente') promesa.catch((error) => avisar(t('No se pudo registrar la impresión: {error}', { error: mensajeError(error) }), 'error', 0));
+    const n = cantidad;
     avisar(
       resultado === 'confirmado'
-        ? `${cantidad} producto${cantidad === 1 ? '' : 's'} marcado${cantidad === 1 ? '' : 's'} como impreso${cantidad === 1 ? '' : 's'} (${fecha}).`
-        : `${cantidad} producto${cantidad === 1 ? '' : 's'} marcado${cantidad === 1 ? '' : 's'} en este equipo; se enviará al recuperar la señal.`,
+        ? (n === 1 ? t('{n} producto marcado como impreso ({fecha}).', { n, fecha }) : t('{n} productos marcados como impresos ({fecha}).', { n, fecha }))
+        : (n === 1 ? t('{n} producto marcado en este equipo; se enviará al recuperar la señal.', { n }) : t('{n} productos marcados en este equipo; se enviará al recuperar la señal.', { n })),
       resultado === 'confirmado' ? 'ok' : 'info',
       6000,
     );
@@ -370,7 +381,7 @@ async function confirmarImpresion() {
     }
     volverASeleccion();
   } catch (error) {
-    avisar(`No se pudo registrar la impresión: ${mensajeError(error)}`, 'error', 0);
+    avisar(t('No se pudo registrar la impresión: {error}', { error: mensajeError(error) }), 'error', 0);
     modo = 'confirmar';
   } finally {
     $('btn-confirmar').disabled = false;

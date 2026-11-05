@@ -7,6 +7,8 @@
  */
 import { cerrarSesion, RAIZ, EN_CATALOGO, paginaActual } from './auth.js';
 import { db, collection, query, where, onSnapshot } from './firebase.js';
+import { t } from './idioma.js';
+import { botonIdioma } from './boton-idioma.js';
 
 /** Trazos de los íconos (24 × 24, línea de 2 px). */
 const ICONOS = {
@@ -30,7 +32,8 @@ const ICONOS = {
   inventario: 'M2 6h12v10H2zM14 9h4l4 4v3h-8M6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
 };
 
-/** Secciones del back office, en grupos. */
+/** Secciones del back office, en grupos (textos en español: se traducen al pintar). */
+// i18n:sin-revisar-inicio (se traducen al pintar con t(); sus claves están en js/i18n/en-comun.js)
 const GRUPOS = [
   { titulo: null, secciones: [{ href: 'index.html', texto: 'Inicio', icono: 'inicio' }] },
   {
@@ -78,8 +81,10 @@ const GRUPOS_CATALOGO = [
     ],
   },
 ];
+// i18n:sin-revisar-fin
 
-const NOMBRE_ROL = { admin: 'Administrador', empleado: 'Empleado' };
+const NOMBRE_ROL = { admin: () => t('Administrador'), empleado: () => t('Empleado') };
+const nombreRol = (rol) => NOMBRE_ROL[rol]?.() ?? rol;
 const SVG = 'http://www.w3.org/2000/svg';
 
 function icono(nombre) {
@@ -118,7 +123,7 @@ export function pintarNavegacion({ personal, activa }) {
   marca.append(
     Object.assign(document.createElement('span'), { className: 'marca__logo' }),
     Object.assign(document.createElement('span'), { className: 'marca__texto', textContent: 'Águila POS' }),
-    Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: EN_CATALOGO ? 'Catálogo' : 'Back office' }),
+    Object.assign(document.createElement('span'), { className: 'marca__sub', textContent: EN_CATALOGO ? t('Catálogo') : t('Back office') }),
   );
   // En el Catálogo las pantallas compartidas pasan el nombre del back office: manda la página real.
   const actual = EN_CATALOGO ? paginaActual().split('?')[0] : activa;
@@ -126,7 +131,7 @@ export function pintarNavegacion({ personal, activa }) {
   const botonMenu = document.createElement('button');
   botonMenu.type = 'button';
   botonMenu.className = 'menu-boton';
-  botonMenu.setAttribute('aria-label', 'Abrir menú');
+  botonMenu.setAttribute('aria-label', t('Abrir menú'));
   botonMenu.setAttribute('aria-expanded', 'false');
   botonMenu.setAttribute('aria-controls', 'panel-navegacion');
   for (let i = 0; i < 3; i += 1) botonMenu.append(Object.assign(document.createElement('span'), { className: 'menu-boton__barra' }));
@@ -136,13 +141,13 @@ export function pintarNavegacion({ personal, activa }) {
   panel.id = 'panel-navegacion';
 
   const nav = document.createElement('nav');
-  nav.setAttribute('aria-label', 'Secciones');
+  nav.setAttribute('aria-label', t('Secciones'));
   for (const grupo of EN_CATALOGO ? GRUPOS_CATALOGO : GRUPOS) {
     const bloque = document.createElement('div');
     bloque.className = 'nav-grupo';
-    if (grupo.titulo) bloque.append(Object.assign(document.createElement('div'), { className: 'nav-grupo__titulo', textContent: grupo.titulo }));
+    if (grupo.titulo) bloque.append(Object.assign(document.createElement('div'), { className: 'nav-grupo__titulo', textContent: t(grupo.titulo) }));
     for (const seccion of grupo.secciones) {
-      const a = enlace(seccion.href, seccion.texto, '', seccion.icono);
+      const a = enlace(seccion.href, t(seccion.texto), '', seccion.icono);
       if (seccion.href === actual) a.setAttribute('aria-current', 'page');
       if (seccion.contador) contarPendientes(a);
       bloque.append(a);
@@ -150,8 +155,9 @@ export function pintarNavegacion({ personal, activa }) {
     nav.append(bloque);
   }
 
-  const caja = EN_CATALOGO ? null : enlace('caja/', 'Abrir la caja', 'nav-caja', 'caja');
-  if (caja) caja.title = 'La caja registradora (para vender)';
+  const caja = EN_CATALOGO ? null : enlace('caja/', t('Abrir la caja'), 'nav-caja', 'caja');
+  if (caja) caja.title = t('La caja registradora (para vender)');
+  const idioma = botonIdioma({ clase: 'nav-idioma' });
 
   const usuario = document.createElement('div');
   usuario.className = 'usuario';
@@ -160,23 +166,23 @@ export function pintarNavegacion({ personal, activa }) {
   cuenta.className = 'usuario__nombre';
   cuenta.append(
     Object.assign(document.createElement('strong'), { textContent: personal.nombre }),
-    Object.assign(document.createElement('span'), { textContent: EN_CATALOGO ? (personal.correo ?? NOMBRE_ROL[personal.rol] ?? '') : `${NOMBRE_ROL[personal.rol] ?? personal.rol} · Mi cuenta` }),
+    Object.assign(document.createElement('span'), { textContent: EN_CATALOGO ? (personal.correo ?? nombreRol(personal.rol)) : t('{rol} · Mi cuenta', { rol: nombreRol(personal.rol) }) }),
   );
   if (!EN_CATALOGO) cuenta.title = `${personal.tipo === 'codigo' ? 'Nº ' : ''}${personal.usuario}`;
   if (actual === 'cuenta.html') cuenta.setAttribute('aria-current', 'page');
   const salir = document.createElement('button');
   salir.type = 'button';
   salir.className = 'boton boton--secundario';
-  salir.textContent = 'Cerrar sesión';
+  salir.textContent = t('Cerrar sesión');
   salir.addEventListener('click', () => cerrarSesion());
   usuario.append(cuenta, salir);
 
-  panel.append(...[nav, caja, usuario].filter(Boolean));
+  panel.append(...[nav, caja, idioma, usuario].filter(Boolean));
 
   const fijarAbierto = (abierto) => {
     encabezado.classList.toggle('encabezado--abierto', abierto);
     botonMenu.setAttribute('aria-expanded', String(abierto));
-    botonMenu.setAttribute('aria-label', abierto ? 'Cerrar menú' : 'Abrir menú');
+    botonMenu.setAttribute('aria-label', abierto ? t('Cerrar menú') : t('Abrir menú'));
   };
   botonMenu.addEventListener('click', () => fijarAbierto(!encabezado.classList.contains('encabezado--abierto')));
   document.addEventListener('keydown', (evento) => {
@@ -192,14 +198,14 @@ export function pintarNavegacion({ personal, activa }) {
 /** Insignia con las solicitudes del Catálogo pendientes (back office). */
 function contarPendientes(enlaceSolicitudes) {
   const insignia = Object.assign(document.createElement('span'), { className: 'nav-insignia', hidden: true });
-  insignia.setAttribute('aria-label', 'pendientes');
+  insignia.setAttribute('aria-label', t('pendientes'));
   enlaceSolicitudes.append(insignia);
   onSnapshot(
     query(collection(db, 'solicitudes'), where('estado', '==', 'pendiente')),
     (resultado) => {
       insignia.hidden = resultado.size === 0;
       insignia.textContent = String(resultado.size);
-      insignia.setAttribute('aria-label', `${resultado.size} pendientes`);
+      insignia.setAttribute('aria-label', t('{n} pendientes', { n: resultado.size }));
     },
     () => { insignia.hidden = true; },
   );

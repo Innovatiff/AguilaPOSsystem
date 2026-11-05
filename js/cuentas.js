@@ -14,6 +14,7 @@
  */
 import { auth, autenticacionSecundaria, createUserWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from './firebase.js';
 import { correoDeAcceso } from './identidad.js';
+import { t } from './idioma.js';
 
 const INTENTOS_MAXIMOS = 25;
 
@@ -46,13 +47,13 @@ export async function crearCuentaDeCodigo(codigo, nip, desdeVersion = 1) {
       if (error?.code !== 'auth/email-already-in-use') throw error;
     }
   }
-  throw Object.assign(new Error('Demasiadas cuentas previas para este código.'), { code: 'catalogo/sin-version-libre' });
+  throw Object.assign(new Error(t('Demasiadas cuentas previas para este código.')), { code: 'catalogo/sin-version-libre' });
 }
 
 /** Cambia el NIP o la contraseña de la sesión actual; exige el secreto vigente. */
 export async function cambiarSecretoPropio(actual, nuevo) {
   const usuario = auth.currentUser;
-  if (!usuario) throw Object.assign(new Error('Sin sesión'), { code: 'catalogo/sin-sesion' });
+  if (!usuario) throw Object.assign(new Error(t('Sin sesión')), { code: 'catalogo/sin-sesion' });
   await reauthenticateWithCredential(usuario, EmailAuthProvider.credential(usuario.email, actual));
   await updatePassword(usuario, nuevo);
 }

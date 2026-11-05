@@ -4,6 +4,7 @@
  * cómodo en un rollo de 80 mm y legible por cualquier escáner de caja.
  * Módulo puro: produce la secuencia de módulos y un SVG.
  */
+import { t } from './idioma.js';
 
 /** Anchos (barra, espacio, barra, espacio, barra, espacio) de los valores 0–106. */
 const PATRONES = [
@@ -63,7 +64,7 @@ export function svgCode128C(digitos, { moduloMM = 0.375, altoMM = 10 } = {}) {
   svg.setAttribute('class', 'codigo-recibo');
   svg.setAttribute('data-digitos', String(digitos));
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', `Código ${digitos}`);
+  svg.setAttribute('aria-label', t('Código {digitos}', { digitos }));
   let x = ZONA_SILENCIO_MODULOS;
   let d = '';
   for (let i = 0; i < modulos.length; ) {

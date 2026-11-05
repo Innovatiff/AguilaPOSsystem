@@ -11,6 +11,7 @@ import { h } from './dom.js';
 // ------------------------------------------------------------- DOM
 
 export { h } from './dom.js';
+import { t } from './idioma.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -100,7 +101,7 @@ export function tecladoNumerico({ destino, decimal = false, dobleCero = false, a
       type: 'button',
       class: `tecla${['⌫', 'C'].includes(tecla) ? ' tecla--accion' : ''}`,
       text: tecla,
-      'aria-label': tecla === '⌫' ? 'Borrar' : tecla === 'C' ? 'Limpiar' : tecla,
+      'aria-label': tecla === '⌫' ? t('Borrar') : tecla === 'C' ? t('Limpiar') : tecla,
       dataset: { tecla },
     });
     contenedor.append(boton);
@@ -216,7 +217,7 @@ export function abrirDialogo({ titulo, cuerpo = [], botones = [], alPulsar = nul
       try {
         await alPulsar(valor, ctx);
       } catch (error) {
-        ctx.error(error?.message || 'No se pudo completar la operación.');
+        ctx.error(error?.message || t('No se pudo completar la operación.'));
       } finally {
         ocupado = false;
         if (!cerrado) for (const { nodo, def } of nodosBoton) nodo.disabled = !!def.desactivado;
@@ -253,7 +254,7 @@ export function abrirDialogo({ titulo, cuerpo = [], botones = [], alPulsar = nul
 }
 
 /** Sí / No. Devuelve true si se acepta. */
-export async function confirmar({ titulo, texto, aceptar = 'Aceptar', cancelar = 'Cancelar', peligro = false, nota = null }) {
+export async function confirmar({ titulo, texto, aceptar = t('Aceptar'), cancelar = t('Cancelar'), peligro = false, nota = null }) {
   const cuerpo = [h('p', { class: 'dlg__texto', text: texto })];
   if (nota) cuerpo.push(h('p', { class: 'dlg__nota', text: nota }));
   const resultado = await abrirDialogo({
@@ -268,7 +269,7 @@ export async function confirmar({ titulo, texto, aceptar = 'Aceptar', cancelar =
 }
 
 /** Aviso que hay que cerrar a mano (errores graves, instrucciones). */
-export function informar({ titulo, texto, nota = null, boton = 'Entendido' }) {
+export function informar({ titulo, texto, nota = null, boton = t('Entendido') }) {
   const cuerpo = [h('p', { class: 'dlg__texto', text: texto })];
   if (nota) cuerpo.push(h('p', { class: 'dlg__nota', text: nota }));
   return abrirDialogo({ titulo, cuerpo, botones: [{ texto: boton, valor: true, principal: true }] });
@@ -289,7 +290,7 @@ export function informar({ titulo, texto, nota = null, boton = 'Entendido' }) {
  * @param {string} [o.prefijo] p. ej. "$"
  * @param {number} [o.maximo] longitud máxima del texto
  */
-export function pedirValor({ titulo, etiqueta, interpretar, vista = null, inicial = '', nota = null, decimal = true, rapidos = [], aceptar = 'Aceptar', maximo = 10, antes = null }) {
+export function pedirValor({ titulo, etiqueta, interpretar, vista = null, inicial = '', nota = null, decimal = true, rapidos = [], aceptar = t('Aceptar'), maximo = 10, antes = null }) {
   const id = `campo-valor-${contadorDialogos + 1}`;
   const campo = h('input', { id, inputmode: 'none', autocomplete: 'off', maxlength: maximo, value: inicial });
   const previa = h('p', { class: 'dlg__nota', 'aria-live': 'polite' });
@@ -328,7 +329,7 @@ export function pedirValor({ titulo, etiqueta, interpretar, vista = null, inicia
     titulo,
     cuerpo,
     botones: [
-      { texto: 'Cancelar', valor: null, cerrar: true },
+      { texto: t('Cancelar'), valor: null, cerrar: true },
       { texto: aceptar, valor: 'aceptar', principal: true },
     ],
     alAbrir: (ctx) => {
@@ -344,7 +345,7 @@ export function pedirValor({ titulo, etiqueta, interpretar, vista = null, inicia
 }
 
 /** Pide un texto corto (motivo, nota). */
-export function pedirTexto({ titulo, etiqueta, inicial = '', nota = null, obligatorio = false, maximo = 120, aceptar = 'Aceptar' }) {
+export function pedirTexto({ titulo, etiqueta, inicial = '', nota = null, obligatorio = false, maximo = 120, aceptar = t('Aceptar') }) {
   const id = `campo-texto-${contadorDialogos + 1}`;
   const campo = h('input', { id, autocomplete: 'off', maxlength: maximo, value: inicial });
   const cuerpo = [h('label', { for: id, text: etiqueta }), campo];
@@ -353,7 +354,7 @@ export function pedirTexto({ titulo, etiqueta, inicial = '', nota = null, obliga
     titulo,
     cuerpo,
     botones: [
-      { texto: 'Cancelar', valor: null, cerrar: true },
+      { texto: t('Cancelar'), valor: null, cerrar: true },
       { texto: aceptar, valor: 'aceptar', principal: true },
     ],
     alPulsar: (_valor, ctx) => {
@@ -380,7 +381,7 @@ export function elegir({ titulo, texto = null, opciones }) {
   return abrirDialogo({
     titulo,
     cuerpo,
-    botones: [{ texto: 'Cancelar', valor: null, cerrar: true }],
+    botones: [{ texto: t('Cancelar'), valor: null, cerrar: true }],
     alAbrir: (ctx) => {
       lista.addEventListener('click', (e) => {
         const boton = e.target.closest('.opcion');

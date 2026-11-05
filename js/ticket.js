@@ -11,11 +11,24 @@
  *  - Productos por peso: gramos enteros; importe = gramos × precio/kg ÷ 1000.
  *  - Un ticket es venta (todo positivo) o devolución (todo negativo).
  */
+import { t, enIngles } from './idioma.js';
 
 /** Impuesto por defecto: HST de Ontario, en puntos base (1300 = 13.00 %). */
 export const TASA_HST_BP = 1300;
 export const METODOS_PAGO = Object.freeze(['efectivo', 'debito', 'credito', 'otro']);
+/** Nombres en español (como se guardan y se reconocen); para mostrar, nombreMetodo(). */
 export const NOMBRE_METODO = Object.freeze({ efectivo: 'Efectivo', debito: 'Débito', credito: 'Crédito', otro: 'Otro' });
+
+/** Forma de pago para mostrar o imprimir, en el idioma elegido. */
+export function nombreMetodo(metodo) {
+  switch (metodo) {
+    case 'efectivo': return t('Efectivo');
+    case 'debito': return t('Débito');
+    case 'credito': return t('Crédito');
+    case 'otro': return t('Otro');
+    default: return metodo;
+  }
+}
 export const TIPOS_VENTA = Object.freeze(['venta', 'devolucion']);
 export const UNIDADES = Object.freeze(['pieza', 'peso']);
 
@@ -82,11 +95,11 @@ export function repartirProporcional(total, pesos) {
 export function gramosDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim().replace(/\s*kg$/i, '').replace(',', '.');
   const coincidencia = /^(\d{1,2})?(?:\.(\d{0,3}))?$/.exec(limpio);
-  if (!coincidencia || limpio === '' || limpio === '.') throw new Error('Peso no válido; escribe los kilos, por ejemplo 1.250');
+  if (!coincidencia || limpio === '' || limpio === '.') throw new Error(t('Peso no válido; escribe los kilos, por ejemplo 1.250'));
   const kilos = Number.parseInt(coincidencia[1] ?? '0', 10);
   const gramos = kilos * 1000 + Number.parseInt((coincidencia[2] ?? '').padEnd(3, '0'), 10);
-  if (gramos <= 0) throw new Error('El peso debe ser mayor que cero.');
-  if (gramos > LIMITES_TICKET.gramos) throw new Error('El peso máximo es 99.999 kg.');
+  if (gramos <= 0) throw new Error(t('El peso debe ser mayor que cero.'));
+  if (gramos > LIMITES_TICKET.gramos) throw new Error(t('El peso máximo es 99.999 kg.'));
   return gramos;
 }
 
@@ -100,9 +113,9 @@ export function formatearPeso(gramos) {
 /** Cantidad de piezas tecleada: entero de 1 a 999. */
 export function cantidadDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim();
-  if (!/^\d{1,3}$/.test(limpio)) throw new Error('Cantidad no válida; escribe un número entero de 1 a 999.');
+  if (!/^\d{1,3}$/.test(limpio)) throw new Error(t('Cantidad no válida; escribe un número entero de 1 a 999.'));
   const cantidad = Number.parseInt(limpio, 10);
-  if (cantidad < 1) throw new Error('La cantidad debe ser al menos 1.');
+  if (cantidad < 1) throw new Error(t('La cantidad debe ser al menos 1.'));
   return cantidad;
 }
 
@@ -110,9 +123,9 @@ export function cantidadDesdeTexto(texto) {
 export function puntosBaseDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim().replace(/%$/, '').replace(',', '.');
   const coincidencia = /^(\d{1,3})(?:\.(\d{0,2}))?$/.exec(limpio);
-  if (!coincidencia) throw new Error('Porcentaje no válido; escribe por ejemplo 10 o 12.5');
+  if (!coincidencia) throw new Error(t('Porcentaje no válido; escribe por ejemplo 10 o 12.5'));
   const puntos = Number.parseInt(coincidencia[1], 10) * 100 + Number.parseInt((coincidencia[2] ?? '').padEnd(2, '0'), 10);
-  if (puntos <= 0 || puntos > 10000) throw new Error('El porcentaje debe estar entre 0.01 y 100.');
+  if (puntos <= 0 || puntos > 10000) throw new Error(t('El porcentaje debe estar entre 0.01 y 100.'));
   return puntos;
 }
 
@@ -120,7 +133,7 @@ export function puntosBaseDesdeTexto(texto) {
 export function formatearPorcentaje(puntosBase) {
   const enteros = Math.floor(puntosBase / 100);
   const decimales = puntosBase % 100;
-  return `${enteros}${decimales ? `.${String(decimales).padStart(2, '0').replace(/0$/, '')}` : ''} %`;
+  return `${enteros}${decimales ? `.${String(decimales).padStart(2, '0').replace(/0$/, '')}` : ''}${enIngles() ? '%' : ' %'}`;
 }
 
 /** Centavos con signo → "$4.99" / "-$4.99" (para tickets y reportes). */
@@ -151,9 +164,9 @@ export function nombreDeProducto(producto) {
  */
 export function lineaDeProducto(producto, { cantidad = 1, pesoGramos = null, precioCentavos = null } = {}) {
   const porPeso = producto.unidadVenta === 'peso';
-  if (porPeso && !Number.isSafeInteger(pesoGramos)) throw new Error('Este producto se vende por peso: falta el peso.');
+  if (porPeso && !Number.isSafeInteger(pesoGramos)) throw new Error(t('Este producto se vende por peso: falta el peso.'));
   const precio = precioCentavos ?? (porPeso ? producto.precioPorKgCentavos : producto.precioCentavos);
-  if (!Number.isSafeInteger(precio) || precio < 0) throw new Error(`«${nombreDeProducto(producto)}» no tiene un precio válido.`);
+  if (!Number.isSafeInteger(precio) || precio < 0) throw new Error(t('«{nombre}» no tiene un precio válido.', { nombre: nombreDeProducto(producto) }));
   return {
     id: nuevoIdLinea(),
     productoId: producto.id ?? null,
@@ -177,7 +190,7 @@ export function lineaDeProducto(producto, { cantidad = 1, pesoGramos = null, pre
  * @param {{id: string, nombre: string, claseFiscal: string}} departamento
  */
 export function lineaDeDepartamento(departamento, precioCentavos, { cantidad = 1, upc = null } = {}) {
-  if (!Number.isSafeInteger(precioCentavos) || precioCentavos <= 0) throw new Error('Escribe el precio del artículo.');
+  if (!Number.isSafeInteger(precioCentavos) || precioCentavos <= 0) throw new Error(t('Escribe el precio del artículo.'));
   return {
     id: nuevoIdLinea(),
     productoId: null,
@@ -302,9 +315,9 @@ export function estadoCobro(totalCentavos, pagos) {
  */
 export function registrarPago(totalCentavos, pagos, { metodo, montoCentavos = 0 }) {
   if (!METODOS_PAGO.includes(metodo)) throw new Error(`Forma de pago desconocida: ${metodo}`);
-  if (pagos.length >= LIMITES_TICKET.pagos) throw new Error('Demasiados pagos en un solo ticket.');
+  if (pagos.length >= LIMITES_TICKET.pagos) throw new Error(t('Demasiados pagos en un solo ticket.'));
   const estado = estadoCobro(totalCentavos, pagos);
-  if (estado.completo) throw new Error('El ticket ya está pagado.');
+  if (estado.completo) throw new Error(t('El ticket ya está pagado.'));
   const pendiente = estado.pendienteCentavos;
   const monto = Number.isSafeInteger(montoCentavos) && montoCentavos > 0 ? montoCentavos : 0;
   const signo = pendiente < 0 ? -1 : 1;
@@ -317,7 +330,7 @@ export function registrarPago(totalCentavos, pagos, { metodo, montoCentavos = 0 
       return { pago, completo: true, cambioCentavos: 0 };
     }
     const entregado = monto === 0 ? redondeado : monto;
-    if (entregado % 5 !== 0) throw new Error('En efectivo no hay centavos sueltos: el monto debe terminar en 0 o 5.');
+    if (entregado % 5 !== 0) throw new Error(t('En efectivo no hay centavos sueltos: el monto debe terminar en 0 o 5.'));
     if (entregado >= redondeado) {
       const pago = { metodo, importeCentavos: redondeado, recibidoCentavos: entregado, cambioCentavos: entregado - redondeado, final: true };
       return { pago, completo: true, cambioCentavos: pago.cambioCentavos };
@@ -395,7 +408,7 @@ export const CAMPOS_LINEA_VENTA = Object.freeze([
  */
 export function armarVenta(calculo, pagos, meta) {
   const estado = estadoCobro(calculo.totalCentavos, pagos);
-  if (!estado.completo) throw new Error('Falta cobrar el ticket.');
+  if (!estado.completo) throw new Error(t('Falta cobrar el ticket.'));
   const porMetodo = Object.fromEntries(METODOS_PAGO.map((m) => [m, 0]));
   for (const p of pagos) porMetodo[p.metodo] += p.importeCentavos;
   const lineas = calculo.lineas.map((l) => ({
@@ -470,6 +483,7 @@ const esTextoONulo = (v, max) => v === null || esTexto(v, max);
  * Validación completa de una venta (más estricta que las reglas, que no pueden
  * recorrer las líneas). Devuelve la lista de errores; vacía si está bien.
  */
+// i18n:sin-revisar-inicio (validación interna antes de guardar: mensajes para desarrolladores)
 export function validarVenta(v, { conRegistro = false } = {}) {
   const errores = [];
   const campos = conRegistro ? CAMPOS_VENTA : CAMPOS_VENTA.filter((c) => c !== 'registradoEn');
@@ -538,6 +552,8 @@ export function validarVenta(v, { conRegistro = false } = {}) {
  * Etiqueta de balanza con precio (UPC-A que empieza por 2): "2 IIIII PPPPP C".
  * Devuelve los PLU candidatos (5 y 4 dígitos) y el precio en centavos, o null.
  */
+// i18n:sin-revisar-fin
+
 export function interpretarCodigoBalanza(upc) {
   if (!/^2[0-9]{11}$/.test(String(upc ?? ''))) return null;
   const articulo = upc.slice(1, 6);

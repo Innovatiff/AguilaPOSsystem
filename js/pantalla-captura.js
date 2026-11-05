@@ -11,6 +11,7 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { avisar } from './avisos.js';
+import { t, locale } from './idioma.js';
 import { observarCatalogo, observarTiendas, crearProducto, actualizarProducto } from './productos.js';
 import { armarProducto, validarProducto, diferenciasProducto } from './esquema.js';
 import { normalizarUPC } from './upca.js';
@@ -49,7 +50,7 @@ if (pideAlAdmin) {
   // Sin precio no hay etiqueta que previsualizar; la pista explica el recorrido sin precio.
   vistaEtiqueta.hidden = true;
   $('titulo-vista').hidden = true;
-  $('pista-captura').textContent = 'Escanea · Enter pasa al siguiente campo · Enter en Presentación envía la solicitud de alta (sin precio: lo pone un administrador) · Esc limpia · F4 corrige el último';
+  $('pista-captura').textContent = t('Escanea · Enter pasa al siguiente campo · Enter en Presentación envía la solicitud de alta (sin precio: lo pone un administrador) · Esc limpia · F4 corrige el último');
   observarSolicitudes('pendiente', (lista) => {
     altasPendientes.clear();
     for (const s of lista) if (s.tipo === 'alta' && s.producto?.upc) altasPendientes.set(s.producto.upc, s);
@@ -73,10 +74,10 @@ let temporizadorVista = null;
 let temporizadorListas = null;
 
 const nombreCompleto = (p) => [p.marca, p.nombre].filter(Boolean).join(' ');
-const precioTexto = (p) => (Number.isInteger(p.precioCentavos) ? `${formatearPrecio(p.precioCentavos)}${indicadorFiscal(p.claseFiscal)}` : 'sin precio');
+const precioTexto = (p) => (Number.isInteger(p.precioCentavos) ? `${formatearPrecio(p.precioCentavos)}${indicadorFiscal(p.claseFiscal)}` : t('sin precio'));
 const tiendaActual = () => selectTienda.value || null;
-const nombreTienda = (id) => tiendas.find((t) => t.id === id)?.nombre ?? id;
-const horaCorta = () => new Date().toLocaleTimeString('es-CA', { hour: '2-digit', minute: '2-digit' });
+const nombreTienda = (id) => tiendas.find((tienda) => tienda.id === id)?.nombre ?? id;
+const horaCorta = () => new Date().toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
 
 function crear(etiqueta, clase, texto) {
   const el = document.createElement(etiqueta);
@@ -97,26 +98,27 @@ observarCatalogo(
     catalogo = mapa;
     porUPC = new Map();
     for (const p of mapa.values()) if (p.upc) porUPC.set(p.upc, p);
-    const origen = desdeCache ? (pendientes ? 'datos locales, con cambios por enviar' : 'datos locales') : 'sincronizado';
-    $('estado-catalogo').textContent = `${mapa.size} producto${mapa.size === 1 ? '' : 's'} · ${origen}`;
+    const origen = desdeCache ? (pendientes ? t('datos locales, con cambios por enviar') : t('datos locales')) : t('sincronizado');
+    const n = mapa.size;
+    $('estado-catalogo').textContent = `${n === 1 ? t('{n} producto', { n }) : t('{n} productos', { n })} · ${origen}`;
     clearTimeout(temporizadorListas);
     temporizadorListas = setTimeout(pintarListas, 400);
   },
-  (error) => avisar(`No se pudo cargar el catálogo: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudo cargar el catálogo: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 observarTiendas(
   (lista) => {
     tiendas = lista;
-    const activas = lista.filter((t) => t.activo);
+    const activas = lista.filter((tienda) => tienda.activo);
     const preferida = leerPreferencia(PREFERENCIAS.tienda);
     const seleccionada = selectTienda.value || preferida;
-    selectTienda.replaceChildren(...activas.map((t) => new Option(t.nombre, t.id)));
-    if (activas.length === 0) selectTienda.append(new Option('Sin tiendas registradas', ''));
-    if (seleccionada && activas.some((t) => t.id === seleccionada)) selectTienda.value = seleccionada;
+    selectTienda.replaceChildren(...activas.map((tienda) => new Option(tienda.nombre, tienda.id)));
+    if (activas.length === 0) selectTienda.append(new Option(t('Sin tiendas registradas'), ''));
+    if (seleccionada && activas.some((tienda) => tienda.id === seleccionada)) selectTienda.value = seleccionada;
     guardarPreferencia(PREFERENCIAS.tienda, selectTienda.value);
   },
-  (error) => avisar(`No se pudieron cargar las tiendas: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudieron cargar las tiendas: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 selectTienda.addEventListener('change', () => guardarPreferencia(PREFERENCIAS.tienda, selectTienda.value));
@@ -147,7 +149,7 @@ function seleccionarClase(valor) {
 
 function tiendasParaNuevo() {
   const actual = tiendaActual();
-  if (casillaOtras.checked) return tiendas.filter((t) => t.activo).map((t) => t.id);
+  if (casillaOtras.checked) return tiendas.filter((tienda) => tienda.activo).map((tienda) => tienda.id);
   return actual ? [actual] : [];
 }
 
@@ -193,7 +195,7 @@ function alEnterUPC() {
   const texto = campos.upc.value.trim();
   existente = null;
   if (texto === '') {
-    mostrarBanner('info', 'Producto sin código de barras. Escribe el nombre.');
+    mostrarBanner('info', t('Producto sin código de barras. Escribe el nombre.'));
     campos.nombre.focus();
     return;
   }
@@ -210,12 +212,12 @@ function alEnterUPC() {
   const pendiente = !producto && pideAlAdmin ? altasPendientes.get(codigo) : null;
   if (pendiente) {
     accionPendiente = 'siguiente';
-    mostrarBanner('aviso', `Ya se pidió el alta del UPC ${codigo} (${pendiente.creadaPorNombre}): falta que un administrador le ponga precio. Enter: siguiente`);
+    mostrarBanner('aviso', t('Ya se pidió el alta del UPC {upc} ({nombre}): falta que un administrador le ponga precio.', { upc: codigo, nombre: pendiente.creadaPorNombre }) + ' ' + t('Enter: siguiente'));
     campos.upc.select();
     return;
   }
   if (!producto) {
-    mostrarBanner('ok', pideAlAdmin ? `UPC ${codigo}: nuevo. Escribe los datos (sin precio) y Enter envía la solicitud de alta.` : `UPC ${codigo}: nuevo. Escribe los datos.`);
+    mostrarBanner('ok', pideAlAdmin ? t('UPC {upc}: nuevo. Escribe los datos (sin precio) y Enter envía la solicitud de alta.', { upc: codigo }) : t('UPC {upc}: nuevo. Escribe los datos.', { upc: codigo }));
     campos.nombre.focus();
     actualizarVista();
     return;
@@ -225,16 +227,20 @@ function alEnterUPC() {
   const resumen = `${nombreCompleto(producto)} · ${precioTexto(producto)}`;
   if (!producto.activo && pideAlAdmin) {
     accionPendiente = 'siguiente';
-    mostrarBanner('aviso', `${resumen} está INACTIVO: solo un administrador lo puede reactivar. Enter: siguiente`);
+    mostrarBanner('aviso', t('{resumen} está INACTIVO: solo un administrador lo puede reactivar. Enter: siguiente', { resumen }));
   } else if (!producto.activo) {
     accionPendiente = 'reactivar';
-    mostrarBanner('aviso', `${resumen} está INACTIVO. Enter: reactivar${tienda ? ` y agregar a ${nombreTienda(tienda)}` : ''} · Esc: omitir`);
+    mostrarBanner('aviso', tienda
+      ? t('{resumen} está INACTIVO. Enter: reactivar y agregar a {tienda} · Esc: omitir', { resumen, tienda: nombreTienda(tienda) })
+      : t('{resumen} está INACTIVO. Enter: reactivar · Esc: omitir', { resumen }));
   } else if (tienda && !producto.tiendas.includes(tienda)) {
     accionPendiente = 'agregar';
-    mostrarBanner('aviso', `${resumen} ya está en el catálogo pero no en ${nombreTienda(tienda)}. Enter: agregar a esta tienda · Esc: omitir`);
+    mostrarBanner('aviso', t('{resumen} ya está en el catálogo pero no en {tienda}. Enter: agregar a esta tienda · Esc: omitir', { resumen, tienda: nombreTienda(tienda) }));
   } else {
     accionPendiente = 'siguiente';
-    mostrarBanner('ok', `Ya está: ${resumen}${tienda ? ` · en ${nombreTienda(tienda)}` : ''}. Enter: siguiente · F4: corregir`);
+    mostrarBanner('ok', tienda
+      ? t('Ya está: {resumen} · en {tienda}. Enter: siguiente · F4: corregir', { resumen, tienda: nombreTienda(tienda) })
+      : t('Ya está: {resumen}. Enter: siguiente · F4: corregir', { resumen }));
   }
   ultimo = { id: producto.id };
   btnCorregir.disabled = false;
@@ -258,7 +264,9 @@ function ejecutarAccionPendiente() {
     return;
   }
   const { promesa } = actualizarProducto(producto, cambios, personal.usuario);
-  const detalle = accion === 'reactivar' ? `Reactivado${cambios.tiendas ? ` y agregado a ${nombreTienda(tienda)}` : ''}` : `Agregado a ${nombreTienda(tienda)}`;
+  const detalle = accion === 'reactivar'
+    ? (cambios.tiendas ? t('Reactivado y agregado a {tienda}', { tienda: nombreTienda(tienda) }) : t('Reactivado'))
+    : t('Agregado a {tienda}', { tienda: nombreTienda(tienda) });
   registrar(promesa, detalle, { ...producto, ...cambios });
   ultimo = { id: producto.id };
   limpiar();
@@ -332,7 +340,7 @@ function leerFormulario() {
   const upcTexto = campos.upc.value.trim();
   const upc = upcTexto === '' ? null : normalizarUPC(upcTexto);
   const nombre = campos.nombre.value.trim();
-  if (nombre === '') throw Object.assign(new Error('Falta el nombre.'), { campo: campos.nombre });
+  if (nombre === '') throw Object.assign(new Error(t('Falta el nombre.')), { campo: campos.nombre });
   if (pideAlAdmin) {
     return {
       upc, plu: null, nombre, marca: campos.marca.value, descriptor: null, presentacion: campos.presentacion.value,
@@ -347,7 +355,7 @@ function leerFormulario() {
   }
   if (interpretado.claseFiscal) seleccionarClase(interpretado.claseFiscal);
   const claseFiscal = claseSeleccionada();
-  if (!claseFiscal) throw Object.assign(new Error('Elige la clase fiscal: G o C.'), { campo: radiosClase[0] });
+  if (!claseFiscal) throw Object.assign(new Error(t('Elige la clase fiscal: G o C.')), { campo: radiosClase[0] });
   return {
     upc,
     plu: null,
@@ -385,18 +393,18 @@ function guardar() {
     }
     const cambios = diferenciasProducto(base, preparado);
     if (!esAdmin && 'precioCentavos' in cambios) {
-      mostrarBanner('error', 'Solo un administrador puede cambiar el precio. Deja el precio como estaba y guarda lo demás.');
+      mostrarBanner('error', t('Solo un administrador puede cambiar el precio. Deja el precio como estaba y guarda lo demás.'));
       campos.precio.value = textoDesdeCentavos(base.precioCentavos);
       campos.nombre.focus();
       return;
     }
     if (Object.keys(cambios).length === 0) {
-      mostrarBanner('info', 'Sin cambios.');
+      mostrarBanner('info', t('Sin cambios.'));
       limpiar();
       return;
     }
     const { promesa, cambioPrecio } = actualizarProducto(base, cambios, personal.usuario);
-    registrar(promesa, cambioPrecio ? 'Corregido (precio con historial)' : 'Corregido', { ...base, ...preparado }, cambioPrecio);
+    registrar(promesa, cambioPrecio ? t('Corregido (precio con historial)') : t('Corregido'), { ...base, ...preparado }, cambioPrecio);
     ultimo = { id: base.id };
     limpiar();
     return;
@@ -404,7 +412,7 @@ function guardar() {
 
   if (datos.upc && porUPC.has(datos.upc)) {
     existente = porUPC.get(datos.upc);
-    mostrarBanner('error', `El UPC ${datos.upc} ya es de «${nombreCompleto(existente)}». Escanéalo de nuevo para agregarlo a la tienda o corregirlo.`);
+    mostrarBanner('error', t('El UPC {upc} ya es de «{nombre}». Escanéalo de nuevo para agregarlo a la tienda o corregirlo.', { upc: datos.upc, nombre: nombreCompleto(existente) }));
     campos.upc.focus();
     campos.upc.select();
     return;
@@ -425,7 +433,7 @@ function guardar() {
   if (producto.upc) porUPC.set(producto.upc, conId); // evita duplicar si se vuelve a escanear antes de que llegue la confirmación
   capturados += 1;
   contador.textContent = String(capturados);
-  registrar(promesa, `Creado · ${producto.tiendas.map(nombreTienda).join(', ') || 'sin tienda'}`, conId);
+  registrar(promesa, t('Creado · {tiendas}', { tiendas: producto.tiendas.map(nombreTienda).join(', ') || t('sin tienda') }), conId);
   ultimo = { id };
   btnCorregir.disabled = false;
   limpiar();
@@ -434,7 +442,7 @@ function guardar() {
 /** Catálogo: el producto nuevo va como solicitud de alta, sin precio. */
 function solicitarAlta(datos) {
   if (datos.upc && altasPendientes.has(datos.upc)) {
-    mostrarBanner('error', `Ya se pidió el alta del UPC ${datos.upc}: falta que un administrador le ponga precio.`);
+    mostrarBanner('error', t('Ya se pidió el alta del UPC {upc}: falta que un administrador le ponga precio.', { upc: datos.upc }));
     campos.upc.focus();
     return;
   }
@@ -442,7 +450,7 @@ function solicitarAlta(datos) {
   if (datos.upc) altasPendientes.set(datos.upc, solicitud); // evita pedirlo dos veces antes de que llegue la confirmación
   capturados += 1;
   contador.textContent = String(capturados);
-  registrar(promesa, 'Solicitud de alta enviada · el administrador pondrá el precio', { ...solicitud.producto, precioCentavos: null });
+  registrar(promesa, t('Solicitud de alta enviada · el administrador pondrá el precio'), { ...solicitud.producto, precioCentavos: null });
   limpiar();
 }
 
@@ -450,7 +458,7 @@ function solicitarAlta(datos) {
 function registrar(promesa, detalle, producto, cambioPrecio = false) {
   const fila = crear('li');
   const estado = crear('span', 'estado estado--pendiente', '⋯');
-  estado.title = 'Enviando…';
+  estado.title = t('Enviando…');
   const texto = crear('span');
   texto.append(crear('strong', '', nombreCompleto(producto)), ` · ${precioTexto(producto)}`, crear('br'), crear('span', 'detalle', `${horaCorta()} · ${detalle}`));
   fila.append(estado, texto);
@@ -460,14 +468,14 @@ function registrar(promesa, detalle, producto, cambioPrecio = false) {
     () => {
       estado.textContent = '✓';
       estado.className = 'estado estado--ok';
-      estado.title = 'Guardado en el servidor';
+      estado.title = t('Guardado en el servidor');
     },
     (error) => {
       estado.textContent = '!';
       estado.className = 'estado estado--error';
       estado.title = mensajeError(error);
-      const motivo = error?.code === 'permission-denied' && cambioPrecio ? 'el precio cambió en otra estación' : mensajeError(error);
-      avisar(`No se guardó «${nombreCompleto(producto)}»: ${motivo}`, 'error', 0);
+      const motivo = error?.code === 'permission-denied' && cambioPrecio ? t('el precio cambió en otra estación') : mensajeError(error);
+      avisar(t('No se guardó «{nombre}»: {detalle}', { nombre: nombreCompleto(producto), detalle: motivo }), 'error', 0);
     },
   );
 }
@@ -477,7 +485,7 @@ function corregirUltimo() {
   if (!ultimo) return;
   const producto = catalogo.get(ultimo.id);
   if (!producto) {
-    avisar('Ese producto ya no está disponible para corregir.', 'error');
+    avisar(t('Ese producto ya no está disponible para corregir.'), 'error');
     return;
   }
   modo = 'corregir';
@@ -493,8 +501,8 @@ function corregirUltimo() {
   campos.precio.readOnly = !esAdmin;
   seleccionarClase(producto.claseFiscal);
   mostrarBanner('info', esAdmin
-    ? `Corrigiendo «${nombreCompleto(producto)}». Enter en la clase fiscal guarda · Esc cancela. Un precio distinto queda en el historial.`
-    : `Corrigiendo «${nombreCompleto(producto)}». Enter en la clase fiscal guarda · Esc cancela. El precio solo lo cambia un administrador.`);
+    ? t('Corrigiendo «{nombre}». Enter en la clase fiscal guarda · Esc cancela. Un precio distinto queda en el historial.', { nombre: nombreCompleto(producto) })
+    : t('Corrigiendo «{nombre}». Enter en la clase fiscal guarda · Esc cancela. El precio solo lo cambia un administrador.', { nombre: nombreCompleto(producto) }));
   actualizarVista();
   campos.nombre.focus();
   campos.nombre.select();
@@ -535,7 +543,7 @@ function actualizarVista() {
   try {
     const etiqueta = renderEtiqueta(armarProducto({
       upc,
-      nombre: campos.nombre.value.trim() || 'NOMBRE',
+      nombre: campos.nombre.value.trim() || t('NOMBRE'),
       marca: campos.marca.value,
       presentacion: campos.presentacion.value,
       precioCentavos,

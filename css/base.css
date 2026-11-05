@@ -1943,6 +1943,64 @@ dialog.escaner[open] {
   font-weight: 700;
 }
 
+/* Botón de idioma: en la barra lateral, como un enlace más; en las páginas de entrada, arriba a la derecha. */
+.nav-idioma,
+.boton-idioma {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nav-idioma {
+  width: 100%;
+  padding: 9px 12px;
+  color: #e7eaee;
+}
+
+.nav-idioma:hover,
+.nav-idioma:focus-visible {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.nav-idioma svg,
+.boton-idioma svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.boton-idioma {
+  padding: 7px 12px;
+  border-color: #cfd4da;
+  background: #fff;
+  color: var(--color-texto);
+}
+
+.boton-idioma:hover,
+.boton-idioma:focus-visible {
+  border-color: var(--color-texto);
+}
+
+.idioma-esquina {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+}
+
 .nav-caja {
   display: flex;
   align-items: center;
@@ -2891,6 +2949,11 @@ body.consulta {
 
 .consulta__barra .boton {
   padding: 8px 12px;
+}
+
+.consulta__barra .consulta__idioma {
+  width: auto;
+  padding: 7px 10px;
 }
 
 main.consulta__cuerpo {

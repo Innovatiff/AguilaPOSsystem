@@ -1,6 +1,7 @@
 /**
  * Precios en CENTAVOS enteros. Nunca flotantes.
  */
+import { t } from './idioma.js';
 
 /**
  * Formatea centavos como "$4.99" (siempre dos decimales, miles con coma).
@@ -28,7 +29,7 @@ export function centavosDesdeTexto(texto) {
   if (limpio.includes(',') && limpio.includes('.')) limpio = limpio.replace(/,/g, ''); // coma de miles
   else limpio = limpio.replace(',', '.'); // coma decimal
   const coincidencia = /^(\d+)(?:\.(\d{0,2}))?$/.exec(limpio);
-  if (!coincidencia) throw new Error('Precio no válido; escribe por ejemplo 4.99');
+  if (!coincidencia) throw new Error(t('Precio no válido; escribe por ejemplo 4.99'));
   const enteros = Number.parseInt(coincidencia[1], 10);
   const decimales = Number.parseInt((coincidencia[2] ?? '').padEnd(2, '0'), 10);
   return enteros * 100 + decimales;
@@ -69,7 +70,7 @@ export const INDICADOR_FISCAL = Object.freeze({
 export function indicadorFiscal(claseFiscal) {
   const indicador = INDICADOR_FISCAL[claseFiscal];
   if (indicador === undefined) {
-    throw new Error(`claseFiscal desconocida: "${String(claseFiscal)}" (debe ser "gravado" o "tasaCero")`);
+    throw new Error(t('claseFiscal desconocida: "{clase}" (debe ser "gravado" o "tasaCero")', { clase: String(claseFiscal) }));
   }
   return indicador;
 }

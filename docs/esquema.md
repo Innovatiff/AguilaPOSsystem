@@ -279,7 +279,10 @@ Immutable cash movements of a shift: `tipo` = `retiro` (drop to the safe),
 `entrada` (cash in), `pago` (payout from the drawer), `apertura` (no sale,
 amount 0) or `cancelacion` (a cancelled ticket and its amount). Fields:
 `turno`, `caja`, `tienda`, `cajero`, `cajeroNombre`, `tipo`,
-`importeCentavos`, `motivo`, `fecha`, `registradoEn` (server time).
+`importeCentavos`, `motivo`, `fecha`, `registradoEn` (server time). A
+`motivo` typed by the cashier is stored as typed; for `cancelacion` the
+register writes it in Spanish («3 artículo(s)», «Ticket en espera cancelado al
+cerrar el turno») and the back office shows it in the reader's language.
 
 ### `autorizaciones/{autorizacionId}`
 Written by an admin from the register with their own code and PIN, in a
@@ -301,7 +304,7 @@ read; nobody updates or deletes. Fields, exactly:
 | cajero, cajeroNombre | string | must be the signed-in user |
 | ticket | string \| null | local id of the ticket in progress (links every movement of one sale) |
 | folio | string \| null | receipt number, on `pago` and `venta_completada` / `devolucion_completada` |
-| texto | string ≤ 200 | what the feed shows: "Venta 261104-01-0001 completada — $17.51 (4 artículos, efectivo), cambio $0.49" |
+| texto | string ≤ 200 | what the feed shows: "Venta 261104-01-0001 completada — $17.51 (4 artículos, efectivo), cambio $0.49". Always stored in Spanish, from one of the templates in `PLANTILLAS_EVENTO` (`js/eventos.js`), whatever language the register is in; readers see it in their language (`textoEvento()`) |
 | importeCentavos | integer \| null | |
 | fecha | timestamp | register clock, strictly increasing per register (order within a ticket); not in the future |
 | registradoEn | timestamp | server time (`== request.time`); the feed orders by it |

@@ -14,6 +14,7 @@ import { centavosDesdeTexto, textoDesdeCentavos } from './precios.js';
 import { normalizarTexto } from './esquema.js';
 import { reciboVenta } from './recibo.js';
 import { mostrarMensaje } from './bo.js';
+import { t } from './idioma.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'gestion/configuracion.html' });
@@ -21,7 +22,9 @@ pintarNavegacion({ personal, activa: 'gestion/configuracion.html' });
 const $ = (id) => document.getElementById(id);
 /** Los mismos colores que las teclas de la caja (css/caja.css). */
 const COLOR_TECLA = Object.freeze({ verde: '#2e7d4f', naranja: '#d26a12', rojo: '#b8322c', azul: '#2b5fb4', amarillo: '#b58a00', morado: '#6d43b3', turquesa: '#11808a', gris: '#59626e' });
-const NOMBRE_COLOR = Object.freeze({ verde: 'Verde', naranja: 'Naranja', rojo: 'Rojo', azul: 'Azul', amarillo: 'Amarillo', morado: 'Morado', turquesa: 'Turquesa', gris: 'Gris' });
+const NOMBRE_COLOR = Object.freeze({
+  verde: t('Verde'), naranja: t('Naranja'), rojo: t('Rojo'), azul: t('Azul'), amarillo: t('Amarillo'), morado: t('Morado'), turquesa: t('Turquesa'), gris: t('Gris'),
+});
 
 let guardada = null; // configuración tal como está en Firestore
 let departamentos = []; // en edición
@@ -41,7 +44,7 @@ function identificadorDe(nombre, usados) {
 
 function cargarFormulario(config) {
   $('k-impuesto-nombre').value = config.impuestoNombre;
-  $('k-tasa').value = formatearPorcentaje(config.tasaImpuestoBP).replace(' %', '');
+  $('k-tasa').value = formatearPorcentaje(config.tasaImpuestoBP).replace(/ ?%$/, ''); // «13 %» y, en inglés, «13%»
   $('k-fondo').value = textoDesdeCentavos(config.fondoSugeridoCentavos);
   $('k-limite').value = textoDesdeCentavos(config.limiteVentaLibreCentavos);
   $('k-ciego').checked = config.conteoCiego;
@@ -55,7 +58,7 @@ function tasaDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim();
   if (limpio === '0') return 0;
   const puntos = puntosBaseDesdeTexto(limpio);
-  if (puntos > 3000) throw new Error('La tasa máxima es 30 %.');
+  if (puntos > 3000) throw new Error(t('La tasa máxima es 30 %.'));
   return puntos;
 }
 
@@ -63,34 +66,34 @@ function montoDesdeTexto(texto, campo) {
   try {
     return centavosDesdeTexto(texto);
   } catch {
-    throw new Error(`${campo}: escribe un monto, por ejemplo 150.00`);
+    throw new Error(t('{campo}: escribe un monto, por ejemplo 150.00', { campo }));
   }
 }
 
 /** Lee el formulario; lanza Error con el mensaje si algo no es válido. */
 function leerFormulario() {
   const impuestoNombre = $('k-impuesto-nombre').value.trim();
-  if (!impuestoNombre) throw new Error('Escribe el nombre del impuesto (p. ej. HST).');
+  if (!impuestoNombre) throw new Error(t('Escribe el nombre del impuesto (p. ej. HST).'));
   let tasaImpuestoBP;
   try {
     tasaImpuestoBP = tasaDesdeTexto($('k-tasa').value);
   } catch (error) {
-    throw new Error(`Tasa: ${error.message}`);
+    throw new Error(t('Tasa: {error}', { error: error.message }));
   }
   const datos = {
     impuestoNombre,
     tasaImpuestoBP,
-    fondoSugeridoCentavos: montoDesdeTexto($('k-fondo').value, 'Fondo sugerido'),
-    limiteVentaLibreCentavos: montoDesdeTexto($('k-limite').value, 'Límite de venta libre'),
+    fondoSugeridoCentavos: montoDesdeTexto($('k-fondo').value, t('Fondo sugerido')),
+    limiteVentaLibreCentavos: montoDesdeTexto($('k-limite').value, t('Límite de venta libre')),
     conteoCiego: $('k-ciego').checked,
     papelRecibo: Number(document.querySelector('input[name="papel"]:checked')?.value ?? 80),
     reciboPie: $('k-pie').value.trim(),
     departamentos: departamentos.map((d) => ({ id: d.id, nombre: d.nombre.trim(), claseFiscal: d.claseFiscal, color: d.color })),
   };
-  if (datos.departamentos.length === 0) throw new Error('Deja al menos una tecla de departamento.');
+  if (datos.departamentos.length === 0) throw new Error(t('Deja al menos una tecla de departamento.'));
   for (const [i, d] of datos.departamentos.entries()) {
     const errores = validarDepartamento(d);
-    if (errores.length) throw new Error(`Departamento ${i + 1}: ${errores[0]}.`);
+    if (errores.length) throw new Error(t('Departamento {n}: {error}.', { n: i + 1, error: errores[0] }));
   }
   return datos;
 }
@@ -98,23 +101,23 @@ function leerFormulario() {
 // ------------------------------------------------------------- departamentos
 
 function pintarDepartamentos() {
-  $('deptos-contador').textContent = `${departamentos.length} de ${MAXIMO_DEPARTAMENTOS}`;
+  $('deptos-contador').textContent = t('{n} de {maximo}', { n: departamentos.length, maximo: MAXIMO_DEPARTAMENTOS });
   $('btn-agregar-depto').disabled = departamentos.length >= MAXIMO_DEPARTAMENTOS;
   $('tabla-deptos').tBodies[0].replaceChildren(...departamentos.map((d, i) => {
-    const nombre = h('input', { type: 'text', value: d.nombre, maxlength: 30, required: true, 'aria-label': `Nombre del departamento ${i + 1}` });
+    const nombre = h('input', { type: 'text', value: d.nombre, maxlength: 30, required: true, 'aria-label': t('Nombre del departamento {n}', { n: i + 1 }) });
     nombre.addEventListener('input', () => {
       d.nombre = nombre.value;
       cambio();
     });
-    const impuesto = h('select', { 'aria-label': `Impuesto del departamento ${i + 1}` },
-      h('option', { value: 'gravado', text: 'Con impuesto (+Tx)', selected: d.claseFiscal === 'gravado' }),
-      h('option', { value: 'tasaCero', text: 'Sin impuesto', selected: d.claseFiscal === 'tasaCero' }));
+    const impuesto = h('select', { 'aria-label': t('Impuesto del departamento {n}', { n: i + 1 }) },
+      h('option', { value: 'gravado', text: t('Con impuesto (+Tx)'), selected: d.claseFiscal === 'gravado' }),
+      h('option', { value: 'tasaCero', text: t('Sin impuesto'), selected: d.claseFiscal === 'tasaCero' }));
     impuesto.addEventListener('change', () => {
       d.claseFiscal = impuesto.value;
       cambio();
     });
     const muestra = h('span', { class: 'muestra-color muestra-color--grande', style: `background:${COLOR_TECLA[d.color]}` });
-    const color = h('select', { 'aria-label': `Color del departamento ${i + 1}` }, COLORES_DEPARTAMENTO.map((c) => h('option', { value: c, text: NOMBRE_COLOR[c], selected: d.color === c })));
+    const color = h('select', { 'aria-label': t('Color del departamento {n}', { n: i + 1 }) }, COLORES_DEPARTAMENTO.map((c) => h('option', { value: c, text: NOMBRE_COLOR[c], selected: d.color === c })));
     color.addEventListener('change', () => {
       d.color = color.value;
       muestra.style.background = COLOR_TECLA[d.color];
@@ -129,15 +132,15 @@ function pintarDepartamentos() {
     };
     return h('tr', null,
       h('td', { class: 'orden' },
-        h('button', { type: 'button', class: 'boton boton--pequeno', text: '↑', 'aria-label': 'Subir', disabled: i === 0, onclick: () => mover(-1) }),
-        h('button', { type: 'button', class: 'boton boton--pequeno', text: '↓', 'aria-label': 'Bajar', disabled: i === departamentos.length - 1, onclick: () => mover(1) })),
+        h('button', { type: 'button', class: 'boton boton--pequeno', text: '↑', 'aria-label': t('Subir'), disabled: i === 0, onclick: () => mover(-1) }),
+        h('button', { type: 'button', class: 'boton boton--pequeno', text: '↓', 'aria-label': t('Bajar'), disabled: i === departamentos.length - 1, onclick: () => mover(1) })),
       h('td', null, nombre, h('span', { class: 'secundario monoespaciada', text: d.id })),
       h('td', null, impuesto),
       h('td', { class: 'celda-color' }, muestra, color),
       h('td', null, h('button', {
         type: 'button',
         class: 'boton boton--pequeno',
-        text: 'Quitar',
+        text: t('Quitar'),
         onclick: () => {
           departamentos.splice(i, 1);
           pintarDepartamentos();
@@ -150,7 +153,7 @@ function pintarDepartamentos() {
 $('btn-agregar-depto').addEventListener('click', () => {
   if (departamentos.length >= MAXIMO_DEPARTAMENTOS) return;
   const usados = new Set(departamentos.map((d) => d.id));
-  const nombre = 'Nuevo departamento';
+  const nombre = t('Nuevo departamento');
   departamentos.push({ id: identificadorDe(`${nombre}-${Date.now().toString(36).slice(-3)}`, usados), nombre, claseFiscal: 'gravado', color: 'gris' });
   pintarDepartamentos();
   cambio();
@@ -185,14 +188,14 @@ function pintarVista() {
   $('vista-deptos').replaceChildren(...config.departamentos.map((d) => h('span', {
     class: 'tecla-demo',
     style: `background:${COLOR_TECLA[d.color]}`,
-  }, h('strong', { text: d.nombre }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : 'Sin impuesto' }))));
+  }, h('strong', { text: d.nombre }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : t('Sin impuesto') }))));
 }
 
 // ------------------------------------------------------------- guardar
 
 function cambio() {
   sucio = true;
-  $('k-estado').textContent = 'Cambios sin guardar';
+  $('k-estado').textContent = t('Cambios sin guardar');
   mostrarMensaje($('k-mensaje'), '', '');
   pintarVista();
 }
@@ -219,9 +222,9 @@ $('form-config').addEventListener('submit', async (e) => {
     await guardarConfigPos(datos, personal.usuario);
     sucio = false;
     $('k-estado').textContent = '';
-    mostrarMensaje($('k-mensaje'), 'ok', 'Configuración guardada. Las cajas ya la están usando.');
+    mostrarMensaje($('k-mensaje'), 'ok', t('Configuración guardada. Las cajas ya la están usando.'));
   } catch (error) {
-    mostrarMensaje($('k-mensaje'), 'error', `No se pudo guardar: ${mensajeError(error)}`);
+    mostrarMensaje($('k-mensaje'), 'error', t('No se pudo guardar: {error}', { error: mensajeError(error) }));
   } finally {
     $('k-guardar').disabled = false;
   }
@@ -244,11 +247,11 @@ observarConfigPos((config, existe) => {
   if (!sucio) {
     cargarFormulario(config);
     pintarVista();
-    if (!existe) $('k-estado').textContent = 'Valores de fábrica: guarda para fijarlos';
+    if (!existe) $('k-estado').textContent = t('Valores de fábrica: guarda para fijarlos');
   }
-}, (error) => mostrarMensaje($('k-mensaje'), 'error', `No se pudo leer la configuración: ${mensajeError(error)}`));
+}, (error) => mostrarMensaje($('k-mensaje'), 'error', t('No se pudo leer la configuración: {error}', { error: mensajeError(error) })));
 
 observarTiendas((lista) => {
-  tienda = lista.find((t) => t.activo) ?? lista[0] ?? null;
+  tienda = lista.find((candidata) => candidata.activo) ?? lista[0] ?? null;
   pintarVista();
 }, () => {});

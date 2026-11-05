@@ -3,6 +3,10 @@ import {
   EN_CATALOGO, puedeUsarCatalogo,
 } from './auth.js';
 import { tipoDeIdentificador, normalizarIdentificador } from './identidad.js';
+import { t } from './idioma.js';
+import { botonIdioma } from './boton-idioma.js';
+
+document.body.append(botonIdioma({ clase: 'boton-idioma idioma-esquina' }));
 
 const parametros = new URLSearchParams(window.location.search);
 const destino = RAIZ + destinoSeguro(parametros.get('volver'));
@@ -15,13 +19,13 @@ const btnOlvide = document.getElementById('btn-olvide');
 const mensaje = document.getElementById('mensaje');
 
 const MOTIVOS = {
-  'sesion-cerrada': ['ok', 'Sesión cerrada.'],
-  'desactivado': ['error', 'Tu acceso está desactivado. Habla con el gerente.'],
-  'sin-registro': ['error', 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).'],
-  'cuenta-renovada': ['error', 'Tu NIP fue restablecido. Entra con el NIP nuevo.'],
-  'sin-conexion': ['error', 'No se pudo comprobar tu acceso. Revisa la conexión e inténtalo de nuevo.'],
-  'solo-admin': ['error', 'El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios; para el catálogo, la app Catálogo.'],
-  'sin-permiso-catalogo': ['error', 'No tienes permiso para usar el Catálogo. Pide a un administrador que te lo active en Empleados.'],
+  'sesion-cerrada': ['ok', t('Sesión cerrada.')],
+  'desactivado': ['error', t('Tu acceso está desactivado. Habla con el gerente.')],
+  'sin-registro': ['error', t('Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).')],
+  'cuenta-renovada': ['error', t('Tu NIP fue restablecido. Entra con el NIP nuevo.')],
+  'sin-conexion': ['error', t('No se pudo comprobar tu acceso. Revisa la conexión e inténtalo de nuevo.')],
+  'solo-admin': ['error', t('El back office es solo para administradores. Para vender, usa la caja; para ver un precio, la consulta de precios; para el catálogo, la app Catálogo.')],
+  'sin-permiso-catalogo': ['error', t('No tienes permiso para usar el Catálogo. Pide a un administrador que te lo active en Empleados.')],
 };
 const MOTIVOS_SIN_REINGRESO = new Set(['desactivado', 'sin-registro', 'cuenta-renovada', 'solo-admin', 'sin-permiso-catalogo']);
 // Back office: solo administradores. App Catálogo: administradores y personal con permiso de catálogo.
@@ -37,7 +41,7 @@ function mostrar(tipo, texto) {
 function ocupado(si) {
   btnEntrar.disabled = si;
   btnOlvide.disabled = si;
-  btnEntrar.textContent = si ? 'Entrando…' : 'Entrar';
+  btnEntrar.textContent = si ? t('Entrando…') : t('Entrar');
 }
 
 /**
@@ -49,7 +53,7 @@ function ajustarModo() {
   const tipo = tipoDeIdentificador(identificador.value);
   const esCodigo = tipo === 'codigo' || (tipo === null && /^[0-9]+$/.test(normalizarIdentificador(identificador.value)));
   secreto.inputMode = EN_CATALOGO || esCodigo ? 'numeric' : 'text';
-  etiquetaSecreto.textContent = EN_CATALOGO || esCodigo ? 'NIP' : 'NIP o contraseña';
+  etiquetaSecreto.textContent = EN_CATALOGO || esCodigo ? t('NIP') : t('NIP o contraseña');
   btnOlvide.hidden = EN_CATALOGO || tipo !== 'correo';
 }
 identificador.addEventListener('input', ajustarModo);
@@ -93,7 +97,7 @@ formulario.addEventListener('submit', async (evento) => {
     const codigo = error?.code ?? '';
     const credencialesMal = ['auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/user-not-found', 'auth/wrong-password'].includes(codigo);
     if (credencialesMal) {
-      mostrar('error', EN_CATALOGO ? 'Correo o NIP incorrectos.' : tipoDeIdentificador(identificador.value) === 'codigo' ? 'Código o NIP incorrectos.' : 'Correo, NIP o contraseña incorrectos.');
+      mostrar('error', EN_CATALOGO ? t('Correo o NIP incorrectos.') : tipoDeIdentificador(identificador.value) === 'codigo' ? t('Código o NIP incorrectos.') : t('Correo, NIP o contraseña incorrectos.'));
     } else {
       mostrar('error', mensajeError(error));
     }
@@ -105,14 +109,14 @@ formulario.addEventListener('submit', async (evento) => {
 
 btnOlvide.addEventListener('click', async () => {
   if (tipoDeIdentificador(identificador.value) !== 'correo') {
-    mostrar('error', 'Escribe tu correo y vuelve a pulsar «Olvidé mi contraseña». Si entras con NIP, un administrador lo cambia en Empleados.');
+    mostrar('error', t('Escribe tu correo y vuelve a pulsar «Olvidé mi contraseña». Si entras con NIP, un administrador lo cambia en Empleados.'));
     identificador.focus();
     return;
   }
   ocupado(true);
   try {
     await enviarRestablecimiento(identificador.value);
-    mostrar('ok', `Si ${normalizarIdentificador(identificador.value)} entra con contraseña, recibirá un correo para crear una nueva. Si entras con NIP, un administrador lo cambia en Empleados.`);
+    mostrar('ok', t('Si {correo} entra con contraseña, recibirá un correo para crear una nueva. Si entras con NIP, un administrador lo cambia en Empleados.', { correo: normalizarIdentificador(identificador.value) }));
   } catch (error) {
     mostrar('error', mensajeError(error));
   } finally {

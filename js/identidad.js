@@ -21,6 +21,7 @@
  * Módulo puro (sin Firebase ni DOM): se prueba en Node y lo reflejan las
  * reglas de Firestore (función usuarioActual()).
  */
+import { t } from './idioma.js';
 
 /** Dominio de los correos sintéticos. Subdominio del proyecto: nadie más lo posee. */
 export const DOMINIO_CODIGOS = 'codigo.aguilapos.firebaseapp.com';
@@ -81,11 +82,11 @@ export function correoDeAcceso(identificador, version = 1) {
   const id = normalizarIdentificador(identificador);
   if (esCodigo(id)) {
     const v = Number(version);
-    if (!Number.isInteger(v) || v < 1) throw new Error('Versión de cuenta inválida.');
+    if (!Number.isInteger(v) || v < 1) throw new Error(t('Versión de cuenta inválida.'));
     return `${id}${v > 1 ? `.${v}` : ''}@${DOMINIO_CODIGOS}`;
   }
   if (esCorreo(id)) return id;
-  throw new Error('Escribe tu código de empleado (solo números) o tu correo.');
+  throw new Error(t('Escribe tu código de empleado (solo números) o tu correo.'));
 }
 
 /** Usuario estable a partir del correo de Auth: código (sin versión) o correo en minúsculas. */
@@ -107,8 +108,8 @@ export function versionDe(correoAuth) {
 // ------------------------------------------------------------- validación
 export function validarCodigo(codigo) {
   const id = normalizarIdentificador(codigo);
-  if (id === '') return 'Escribe el código de empleado.';
-  if (!REGEX_CODIGO.test(id)) return 'El código de empleado son 6 dígitos.';
+  if (id === '') return t('Escribe el código de empleado.');
+  if (!REGEX_CODIGO.test(id)) return t('El código de empleado son 6 dígitos.');
   return null;
 }
 
@@ -117,19 +118,19 @@ const SECUENCIAS = new Set(['0123456789', '9876543210']);
 /** NIP de colaborador: 6 dígitos, ni todos iguales ni una secuencia (123456, 654321…). */
 export function validarNIP(nip) {
   const texto = String(nip ?? '').trim();
-  if (texto === '') return 'Escribe el NIP.';
-  if (!REGEX_NIP.test(texto)) return 'El NIP son 6 dígitos, solo números.';
-  if (/^(\d)\1+$/.test(texto)) return 'El NIP no puede ser el mismo dígito repetido.';
+  if (texto === '') return t('Escribe el NIP.');
+  if (!REGEX_NIP.test(texto)) return t('El NIP son 6 dígitos, solo números.');
+  if (/^(\d)\1+$/.test(texto)) return t('El NIP no puede ser el mismo dígito repetido.');
   for (const secuencia of SECUENCIAS) {
-    if (secuencia.includes(texto)) return 'El NIP no puede ser una secuencia como 123456.';
+    if (secuencia.includes(texto)) return t('El NIP no puede ser una secuencia como 123456.');
   }
   return null;
 }
 
 export function validarContrasena(texto) {
   const contrasena = String(texto ?? '');
-  if (contrasena === '') return 'Escribe la contraseña.';
-  if (contrasena.length < LONGITUD_MINIMA_CONTRASENA) return `La contraseña debe tener al menos ${LONGITUD_MINIMA_CONTRASENA} caracteres.`;
+  if (contrasena === '') return t('Escribe la contraseña.');
+  if (contrasena.length < LONGITUD_MINIMA_CONTRASENA) return t('La contraseña debe tener al menos {n} caracteres.', { n: LONGITUD_MINIMA_CONTRASENA });
   return null;
 }
 
@@ -177,27 +178,27 @@ export function armarFichaPersonal(datos, actualizadoPor) {
   };
 }
 
-/** Errores (en español) de una ficha; vacío si es válida. Mismo criterio que las reglas. */
+/** Errores (en el idioma elegido) de una ficha; vacío si es válida. Mismo criterio que las reglas. */
 export function validarFichaPersonal(f) {
   const errores = [];
-  if (!TIPOS_ACCESO.includes(f.tipo)) errores.push('El tipo de acceso debe ser "codigo" o "correo".');
+  if (!TIPOS_ACCESO.includes(f.tipo)) errores.push(t('El tipo de acceso debe ser "codigo" o "correo".'));
   if (f.tipo === 'codigo') {
     const error = validarCodigo(f.usuario);
     if (error) errores.push(error);
-    else if (f.correoAuth !== correoDeAcceso(f.usuario, f.cuentaVersion)) errores.push('El correo de la cuenta no corresponde al código y su versión.');
+    else if (f.correoAuth !== correoDeAcceso(f.usuario, f.cuentaVersion)) errores.push(t('El correo de la cuenta no corresponde al código y su versión.'));
   } else if (f.tipo === 'correo') {
-    if (!esCorreo(f.usuario)) errores.push('El correo no es válido.');
-    else if (f.correoAuth !== f.usuario) errores.push('El correo de la cuenta debe ser el mismo correo.');
-    if (f.cuentaVersion !== 1) errores.push('Las cuentas por correo no llevan versión.');
+    if (!esCorreo(f.usuario)) errores.push(t('El correo no es válido.'));
+    else if (f.correoAuth !== f.usuario) errores.push(t('El correo de la cuenta debe ser el mismo correo.'));
+    if (f.cuentaVersion !== 1) errores.push(t('Las cuentas por correo no llevan versión.'));
   }
-  if (typeof f.nombre !== 'string' || f.nombre.trim() === '' || f.nombre.length > 80) errores.push('El nombre es obligatorio (máximo 80 caracteres).');
-  if (!['admin', 'empleado'].includes(f.rol)) errores.push('El rol debe ser admin o empleado.');
-  if (typeof f.activo !== 'boolean') errores.push('activo debe ser verdadero o falso.');
-  if (f.tienda !== null && !/^[a-z0-9-]{2,40}$/.test(String(f.tienda))) errores.push('La tienda no es válida.');
-  if (!Number.isInteger(f.cuentaVersion) || f.cuentaVersion < 1) errores.push('La versión de cuenta debe ser un entero mayor o igual a 1.');
-  if (typeof f.actualizadoPor !== 'string' || f.actualizadoPor === '') errores.push('Falta quién actualiza la ficha.');
-  if (!(f.correo === null || esCorreo(f.correo))) errores.push('El correo no es válido.');
-  if (f.tipo === 'correo' && f.correo !== f.usuario) errores.push('El correo de una cuenta por correo es su propio usuario.');
-  if (typeof f.catalogo !== 'boolean') errores.push('El permiso del Catálogo debe ser sí o no.');
+  if (typeof f.nombre !== 'string' || f.nombre.trim() === '' || f.nombre.length > 80) errores.push(t('El nombre es obligatorio (máximo 80 caracteres).'));
+  if (!['admin', 'empleado'].includes(f.rol)) errores.push(t('El rol debe ser admin o empleado.'));
+  if (typeof f.activo !== 'boolean') errores.push(t('activo debe ser verdadero o falso.'));
+  if (f.tienda !== null && !/^[a-z0-9-]{2,40}$/.test(String(f.tienda))) errores.push(t('La tienda no es válida.'));
+  if (!Number.isInteger(f.cuentaVersion) || f.cuentaVersion < 1) errores.push(t('La versión de cuenta debe ser un entero mayor o igual a 1.'));
+  if (typeof f.actualizadoPor !== 'string' || f.actualizadoPor === '') errores.push(t('Falta quién actualiza la ficha.'));
+  if (!(f.correo === null || esCorreo(f.correo))) errores.push(t('El correo no es válido.'));
+  if (f.tipo === 'correo' && f.correo !== f.usuario) errores.push(t('El correo de una cuenta por correo es su propio usuario.'));
+  if (typeof f.catalogo !== 'boolean') errores.push(t('El permiso del Catálogo debe ser sí o no.'));
   return errores;
 }

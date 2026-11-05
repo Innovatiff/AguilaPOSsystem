@@ -9,7 +9,8 @@
  *
  * Este módulo es puro (sin DOM ni Firebase): arma ese estado, ya con los
  * textos y montos formateados, a partir del ticket de la caja. Lo prueban las
- * pruebas unitarias.
+ * pruebas unitarias. Los textos van en el idioma de la caja y el estado dice
+ * cuál es (`idioma`): la pantalla se pone en ese idioma.
  *
  * Mensajes del canal:
  *   caja → pantalla: { tipo: 'estado', estado }   cada vez que algo cambia
@@ -17,7 +18,8 @@
  *                    { tipo: 'adios' }            la caja se cerró o recargó
  *   pantalla → caja: { tipo: 'hola' }             recién abierta: pide el estado actual
  */
-import { formatearMonto, formatearPeso, formatearPorcentaje, redondearEfectivo, NOMBRE_METODO } from './ticket.js';
+import { formatearMonto, formatearPeso, formatearPorcentaje, redondearEfectivo, nombreMetodo } from './ticket.js';
+import { t, idioma, traducirTexto } from './idioma.js';
 
 export const CANAL_CLIENTE = 'aguila-pantalla-cliente';
 export const LATIDO_MS = 4000;
@@ -56,13 +58,13 @@ export function lineaCliente(l) {
   const peso = l.unidad === 'peso';
   return {
     id: l.id,
-    nombre: [l.nombre, l.presentacion].filter((t) => typeof t === 'string' && t.trim() !== '').join(' '),
+    nombre: [l.nombre, l.presentacion].filter((x) => typeof x === 'string' && x.trim() !== '').join(' '),
     detalle: peso
       ? `${formatearPeso(l.pesoGramos)} × ${dinero(l.precioUnitarioCentavos)}/kg`
       : `${l.cantidad} × ${dinero(l.precioUnitarioCentavos)}`,
     importe: dinero(l.importeCentavos),
     antes: l.descuentoCentavos > 0 ? dinero(l.importeBrutoCentavos) : null,
-    descuento: l.descuentoCentavos > 0 ? `Descuento ${describirDescuento(l.descuento) ?? ''}`.trim() : null,
+    descuento: l.descuentoCentavos > 0 ? t('Descuento {descuento}', { descuento: describirDescuento(l.descuento) ?? '' }).trim() : null,
     negativa: (l.cantidad ?? 0) < 0 || (l.pesoGramos ?? 0) < 0,
   };
 }
@@ -106,10 +108,12 @@ export function estadoCliente({ fase, tienda = '', caja = '', atiende = null, co
   const base = {
     v: 1,
     fase,
+    idioma: idioma(),
     tienda: String(tienda ?? '').slice(0, 80),
     caja: String(caja ?? '').slice(0, 40),
     atiende: fase === 'cerrada' ? '' : primerNombre(atiende),
-    mensaje: String(config?.reciboPie ?? '').split('\n')[0].trim().slice(0, 120) || '¡Gracias por su compra!',
+    // El mensaje del recibo va como lo escribió la tienda; el de fábrica, traducido.
+    mensaje: traducirTexto(String(config?.reciboPie ?? '').split('\n')[0].trim().slice(0, 120)) || t('¡Gracias por su compra!'),
   };
   if (fase === 'cerrada' || fase === 'libre') return base;
 
@@ -123,7 +127,7 @@ export function estadoCliente({ fase, tienda = '', caja = '', atiende = null, co
       articulos: Math.abs(venta.articulos),
       total: dinero(Math.abs(venta.totalCentavos + (venta.redondeoCentavos ?? 0))),
       pagos: (venta.pagos ?? []).map((p) => ({
-        metodo: NOMBRE_METODO[p.metodo] ?? p.metodo,
+        metodo: nombreMetodo(p.metodo),
         importe: dinero(Math.abs(p.recibidoCentavos ?? p.importeCentavos)),
       })),
       cambio: venta.cambioCentavos > 0 ? dinero(venta.cambioCentavos) : null,
@@ -149,12 +153,12 @@ export function estadoCliente({ fase, tienda = '', caja = '', atiende = null, co
     const efectivo = cobro.metodo === 'efectivo';
     const pagado = (cobro.pagos ?? []).reduce((suma, p) => suma + Math.abs(p.importeCentavos), 0);
     estado.cobro = {
-      metodo: NOMBRE_METODO[cobro.metodo] ?? cobro.metodo,
+      metodo: nombreMetodo(cobro.metodo),
       tarjeta: cobro.metodo === 'debito' || cobro.metodo === 'credito',
       pagado: dinero(pagado),
       falta: dinero(Math.abs(efectivo ? cobro.pendienteEfectivoCentavos : cobro.pendienteCentavos)),
       pagos: (cobro.pagos ?? []).map((p) => ({
-        metodo: NOMBRE_METODO[p.metodo] ?? p.metodo,
+        metodo: nombreMetodo(p.metodo),
         importe: dinero(Math.abs(p.recibidoCentavos ?? p.importeCentavos)),
       })),
     };

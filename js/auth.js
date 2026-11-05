@@ -22,6 +22,7 @@ import {
 } from './firebase.js';
 import { correoDeAcceso, usuarioDe, esCorreoDeCodigo, esCorreo, esNIP, tipoDeIdentificador, normalizarIdentificador } from './identidad.js';
 import { huellaNip } from './nip.js';
+import { t } from './idioma.js';
 
 /** Raíz de la app (la carpeta de index.html), válida desde cualquier subcarpeta (gestion/…). */
 export const RAIZ = new URL('../', import.meta.url).pathname;
@@ -34,39 +35,42 @@ export const RAIZ = new URL('../', import.meta.url).pathname;
 export const EN_CATALOGO = typeof location !== 'undefined' && /\/catalogo\//.test(location.pathname);
 const PAGINA_ENTRADA = EN_CATALOGO ? 'catalogo/entrar.html' : 'login.html';
 
-const MENSAJES = {
-  'auth/invalid-credential': 'Usuario o contraseña incorrectos.',
-  'auth/invalid-login-credentials': 'Usuario o contraseña incorrectos.',
-  'auth/user-not-found': 'Usuario o contraseña incorrectos.',
-  'auth/wrong-password': 'Usuario o contraseña incorrectos.',
-  'auth/invalid-email': 'El correo no es válido.',
-  'auth/missing-password': 'Escribe la contraseña.',
-  'auth/user-disabled': 'Esta cuenta está deshabilitada.',
-  'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.',
-  'auth/network-request-failed': 'Sin conexión. Revisa la red e inténtalo de nuevo.',
-  'auth/email-already-in-use': 'Ya existe una cuenta con ese correo.',
-  'auth/weak-password': 'La contraseña es demasiado corta.',
-  'auth/requires-recent-login': 'Por seguridad, cierra sesión, vuelve a entrar y repite la operación.',
-  'auth/operation-not-allowed': 'Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.',
-  'auth/admin-restricted-operation': 'Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.',
-  'catalogo/sin-registro': 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).',
-  'catalogo/desactivado': 'Tu acceso está desactivado. Habla con el gerente.',
-  'catalogo/cuenta-renovada': 'Tu NIP fue restablecido. Entra con el NIP nuevo.',
-  'catalogo/sin-version-libre': 'No se pudo crear la cuenta de este código. Usa otro código.',
-  'catalogo/identificador': 'Escribe tu correo.',
-  'catalogo/sin-permiso-catalogo': 'No tienes permiso para usar el Catálogo. Pide a un administrador que te lo active en Empleados.',
-  'caja/nip-incorrecto': 'NIP incorrecto.',
-  'permission-denied': 'No tienes permiso para hacer esto.',
-  'unavailable': 'Sin conexión con la base de datos. Inténtalo de nuevo.',
-};
-
-/** Mensaje en español para un error de Firebase (o genérico). */
-export function mensajeError(error) {
-  const codigo = error?.code ?? '';
-  return MENSAJES[codigo] ?? `Error inesperado${codigo ? ` (${codigo})` : ''}.`;
+/** Mensajes para el personal por código de error, en el idioma elegido (se arman al pedirlos). */
+function mensajes() {
+  return {
+    'auth/invalid-credential': t('Usuario o contraseña incorrectos.'),
+    'auth/invalid-login-credentials': t('Usuario o contraseña incorrectos.'),
+    'auth/user-not-found': t('Usuario o contraseña incorrectos.'),
+    'auth/wrong-password': t('Usuario o contraseña incorrectos.'),
+    'auth/invalid-email': t('El correo no es válido.'),
+    'auth/missing-password': t('Escribe la contraseña.'),
+    'auth/user-disabled': t('Esta cuenta está deshabilitada.'),
+    'auth/too-many-requests': t('Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'),
+    'auth/network-request-failed': t('Sin conexión. Revisa la red e inténtalo de nuevo.'),
+    'auth/email-already-in-use': t('Ya existe una cuenta con ese correo.'),
+    'auth/weak-password': t('La contraseña es demasiado corta.'),
+    'auth/requires-recent-login': t('Por seguridad, cierra sesión, vuelve a entrar y repite la operación.'),
+    'auth/operation-not-allowed': t('Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.'),
+    'auth/admin-restricted-operation': t('Firebase no permite crear cuentas: activa «Enable create (sign-up)» en Authentication → Settings → User actions.'),
+    'catalogo/sin-registro': t('Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).'),
+    'catalogo/desactivado': t('Tu acceso está desactivado. Habla con el gerente.'),
+    'catalogo/cuenta-renovada': t('Tu NIP fue restablecido. Entra con el NIP nuevo.'),
+    'catalogo/sin-version-libre': t('No se pudo crear la cuenta de este código. Usa otro código.'),
+    'catalogo/identificador': t('Escribe tu correo.'),
+    'catalogo/sin-permiso-catalogo': t('No tienes permiso para usar el Catálogo. Pide a un administrador que te lo active en Empleados.'),
+    'caja/nip-incorrecto': t('NIP incorrecto.'),
+    'permission-denied': t('No tienes permiso para hacer esto.'),
+    'unavailable': t('Sin conexión con la base de datos. Inténtalo de nuevo.'),
+  };
 }
 
-const errorCatalogo = (codigo) => Object.assign(new Error(MENSAJES[codigo] ?? codigo), { code: codigo });
+/** Mensaje para el personal (en el idioma elegido) para un error de Firebase (o genérico). */
+export function mensajeError(error) {
+  const codigo = error?.code ?? '';
+  return mensajes()[codigo] ?? (codigo ? t('Error inesperado ({codigo}).', { codigo }) : t('Error inesperado.'));
+}
+
+const errorCatalogo = (codigo) => Object.assign(new Error(mensajes()[codigo] ?? codigo), { code: codigo });
 
 /** Usuario de Firebase Auth actual (o null), una vez que Auth terminó de cargar la sesión. */
 export function usuarioActual() {

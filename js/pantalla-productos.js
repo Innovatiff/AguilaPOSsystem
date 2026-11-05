@@ -10,6 +10,7 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { avisar } from './avisos.js';
+import { t, tc, locale } from './idioma.js';
 import {
   observarCatalogo, observarTiendas, buscarPorUPC, observarProducto, observarHistorial,
   crearProducto, actualizarProducto, esperarConfirmacion,
@@ -61,15 +62,15 @@ const escaner = $('escaner');
 const pideAlAdmin = !esAdmin;
 const altasPendientes = new Map(); // upc → solicitud de alta pendiente
 if (pideAlAdmin) {
-  $('btn-nuevo').firstChild.textContent = 'Pedir alta de producto ';
-  $('oferta-crear-btn').firstChild.textContent = 'Pedir alta con este UPC ';
-  $('escaner-crear').textContent = 'Pedir alta con este UPC';
+  $('btn-nuevo').firstChild.textContent = t('Pedir alta de producto') + ' ';
+  $('oferta-crear-btn').firstChild.textContent = t('Pedir alta con este UPC') + ' ';
+  $('escaner-crear').textContent = t('Pedir alta con este UPC');
   observarSolicitudes('pendiente', (lista) => {
     altasPendientes.clear();
     for (const s of lista) if (s.tipo === 'alta' && s.producto?.upc) altasPendientes.set(s.producto.upc, s);
   }, () => {});
 }
-const textoAltaPendiente = (upc, s) => `Ya se pidió el alta del UPC ${upc} (${s.creadaPorNombre}): falta que un administrador le ponga precio.`;
+const textoAltaPendiente = (upc, s) => t('Ya se pidió el alta del UPC {upc} ({nombre}): falta que un administrador le ponga precio.', { upc, nombre: s.creadaPorNombre });
 
 /** Pantalla táctil o angosta: se abre la ficha de consulta en lugar del editor, y no se roba el foco al teclado. */
 const esMovil = () => window.matchMedia('(max-width: 720px), (pointer: coarse)').matches;
@@ -95,7 +96,7 @@ let ultimoResultado = null; // última salida de paginar(): total, página, elem
 let ultimoFiltro = null; // término + 'ver inactivos' del último pintado; si cambia, se vuelve a la página 1
 const estado = { modo: null, actual: null, inicial: '', guardando: false, dejarDeObservar: null, dejarDeObservarHistorial: null, tiendasSeleccion: null };
 
-const formatoFecha = new Intl.DateTimeFormat('es-CA', { dateStyle: 'medium', timeStyle: 'short' });
+const formatoFecha = new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 const fecha = (marca) => (marca && typeof marca.toDate === 'function' ? formatoFecha.format(marca.toDate()) : '—');
 const nombreCompleto = (p) => [p.marca, p.nombre].filter(Boolean).join(' ');
 const precioConIndicador = (p) => `${formatearPrecio(p.precioCentavos)}${indicadorFiscal(p.claseFiscal)}`;
@@ -119,11 +120,11 @@ observarCatalogo(
     ordenados = null;
     catalogoConfiable = !desdeCache || mapa.size > 0;
     const n = mapa.size;
-    const origen = desdeCache ? (pendientes ? 'datos locales, con cambios por enviar' : 'datos locales') : 'sincronizado';
-    estadoCatalogo.textContent = `${n} producto${n === 1 ? '' : 's'} · ${origen}`;
+    const origen = desdeCache ? (pendientes ? t('datos locales, con cambios por enviar') : t('datos locales')) : t('sincronizado');
+    estadoCatalogo.textContent = `${n === 1 ? t('{n} producto', { n }) : t('{n} productos', { n })} · ${origen}`;
     pintarResultados();
   },
-  (error) => avisar(`No se pudo cargar el catálogo: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudo cargar el catálogo: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 observarTiendas(
@@ -131,7 +132,7 @@ observarTiendas(
     tiendas = lista;
     pintarCasillasTiendas();
   },
-  (error) => avisar(`No se pudieron cargar las tiendas: ${mensajeError(error)}`, 'error', 0),
+  (error) => avisar(t('No se pudieron cargar las tiendas: {error}', { error: mensajeError(error) }), 'error', 0),
 );
 
 document.getElementById('contenido').hidden = false;
@@ -169,9 +170,9 @@ function pintarResultados({ irA = null, enfocarFila = null, desplazar = false } 
   ultimoResultado = resultado;
   cuerpoResultados.replaceChildren(...resultado.elementos.map(fila));
   if (resultado.total === 0 && catalogo.size === 0) {
-    mostrarMensaje(sinResultados, 'El catálogo está vacío. Escanea un producto o pulsa Alt+N para crear el primero.');
+    mostrarMensaje(sinResultados, t('El catálogo está vacío. Escanea un producto o pulsa Alt+N para crear el primero.'));
   } else if (resultado.total === 0) {
-    mostrarMensaje(sinResultados, termino ? `Sin resultados para «${termino}».` : 'No hay productos activos. Marca «Ver inactivos» para verlos todos.');
+    mostrarMensaje(sinResultados, termino ? t('Sin resultados para «{termino}».', { termino }) : t('No hay productos activos. Marca «Ver inactivos» para verlos todos.'));
   } else {
     mostrarMensaje(sinResultados, '');
   }
@@ -186,8 +187,8 @@ function pintarPaginacion(r) {
   if (r.total === 0) return;
   const rango = r.inicio === r.fin ? `${r.inicio}` : `${r.inicio}–${r.fin}`;
   resumenPaginacion.textContent = r.paginas > 1
-    ? `${rango} de ${r.total} · página ${r.pagina} de ${r.paginas}`
-    : `${r.total} ${r.total === 1 ? 'resultado' : 'resultados'}`;
+    ? t('{rango} de {total} · página {pagina} de {paginas}', { rango, total: r.total, pagina: r.pagina, paginas: r.paginas })
+    : (r.total === 1 ? t('{n} resultado', { n: r.total }) : t('{n} resultados', { n: r.total }));
   botonesPaginacion.hidden = r.paginas <= 1;
   if (r.paginas <= 1) {
     numerosPaginacion.replaceChildren();
@@ -203,7 +204,7 @@ function pintarPaginacion(r) {
     const boton = crear('button', 'paginacion__numero', String(n));
     boton.type = 'button';
     boton.dataset.tecla = `p${n}`;
-    boton.setAttribute('aria-label', `Página ${n}`);
+    boton.setAttribute('aria-label', t('Página {n}', { n }));
     if (n === r.pagina) boton.setAttribute('aria-current', 'page');
     else boton.addEventListener('click', () => irAPagina(n));
     return boton;
@@ -246,7 +247,7 @@ function fila(producto) {
   const precio = producto.unidadVenta === 'peso' && producto.precioPorKgCentavos
     ? `${formatearPrecio(producto.precioPorKgCentavos)}/kg`
     : precioConIndicador(producto);
-  tr.append(nombre, crear('td', '', codigo), crear('td', '', precio), crear('td', '', producto.tiendas.join(', ') || '—'), crear('td', '', producto.activo ? 'Activo' : 'Inactivo'));
+  tr.append(nombre, crear('td', '', codigo), crear('td', '', precio), crear('td', '', producto.tiendas.join(', ') || '—'), crear('td', '', producto.activo ? t('Activo') : t('Inactivo')));
   tr.addEventListener('click', () => abrirSegunDispositivo(producto.id));
   tr.addEventListener('keydown', teclasFila);
   return tr;
@@ -348,7 +349,7 @@ async function procesarCodigo(texto) {
     try {
       encontrado = (await buscarPorUPC(codigo))[0] ?? null;
     } catch (error) {
-      mostrarMensaje(avisoBusqueda, `No se pudo comprobar el UPC: ${mensajeError(error)}`);
+      mostrarMensaje(avisoBusqueda, t('No se pudo comprobar el UPC: {error}', { error: mensajeError(error) }));
       return;
     }
   }
@@ -421,10 +422,10 @@ function pintarCasillasTiendas() {
   // selección pendiente (la del producto abierto, o las tiendas activas).
   const marcadas = existentes.length > 0
     ? new Set([...existentes].filter((c) => c.checked).map((c) => c.value))
-    : new Set(estado.tiendasSeleccion ?? tiendas.filter((t) => t.activo).map((t) => t.id));
+    : new Set(estado.tiendasSeleccion ?? tiendas.filter((tienda) => tienda.activo).map((tienda) => tienda.id));
   casillasTiendas.replaceChildren();
   if (tiendas.length === 0) {
-    casillasTiendas.append(crear('span', 'nota', 'Sin tiendas registradas (Administración → Tiendas).'));
+    casillasTiendas.append(crear('span', 'nota', t('Sin tiendas registradas (Administración → Tiendas).')));
     return;
   }
   for (const tienda of tiendas) {
@@ -433,14 +434,14 @@ function pintarCasillasTiendas() {
     casilla.type = 'checkbox';
     casilla.value = tienda.id;
     casilla.checked = marcadas.has(tienda.id);
-    etiqueta.append(casilla, ` ${tienda.nombre}${tienda.activo ? '' : ' (inactiva)'}`);
+    etiqueta.append(casilla, ` ${tienda.nombre}${tienda.activo ? '' : ` ${t('(inactiva)')}`}`);
     casillasTiendas.append(etiqueta);
   }
 }
 
 function marcarTiendas(ids) {
   estado.tiendasSeleccion = ids;
-  const objetivo = ids ?? tiendas.filter((t) => t.activo).map((t) => t.id);
+  const objetivo = ids ?? tiendas.filter((tienda) => tienda.activo).map((tienda) => tienda.id);
   for (const casilla of casillasTiendas.querySelectorAll('input')) casilla.checked = objetivo.includes(casilla.value);
 }
 
@@ -463,8 +464,8 @@ function llenarFormulario(p) {
 
 /** Solo un administrador cambia el precio (y la unidad de venta) de un producto existente; los demás lo ven en solo lectura. */
 const CAMPOS_PRECIO = ['precioCentavos', 'precioPorKgCentavos', 'unidadVenta', 'claseFiscal'];
-const NOTA_PRECIO_BLOQUEADO = 'El precio, la unidad de venta y la clase fiscal solo los cambia un administrador. Lo demás sí se puede editar.';
-const NOTA_PRECIO_SOLICITUD = 'Sin precio: el precio y la clase fiscal los pone un administrador. El producto entra al catálogo cuando aprueba la solicitud.';
+const NOTA_PRECIO_BLOQUEADO = t('El precio, la unidad de venta y la clase fiscal solo los cambia un administrador. Lo demás sí se puede editar.');
+const NOTA_PRECIO_SOLICITUD = t('Sin precio: el precio y la clase fiscal los pone un administrador. El producto entra al catálogo cuando aprueba la solicitud.');
 function bloquearPrecio(bloqueado) {
   $('f-precio').readOnly = bloqueado;
   $('f-precio-kg').readOnly = bloqueado;
@@ -482,11 +483,11 @@ function ocultarPrecio(oculto) {
     $('nota-precio').hidden = false;
     $('nota-precio').querySelector('.nota').textContent = NOTA_PRECIO_SOLICITUD;
   }
-  btnGuardar.firstChild.textContent = oculto ? 'Enviar solicitud ' : 'Guardar ';
+  btnGuardar.firstChild.textContent = `${oculto ? t('Enviar solicitud') : t('Guardar')} `;
   $('editor-lateral').hidden = oculto; // sin precio no hay etiqueta ni historial que mostrar
   $('nota-pie').textContent = pideAlAdmin
-    ? (oculto ? 'La solicitud la revisa un administrador.' : 'El precio solo lo cambia un administrador.')
-    : 'Los cambios de precio quedan en el historial.';
+    ? (oculto ? t('La solicitud la revisa un administrador.') : t('El precio solo lo cambia un administrador.'))
+    : t('Los cambios de precio quedan en el historial.');
 }
 
 class ErrorCampo extends Error {
@@ -508,9 +509,9 @@ function leerFormulario({ sinPrecio = false } = {}) {
     }
   }
   const pluTexto = $('f-plu').value.trim();
-  if (pluTexto !== '' && !/^\d{4,5}$/.test(pluTexto)) throw new ErrorCampo('El PLU debe tener 4 o 5 dígitos.', $('f-plu'));
+  if (pluTexto !== '' && !/^\d{4,5}$/.test(pluTexto)) throw new ErrorCampo(t('El PLU debe tener 4 o 5 dígitos.'), $('f-plu'));
   const nombre = $('f-nombre').value.trim();
-  if (nombre === '') throw new ErrorCampo('El nombre es obligatorio: es la barra negra de la etiqueta.', $('f-nombre'));
+  if (nombre === '') throw new ErrorCampo(t('El nombre es obligatorio: es la barra negra de la etiqueta.'), $('f-nombre'));
   const unidadVenta = form.unidad.value;
   let precioCentavos = null;
   if (!sinPrecio) {
@@ -525,7 +526,7 @@ function leerFormulario({ sinPrecio = false } = {}) {
     try {
       precioPorKgCentavos = centavosDesdeTexto($('f-precio-kg').value);
     } catch (error) {
-      throw new ErrorCampo(`Precio por kilo: ${error.message}`, $('f-precio-kg'));
+      throw new ErrorCampo(t('Precio por kilo: {error}', { error: error.message }), $('f-precio-kg'));
     }
   }
   return {
@@ -579,11 +580,11 @@ function abrirNuevo(prefijado = {}) {
   estado.modo = pideAlAdmin ? 'solicitar' : 'crear';
   estado.actual = null;
   $('editor-titulo').textContent = pideAlAdmin
-    ? (prefijado.upc ? `Pedir alta · UPC ${prefijado.upc}` : 'Pedir alta de producto')
-    : (prefijado.upc ? `Nuevo producto · UPC ${prefijado.upc}` : 'Nuevo producto');
+    ? (prefijado.upc ? t('Pedir alta · UPC {upc}', { upc: prefijado.upc }) : tc('titulo', 'Pedir alta de producto'))
+    : (prefijado.upc ? t('Nuevo producto · UPC {upc}', { upc: prefijado.upc }) : tc('titulo', 'Nuevo producto'));
   btnDesactivar.hidden = true;
   meta.replaceChildren();
-  historial.replaceChildren(crear('li', 'nota', 'Sin cambios de precio.'));
+  historial.replaceChildren(crear('li', 'nota', t('Sin cambios de precio.')));
   llenarFormulario({ ...VACIO, ...prefijado });
   bloquearPrecio(false); // el precio inicial lo pone quien captura (en el Catálogo, nadie: lo pone el admin al aprobar)
   ocultarPrecio(pideAlAdmin);
@@ -600,28 +601,28 @@ function abrirProducto(id) {
   estado.actual = producto;
   $('editor-titulo').textContent = nombreCompleto(producto);
   btnDesactivar.hidden = pideAlAdmin && !producto.activo;
-  btnDesactivar.textContent = pideAlAdmin ? 'Pedir que se quite' : (producto.activo ? 'Desactivar producto' : 'Reactivar producto');
+  btnDesactivar.textContent = pideAlAdmin ? t('Pedir que se quite') : (producto.activo ? t('Desactivar producto') : t('Reactivar producto'));
   llenarFormulario(producto);
   ocultarPrecio(false);
   bloquearPrecio(!esAdmin);
   btnGuardar.disabled = pideAlAdmin && !producto.activo;
   pintarMeta(producto);
-  historial.replaceChildren(crear('li', 'nota', 'Cargando…'));
+  historial.replaceChildren(crear('li', 'nota', t('Cargando…')));
   estado.dejarDeObservarHistorial = observarHistorial(
     id,
     (entradas) => {
       historial.replaceChildren(
         ...(entradas.length === 0
-          ? [crear('li', 'nota', 'Sin cambios de precio.')]
+          ? [crear('li', 'nota', t('Sin cambios de precio.'))]
           : entradas.slice(0, 10).map((e) => crear('li', '', `${fecha(e.fecha)} · ${formatearPrecio(e.precioAnteriorCentavos)} → ${formatearPrecio(e.precioNuevoCentavos)} · ${nombreDeUsuario(e.usuario)}`))),
       );
     },
-    (error) => historial.replaceChildren(crear('li', 'nota', `No se pudo cargar el historial: ${mensajeError(error)}`)),
+    (error) => historial.replaceChildren(crear('li', 'nota', t('No se pudo cargar el historial: {error}', { error: mensajeError(error) }))),
   );
   estado.dejarDeObservar = observarProducto(id, (remoto, metadatos) => {
     if (!remoto || metadatos.hasPendingWrites || estado.guardando || !estado.actual) return;
     if (remoto.actualizadoEn?.toMillis?.() !== estado.actual.actualizadoEn?.toMillis?.()) {
-      mostrarAvisoEditor(`${nombreDeUsuario(remoto.actualizadoPor)} acaba de cambiar este producto en otra estación. Ciérralo y ábrelo de nuevo antes de guardar.`, 'error');
+      mostrarAvisoEditor(t('{nombre} acaba de cambiar este producto en otra estación. Ciérralo y ábrelo de nuevo antes de guardar.', { nombre: nombreDeUsuario(remoto.actualizadoPor) }), 'error');
     }
   });
   mostrarEditor();
@@ -630,7 +631,7 @@ function abrirProducto(id) {
 
 function mostrarEditor() {
   mostrarAvisoEditor(pideAlAdmin && estado.modo === 'editar' && estado.actual?.activo === false
-    ? 'Producto inactivo: solo un administrador lo puede reactivar o editar.'
+    ? t('Producto inactivo: solo un administrador lo puede reactivar o editar.')
     : '', 'aviso');
   if (!editor.open) editor.showModal();
   estado.inicial = huellaFormulario();
@@ -650,11 +651,11 @@ editor.addEventListener('close', () => {
 });
 
 editor.addEventListener('cancel', (evento) => {
-  if (sucio() && !window.confirm('Hay cambios sin guardar. ¿Descartarlos?')) evento.preventDefault();
+  if (sucio() && !window.confirm(t('Hay cambios sin guardar. ¿Descartarlos?'))) evento.preventDefault();
 });
 
 $('btn-cerrar').addEventListener('click', () => {
-  if (sucio() && !window.confirm('Hay cambios sin guardar. ¿Descartarlos?')) return;
+  if (sucio() && !window.confirm(t('Hay cambios sin guardar. ¿Descartarlos?'))) return;
   cerrarEditor();
 });
 
@@ -683,13 +684,13 @@ form.addEventListener('input', () => {
 
 function pintarMeta(p) {
   meta.replaceChildren();
-  meta.append(crear('div', '', `Creado: ${fecha(p.creadoEn)}`));
-  meta.append(crear('div', '', `Actualizado: ${fecha(p.actualizadoEn)} por ${nombreDeUsuario(p.actualizadoPor)}`));
+  meta.append(crear('div', '', t('Creado: {fecha}', { fecha: fecha(p.creadoEn) })));
+  meta.append(crear('div', '', t('Actualizado: {fecha} por {nombre}', { fecha: fecha(p.actualizadoEn), nombre: nombreDeUsuario(p.actualizadoPor) })));
   if (p.ultimoPrecioImpresoCentavos == null) {
-    meta.append(crear('div', '', 'Etiqueta: nunca impresa.'));
+    meta.append(crear('div', '', t('Etiqueta: nunca impresa.')));
   } else {
-    const pendiente = p.ultimoPrecioImpresoCentavos !== p.precioCentavos ? ' · pendiente de reimprimir' : '';
-    meta.append(crear('div', '', `Etiqueta: impresa el ${p.fechaUltimaImpresion} con ${formatearPrecio(p.ultimoPrecioImpresoCentavos)}${pendiente}.`));
+    const pendiente = p.ultimoPrecioImpresoCentavos !== p.precioCentavos ? ' · ' + t('pendiente de reimprimir') : '';
+    meta.append(crear('div', '', t('Etiqueta: impresa el {fecha} con {precio}{pendiente}.', { fecha: String(p.fechaUltimaImpresion), precio: formatearPrecio(p.ultimoPrecioImpresoCentavos), pendiente })));
   }
 }
 
@@ -702,7 +703,7 @@ function actualizarVista() {
     try {
       upc = normalizarUPC(upcTexto);
     } catch (error) {
-      notaUPC = `Sin código de barras en la vista: ${error.message}`;
+      notaUPC = t('Sin código de barras en la vista: {error}', { error: error.message });
     }
   }
   let precioCentavos = 0;
@@ -713,7 +714,7 @@ function actualizarVista() {
   }
   const datos = {
     upc,
-    nombre: $('f-nombre').value.trim() || 'NOMBRE',
+    nombre: $('f-nombre').value.trim() || t('NOMBRE'),
     marca: $('f-marca').value,
     descriptor: $('f-descriptor').value,
     presentacion: $('f-presentacion').value,
@@ -729,7 +730,7 @@ function actualizarVista() {
     mostrarMensaje(vistaAviso, notaUPC);
   } catch (error) {
     vistaEtiqueta.replaceChildren();
-    mostrarMensaje(vistaAviso, `Vista previa no disponible: ${error.message}`);
+    mostrarMensaje(vistaAviso, t('Vista previa no disponible: {error}', { error: error.message }));
   }
 }
 
@@ -750,9 +751,9 @@ async function upcDuplicado(upc) {
 function vigilarRechazo(promesa, nombre, cambioPrecio = false) {
   promesa.catch((error) => {
     const detalle = error?.code === 'permission-denied' && cambioPrecio
-      ? 'el precio cambió en otra estación; ábrelo de nuevo y revisa'
+      ? t('el precio cambió en otra estación; ábrelo de nuevo y revisa')
       : mensajeError(error);
-    avisar(`No se guardó «${nombre}»: ${detalle}`, 'error', 0);
+    avisar(t('No se guardó «{nombre}»: {detalle}', { nombre, detalle }), 'error', 0);
   });
 }
 
@@ -774,7 +775,10 @@ async function solicitarAlta() {
   if (datos.upc) {
     const duplicado = await upcDuplicado(datos.upc);
     if (duplicado) {
-      mostrarAvisoEditor(`El UPC ${datos.upc} ya pertenece a «${nombreCompleto(duplicado)}»${duplicado.activo ? '' : ' (inactivo: pide a un administrador que lo reactive)'}.`);
+      const valores = { upc: datos.upc, nombre: nombreCompleto(duplicado) };
+      mostrarAvisoEditor(duplicado.activo
+        ? t('El UPC {upc} ya pertenece a «{nombre}».', valores)
+        : t('El UPC {upc} ya pertenece a «{nombre}» (inactivo: pide a un administrador que lo reactive).', valores));
       $('f-upc').focus();
       return;
     }
@@ -791,7 +795,7 @@ async function solicitarAlta() {
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa);
     if (resultado === 'pendiente') vigilarRechazo(promesa, datos.nombre);
-    avisar(`Solicitud enviada: «${datos.nombre}» entra al catálogo cuando un administrador le ponga precio.`, resultado === 'confirmado' ? 'ok' : 'info');
+    avisar(t('Solicitud enviada: «{nombre}» entra al catálogo cuando un administrador le ponga precio.', { nombre: datos.nombre }), resultado === 'confirmado' ? 'ok' : 'info');
     estado.inicial = huellaFormulario();
     cerrarEditor();
   } catch (error) {
@@ -832,9 +836,10 @@ async function guardar() {
   }
   const duplicado = await upcDuplicado(preparado.upc);
   if (duplicado) {
-    mostrarAvisoEditor(
-      `El UPC ${preparado.upc} ya pertenece a «${nombreCompleto(duplicado)}»${duplicado.activo ? '' : ' (inactivo: reactívalo en lugar de crear otro)'}.`,
-    );
+    const valores = { upc: preparado.upc, nombre: nombreCompleto(duplicado) };
+    mostrarAvisoEditor(duplicado.activo
+      ? t('El UPC {upc} ya pertenece a «{nombre}».', valores)
+      : t('El UPC {upc} ya pertenece a «{nombre}» (inactivo: reactívalo en lugar de crear otro).', valores));
     $('f-upc').focus();
     return;
   }
@@ -847,18 +852,19 @@ async function guardar() {
       promesa.catch(() => {});
       const resultado = await esperarConfirmacion(promesa);
       if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
+      const nombre = nombreCompleto(producto);
       avisar(
-        resultado === 'confirmado' ? `«${nombreCompleto(producto)}» creado.` : `«${nombreCompleto(producto)}» guardado en este equipo; se enviará al recuperar la señal.`,
+        resultado === 'confirmado' ? t('«{nombre}» creado.', { nombre }) : t('«{nombre}» guardado en este equipo; se enviará al recuperar la señal.', { nombre }),
         resultado === 'confirmado' ? 'ok' : 'info',
       );
     } else {
       const cambios = diferenciasProducto(estado.actual, preparado);
       if (!esAdmin && CAMPOS_PRECIO.some((campo) => campo in cambios)) {
-        mostrarAvisoEditor('Solo un administrador puede cambiar el precio, la unidad de venta o la clase fiscal. Déjalos como estaban y guarda lo demás.');
+        mostrarAvisoEditor(t('Solo un administrador puede cambiar el precio, la unidad de venta o la clase fiscal. Déjalos como estaban y guarda lo demás.'));
         return;
       }
       if (Object.keys(cambios).length === 0) {
-        avisar('Sin cambios.', 'info', 2500);
+        avisar(t('Sin cambios.'), 'info', 2500);
         estado.inicial = huellaFormulario();
         cerrarEditor();
         return;
@@ -867,8 +873,9 @@ async function guardar() {
       promesa.catch(() => {});
       const resultado = await esperarConfirmacion(promesa);
       if (resultado === 'pendiente') vigilarRechazo(promesa, estado.actual.nombre, cambioPrecio);
+      const nombre = nombreCompleto(preparado);
       avisar(
-        resultado === 'confirmado' ? `«${nombreCompleto(preparado)}» guardado.` : `«${nombreCompleto(preparado)}» guardado en este equipo; se enviará al recuperar la señal.`,
+        resultado === 'confirmado' ? t('«{nombre}» guardado.', { nombre }) : t('«{nombre}» guardado en este equipo; se enviará al recuperar la señal.', { nombre }),
         resultado === 'confirmado' ? 'ok' : 'info',
       );
     }
@@ -878,8 +885,8 @@ async function guardar() {
     mostrarAvisoEditor(
       error?.code === 'permission-denied' && estado.modo === 'editar'
         ? (esAdmin
-          ? 'El servidor rechazó el cambio. Si cambiaste el precio, puede que otra estación lo haya cambiado antes: cierra y vuelve a abrir el producto.'
-          : 'El servidor rechazó el cambio: el precio, la unidad de venta y la clase fiscal solo los cambia un administrador.')
+          ? t('El servidor rechazó el cambio. Si cambiaste el precio, puede que otra estación lo haya cambiado antes: cierra y vuelve a abrir el producto.')
+          : t('El servidor rechazó el cambio: el precio, la unidad de venta y la clase fiscal solo los cambia un administrador.'))
         : mensajeError(error),
     );
   } finally {
@@ -890,7 +897,7 @@ async function guardar() {
 
 /** Personal del Catálogo: pide al administrador que quite el producto. */
 async function pedirQueSeQuite(producto) {
-  const motivo = window.prompt(`¿Por qué hay que quitar «${nombreCompleto(producto)}» del catálogo? (lo revisa un administrador)`, '');
+  const motivo = window.prompt(t('¿Por qué hay que quitar «{nombre}» del catálogo? (lo revisa un administrador)', { nombre: nombreCompleto(producto) }), '');
   if (motivo === null) return;
   estado.guardando = true;
   btnDesactivar.disabled = true;
@@ -899,7 +906,7 @@ async function pedirQueSeQuite(producto) {
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa);
     if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
-    avisar(`Solicitud enviada: un administrador decidirá si «${nombreCompleto(producto)}» se quita del catálogo.`, resultado === 'confirmado' ? 'ok' : 'info');
+    avisar(t('Solicitud enviada: un administrador decidirá si «{nombre}» se quita del catálogo.', { nombre: nombreCompleto(producto) }), resultado === 'confirmado' ? 'ok' : 'info');
     cerrarEditor();
   } catch (error) {
     mostrarAvisoEditor(mensajeError(error));
@@ -917,7 +924,7 @@ btnDesactivar.addEventListener('click', async () => {
     return;
   }
   const activar = !producto.activo;
-  if (!activar && !window.confirm(`¿Desactivar «${nombreCompleto(producto)}»? Dejará de salir en búsquedas e impresiones; se puede reactivar.`)) return;
+  if (!activar && !window.confirm(t('¿Desactivar «{nombre}»? Dejará de salir en búsquedas e impresiones; se puede reactivar.', { nombre: nombreCompleto(producto) }))) return;
   estado.guardando = true;
   btnDesactivar.disabled = true;
   try {
@@ -925,7 +932,8 @@ btnDesactivar.addEventListener('click', async () => {
     promesa.catch(() => {});
     const resultado = await esperarConfirmacion(promesa);
     if (resultado === 'pendiente') vigilarRechazo(promesa, producto.nombre);
-    avisar(`«${nombreCompleto(producto)}» ${activar ? 'reactivado' : 'desactivado'}${resultado === 'pendiente' ? ' (se enviará al recuperar la señal)' : ''}.`, activar ? 'ok' : 'info');
+    const valores = { nombre: nombreCompleto(producto), pendiente: resultado === 'pendiente' ? ' ' + t('(se enviará al recuperar la señal)') : '' };
+    avisar(activar ? t('«{nombre}» reactivado{pendiente}.', valores) : t('«{nombre}» desactivado{pendiente}.', valores), activar ? 'ok' : 'info');
     estado.inicial = huellaFormulario();
     cerrarEditor();
   } catch (error) {
@@ -952,14 +960,14 @@ function pintarDetalle(p) {
   $('detalle-precio').textContent = porPeso ? `${formatearPrecio(p.precioPorKgCentavos)}/kg` : formatearPrecio(p.precioCentavos);
   $('detalle-fiscal').textContent = indicadorFiscal(p.claseFiscal);
   $('detalle-kilo').hidden = !porPeso;
-  if (porPeso) $('detalle-kilo').textContent = `Precio de referencia en etiqueta: ${formatearPrecio(p.precioCentavos)}`;
+  if (porPeso) $('detalle-kilo').textContent = t('Precio de referencia en etiqueta: {precio}', { precio: formatearPrecio(p.precioCentavos) });
   $('detalle-inactivo').hidden = p.activo;
   const pendiente = p.activo && p.ultimoPrecioImpresoCentavos !== p.precioCentavos;
   $('detalle-pendiente').hidden = !pendiente;
   if (pendiente) {
     $('detalle-pendiente').textContent = p.ultimoPrecioImpresoCentavos == null
-      ? 'Etiqueta pendiente: nunca se ha impreso.'
-      : `Etiqueta pendiente: la última se imprimió con ${formatearPrecio(p.ultimoPrecioImpresoCentavos)} el ${p.fechaUltimaImpresion}.`;
+      ? t('Etiqueta pendiente: nunca se ha impreso.')
+      : t('Etiqueta pendiente: la última se imprimió con {precio} el {fecha}.', { precio: formatearPrecio(p.ultimoPrecioImpresoCentavos), fecha: String(p.fechaUltimaImpresion) });
   }
   const contenedor = $('detalle-etiqueta');
   contenedor.replaceChildren();
@@ -968,18 +976,18 @@ function pintarDetalle(p) {
     contenedor.append(etiqueta);
     if (detalle.open) ajustarEtiqueta(etiqueta);
   } catch {
-    contenedor.append(crear('span', 'nota', 'Sin vista de etiqueta.'));
+    contenedor.append(crear('span', 'nota', t('Sin vista de etiqueta.')));
   }
   const datos = $('detalle-datos');
   datos.replaceChildren();
-  filaFicha(datos, 'Código', p.upc ? `${p.upc} · ${tipoDeCodigo(p.upc)}` : 'Sin código de barras');
+  filaFicha(datos, t('Código'), p.upc ? `${p.upc} · ${tipoDeCodigo(p.upc)}` : t('Sin código de barras'));
   if (p.plu) filaFicha(datos, 'PLU', p.plu);
-  filaFicha(datos, 'Clase fiscal', p.claseFiscal === 'gravado' ? 'Gravado (+Tx)' : 'Tasa cero');
-  filaFicha(datos, 'Unidad', p.unidadVenta === 'peso' ? 'Por peso' : 'Por pieza');
-  filaFicha(datos, 'Tiendas', p.tiendas.map((id) => tiendas.find((t) => t.id === id)?.nombre ?? id).join(', ') || 'Ninguna');
-  if (p.proveedor) filaFicha(datos, 'Proveedor', p.proveedor);
-  filaFicha(datos, 'Última etiqueta', p.ultimoPrecioImpresoCentavos == null ? 'Nunca impresa' : `${formatearPrecio(p.ultimoPrecioImpresoCentavos)} · ${p.fechaUltimaImpresion}`);
-  filaFicha(datos, 'Actualizado', `${fecha(p.actualizadoEn)} · ${nombreDeUsuario(p.actualizadoPor)}`);
+  filaFicha(datos, t('Clase fiscal'), p.claseFiscal === 'gravado' ? t('Gravado (+Tx)') : t('Tasa cero'));
+  filaFicha(datos, t('Unidad'), p.unidadVenta === 'peso' ? t('Por peso') : t('Por pieza'));
+  filaFicha(datos, t('Tiendas'), p.tiendas.map((id) => tiendas.find((tienda) => tienda.id === id)?.nombre ?? id).join(', ') || t('Ninguna'));
+  if (p.proveedor) filaFicha(datos, t('Proveedor'), p.proveedor);
+  filaFicha(datos, t('Última etiqueta'), p.ultimoPrecioImpresoCentavos == null ? t('Nunca impresa') : `${formatearPrecio(p.ultimoPrecioImpresoCentavos)} · ${p.fechaUltimaImpresion}`);
+  filaFicha(datos, t('Actualizado'), `${fecha(p.actualizadoEn)} · ${nombreDeUsuario(p.actualizadoPor)}`);
 }
 
 function dejarDeObservarDetalle() {
@@ -998,17 +1006,17 @@ function abrirDetalle(id, { desdeEscaner = false } = {}) {
   $('detalle-escanear').hidden = !desdeEscaner;
   pintarDetalle(producto);
   const lista = $('detalle-historial');
-  lista.replaceChildren(crear('li', 'nota', 'Cargando…'));
+  lista.replaceChildren(crear('li', 'nota', t('Cargando…')));
   estadoDetalle.dejarDeObservarHistorial = observarHistorial(
     id,
     (entradas) => {
       lista.replaceChildren(
         ...(entradas.length === 0
-          ? [crear('li', 'nota', 'Sin cambios de precio.')]
+          ? [crear('li', 'nota', t('Sin cambios de precio.'))]
           : entradas.slice(0, 8).map((e) => crear('li', '', `${fecha(e.fecha)} · ${formatearPrecio(e.precioAnteriorCentavos)} → ${formatearPrecio(e.precioNuevoCentavos)} · ${nombreDeUsuario(e.usuario)}`))),
       );
     },
-    (error) => lista.replaceChildren(crear('li', 'nota', `No se pudo cargar el historial: ${mensajeError(error)}`)),
+    (error) => lista.replaceChildren(crear('li', 'nota', t('No se pudo cargar el historial: {error}', { error: mensajeError(error) }))),
   );
   // La ficha se refresca sola si otra estación cambia el producto.
   estadoDetalle.dejarDeObservar = observarProducto(id, (remoto) => {
@@ -1059,14 +1067,14 @@ async function abrirEscanerUI() {
   estadoEscaner.abriendo = true;
   escanerOferta.hidden = true;
   $('escaner-linterna').hidden = true;
-  estadoDelEscaner('Iniciando cámara…');
+  estadoDelEscaner(t('Iniciando cámara…'));
   if (!escaner.open) escaner.showModal();
   try {
     estadoEscaner.controles = await abrirEscaner(video, {
       alDetectar: alLeerCodigo,
       alError: (error) => estadoDelEscaner(mensajeCamara(error), 'error'),
     });
-    estadoDelEscaner('Apunta al código de barras');
+    estadoDelEscaner(t('Apunta al código de barras'));
     $('escaner-linterna').hidden = !estadoEscaner.controles.tieneLinterna;
   } catch (error) {
     estadoDelEscaner(mensajeCamara(error), 'error');
@@ -1097,7 +1105,7 @@ async function alLeerCodigo({ texto }) {
     estadoDelEscaner(`${texto}: ${error.message}`, 'error');
     setTimeout(() => {
       if (escaner.open && escanerOferta.hidden) {
-        estadoDelEscaner('Apunta al código de barras');
+        estadoDelEscaner(t('Apunta al código de barras'));
         controles?.reanudar();
       }
     }, 2200);
@@ -1119,7 +1127,7 @@ async function alLeerCodigo({ texto }) {
   estadoDelEscaner(`UPC ${codigo}`);
   const pendiente = pideAlAdmin ? altasPendientes.get(codigo) : null;
   $('escaner-crear').hidden = Boolean(pendiente);
-  $('escaner-oferta-texto').textContent = pendiente ? textoAltaPendiente(codigo, pendiente) : `No hay ningún producto con el UPC ${codigo}.`;
+  $('escaner-oferta-texto').textContent = pendiente ? textoAltaPendiente(codigo, pendiente) : t('No hay ningún producto con el UPC {codigo}.', { codigo });
   escanerOferta.hidden = false;
   escanerOferta.dataset.upc = codigo;
   $('escaner-crear').focus();
@@ -1134,7 +1142,7 @@ $('escaner-teclear').addEventListener('click', () => {
 $('escaner-seguir').addEventListener('click', () => {
   escanerOferta.hidden = true;
   delete escanerOferta.dataset.upc;
-  estadoDelEscaner('Apunta al código de barras');
+  estadoDelEscaner(t('Apunta al código de barras'));
   estadoEscaner.controles?.reanudar();
 });
 $('escaner-crear').addEventListener('click', () => {

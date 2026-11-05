@@ -12,6 +12,7 @@ import {
   armarProducto, validarProducto, diferenciasProducto, esFechaISO,
 } from './esquema.js';
 import { normalizarUPC } from './upca.js';
+import { t } from './idioma.js';
 
 /** Columnas del archivo exportado, en este orden. `id` es el id del documento. */
 export const COLUMNAS_EXPORTACION = Object.freeze([
@@ -90,18 +91,18 @@ function detectarDelimitador(texto) {
  * comillas RFC 4180 y filas vacías al final.
  */
 export function deCSV(texto) {
-  let t = String(texto ?? '');
-  if (t.charCodeAt(0) === 0xfeff) t = t.slice(1);
-  const delimitador = detectarDelimitador(t);
+  let contenido = String(texto ?? '');
+  if (contenido.charCodeAt(0) === 0xfeff) contenido = contenido.slice(1);
+  const delimitador = detectarDelimitador(contenido);
   const filas = [];
   let fila = [];
   let campo = '';
   let enComillas = false;
-  for (let i = 0; i < t.length; i += 1) {
-    const c = t[i];
+  for (let i = 0; i < contenido.length; i += 1) {
+    const c = contenido[i];
     if (enComillas) {
       if (c === '"') {
-        if (t[i + 1] === '"') {
+        if (contenido[i + 1] === '"') {
           campo += '"';
           i += 1;
         } else {
@@ -116,7 +117,7 @@ export function deCSV(texto) {
       fila.push(campo);
       campo = '';
     } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && t[i + 1] === '\n') i += 1;
+      if (c === '\r' && contenido[i + 1] === '\n') i += 1;
       fila.push(campo);
       filas.push(fila);
       fila = [];
@@ -142,8 +143,8 @@ function enteroCentavos(texto, columna) {
   const limpio = texto.trim();
   if (limpio === '') return null;
   if (/^-?\d+$/.test(limpio)) return Number.parseInt(limpio, 10);
-  if (/^\d+[.,]\d+$/.test(limpio)) throw new Error(`${columna} debe ser un entero en centavos (499, no 4.99)`);
-  throw new Error(`${columna} no es un número entero: "${limpio}"`);
+  if (/^\d+[.,]\d+$/.test(limpio)) throw new Error(t('{columna} debe ser un entero en centavos (499, no 4.99)', { columna }));
+  throw new Error(t('{columna} no es un número entero: "{valor}"', { columna, valor: limpio }));
 }
 
 /** Convierte el texto de una celda al valor del esquema. Lanza con mensaje claro. */
@@ -155,14 +156,14 @@ export function interpretarCelda(columna, texto) {
       return limpio === '' ? null : limpio;
     case 'upc': {
       if (limpio === '') return null;
-      if (/^\d+(\.\d+)?e\+?\d+$/i.test(limpio)) throw new Error('upc en notación científica: Excel lo convirtió a número; da formato de texto a la columna');
+      if (/^\d+(\.\d+)?e\+?\d+$/i.test(limpio)) throw new Error(t('upc en notación científica: Excel lo convirtió a número; da formato de texto a la columna'));
       const digitos = limpio.replace(/\s+/g, '');
       // Excel quita el cero inicial: 11 dígitos se completan a 12.
       return normalizarUPC(/^\d{11}$/.test(digitos) ? `0${digitos}` : digitos);
     }
     case 'plu':
       if (limpio === '') return null;
-      if (!/^\d{4,5}$/.test(limpio)) throw new Error(`plu debe tener 4 o 5 dígitos: "${limpio}"`);
+      if (!/^\d{4,5}$/.test(limpio)) throw new Error(t('plu debe tener 4 o 5 dígitos: "{valor}"', { valor: limpio }));
       return limpio;
     case 'nombre':
     case 'marca':
@@ -178,7 +179,7 @@ export function interpretarCelda(columna, texto) {
     case 'unidadVenta': {
       if (limpio === '') return null;
       const valor = limpio.toLowerCase();
-      if (!UNIDADES_VENTA.includes(valor)) throw new Error(`unidadVenta debe ser pieza o peso: "${limpio}"`);
+      if (!UNIDADES_VENTA.includes(valor)) throw new Error(t('unidadVenta debe ser pieza o peso: "{valor}"', { valor: limpio }));
       return valor;
     }
     case 'claseFiscal': {
@@ -187,20 +188,20 @@ export function interpretarCelda(columna, texto) {
       if (valor === 'gravado' || valor === '+tx') return 'gravado';
       if (valor === 'tasacero' || valor === 'c') return 'tasaCero';
       if (CLASES_FISCALES.includes(limpio)) return limpio;
-      throw new Error(`claseFiscal debe ser gravado o tasaCero: "${limpio}"`);
+      throw new Error(t('claseFiscal debe ser gravado o tasaCero: "{valor}"', { valor: limpio }));
     }
     case 'tiendas':
-      return limpio === '' ? [] : limpio.split(/[|;]/).map((t) => t.trim()).filter(Boolean);
+      return limpio === '' ? [] : limpio.split(/[|;]/).map((tienda) => tienda.trim()).filter(Boolean);
     case 'activo': {
       if (limpio === '') return null;
       const valor = limpio.toLowerCase();
       if (VERDADEROS.has(valor)) return true;
       if (FALSOS.has(valor)) return false;
-      throw new Error(`activo debe ser true o false: "${limpio}"`);
+      throw new Error(t('activo debe ser true o false: "{valor}"', { valor: limpio }));
     }
     case 'fechaUltimaImpresion':
       if (limpio === '') return null;
-      if (!esFechaISO(limpio)) throw new Error(`fechaUltimaImpresion debe ser AAAA-MM-DD: "${limpio}"`);
+      if (!esFechaISO(limpio)) throw new Error(t('fechaUltimaImpresion debe ser AAAA-MM-DD: "{valor}"', { valor: limpio }));
       return limpio;
     default:
       return limpio;
@@ -243,10 +244,10 @@ export function planificarImportacion(archivo, catalogo, correo) {
       plan.desconocidas.push(nombre);
     }
   });
-  if (plan.ignoradas.length > 0) plan.avisos.push(`Columnas que no se importan (las administra la app o el POS): ${plan.ignoradas.join(', ')}.`);
-  if (plan.desconocidas.length > 0) plan.avisos.push(`Columnas desconocidas, se omiten: ${plan.desconocidas.join(', ')}.`);
+  if (plan.ignoradas.length > 0) plan.avisos.push(t('Columnas que no se importan (las administra la app o el POS): {columnas}.', { columnas: plan.ignoradas.join(', ') }));
+  if (plan.desconocidas.length > 0) plan.avisos.push(t('Columnas desconocidas, se omiten: {columnas}.', { columnas: plan.desconocidas.join(', ') }));
   if (plan.columnas.length === 0) {
-    plan.errores.push({ linea: 1, mensaje: 'El archivo no tiene ninguna columna del esquema (nombre, upc, precioCentavos…).' });
+    plan.errores.push({ linea: 1, mensaje: t('El archivo no tiene ninguna columna del esquema (nombre, upc, precioCentavos…).') });
     return plan;
   }
 
@@ -265,20 +266,20 @@ export function planificarImportacion(archivo, catalogo, correo) {
       let actual = null;
       if (celdas.id) {
         actual = catalogo.get(celdas.id) ?? null;
-        if (!actual) throw new Error(`no existe ningún producto con id "${celdas.id}"`);
+        if (!actual) throw new Error(t('no existe ningún producto con id "{id}"', { id: celdas.id }));
       } else if (celdas.upc) {
         actual = porUPC.get(celdas.upc) ?? null;
       }
       if (actual) {
-        if (productosEnArchivo.has(actual.id)) throw new Error(`«${actual.nombre}» ya aparece en la línea ${productosEnArchivo.get(actual.id)}`);
+        if (productosEnArchivo.has(actual.id)) throw new Error(t('«{nombre}» ya aparece en la línea {linea}', { nombre: actual.nombre, linea: productosEnArchivo.get(actual.id) }));
         productosEnArchivo.set(actual.id, linea);
       }
 
       if (celdas.upc) {
-        if (upcsEnArchivo.has(celdas.upc)) throw new Error(`el UPC ${celdas.upc} aparece más de una vez en el archivo (línea ${upcsEnArchivo.get(celdas.upc)})`);
+        if (upcsEnArchivo.has(celdas.upc)) throw new Error(t('el UPC {upc} aparece más de una vez en el archivo (línea {linea})', { upc: celdas.upc, linea: upcsEnArchivo.get(celdas.upc) }));
         upcsEnArchivo.set(celdas.upc, linea);
         const dueno = porUPC.get(celdas.upc);
-        if (dueno && actual && dueno.id !== actual.id) throw new Error(`el UPC ${celdas.upc} ya pertenece a otro producto («${dueno.nombre}»)`);
+        if (dueno && actual && dueno.id !== actual.id) throw new Error(t('el UPC {upc} ya pertenece a otro producto («{nombre}»)', { upc: celdas.upc, nombre: dueno.nombre }));
       }
 
       const base = actual ? { ...actual } : { ...VALORES_NUEVO };
@@ -292,7 +293,7 @@ export function planificarImportacion(archivo, catalogo, correo) {
       }
       if (!actual) {
         for (const requerida of ['nombre', 'precioCentavos', 'claseFiscal']) {
-          if (!indice.has(requerida)) throw new Error(`para crear productos el archivo necesita la columna ${requerida}`);
+          if (!indice.has(requerida)) throw new Error(t('para crear productos el archivo necesita la columna {columna}', { columna: requerida }));
         }
         if (base.unidadVenta === null) base.unidadVenta = 'pieza';
       }

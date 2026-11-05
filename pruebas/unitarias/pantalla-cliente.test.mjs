@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { lineaDeProducto, calcularTicket, registrarPago, armarVenta, estadoCobro } from '../../js/ticket.js';
 import { configConDefectos } from '../../js/config-pos.js';
 import { estadoCliente, lineaCliente, primerNombre, esEstadoValido, MAXIMO_LINEAS } from '../../js/pantalla-cliente.js';
+import { cargarIngles, fijarIdioma } from '../../js/idioma.js';
 
 const TAJIN = { id: 'p-tajin', upc: '633148100013', nombre: 'CLASICO', marca: 'TAJIN', presentacion: '142g', precioCentavos: 499, unidadVenta: 'pieza', claseFiscal: 'gravado' };
 const COCA = { id: 'p-coca', upc: '049000006346', nombre: 'COCA COLA', marca: 'COCA-COLA', presentacion: '355mL', precioCentavos: 199, unidadVenta: 'pieza', claseFiscal: 'gravado' };
@@ -23,7 +24,7 @@ describe('pantalla del cliente (js/pantalla-cliente.js)', () => {
 
   it('caja cerrada y lista: tienda, caja y mensaje, sin ticket', () => {
     const cerrada = estadoCliente({ ...base, fase: 'cerrada' });
-    assert.deepEqual(cerrada, { v: 1, fase: 'cerrada', tienda: 'El Águila Market', caja: 'Caja 1', atiende: '', mensaje: '¡Gracias por su compra!' });
+    assert.deepEqual(cerrada, { v: 1, fase: 'cerrada', idioma: 'es', tienda: 'El Águila Market', caja: 'Caja 1', atiende: '', mensaje: '¡Gracias por su compra!' });
     const libre = estadoCliente({ ...base, fase: 'libre' });
     assert.equal(libre.atiende, 'María');
     assert.ok(esEstadoValido(cerrada) && esEstadoValido(libre));
@@ -104,6 +105,31 @@ describe('pantalla del cliente (js/pantalla-cliente.js)', () => {
     assert.equal(e.cambio, '$6.45');
     assert.equal(e.mensaje, '¡Gracias por su compra!');
     assert.ok(esEstadoValido(e));
+  });
+
+  it('en inglés: la pantalla recibe los textos en el idioma de la caja, y el estado dice cuál es', async () => {
+    await cargarIngles();
+    fijarIdioma('en');
+    try {
+      const tajin = { ...lineaDeProducto(TAJIN), descuento: { tipo: 'porcentaje', puntosBase: 1000 } };
+      const { ticket: t, calculo } = ticket([tajin, lineaDeProducto(COCA)]);
+      const total = calculo.totalCentavos;
+      const { pago } = registrarPago(total, [], { metodo: 'debito', montoCentavos: 500 });
+      const cobro = { totalCentavos: total, pagos: [pago], metodo: 'efectivo', ...estadoCobro(total, [pago]) };
+      const e = estadoCliente({ ...base, fase: 'cobro', ticket: t, calculo, cobro });
+      assert.equal(e.idioma, 'en');
+      assert.equal(e.lineas[0].descuento, 'Discount 10%');
+      assert.equal(e.cobro.metodo, 'Cash');
+      assert.deepEqual(e.cobro.pagos, [{ metodo: 'Debit', importe: '$5.00' }]);
+      assert.equal(e.impuestoNombre, 'HST 13%');
+      // El mensaje de fábrica se traduce; el que escribió la tienda va tal cual.
+      assert.equal(e.mensaje, 'Thank you for your purchase!');
+      const propio = configConDefectos({ reciboPie: 'Gracias, vecino\nVuelva pronto' });
+      assert.equal(estadoCliente({ ...base, config: propio, fase: 'libre' }).mensaje, 'Gracias, vecino');
+    } finally {
+      fijarIdioma(null);
+    }
+    assert.equal(estadoCliente({ ...base, fase: 'libre' }).idioma, 'es');
   });
 
   it('un ticket muy largo manda solo las últimas líneas y cuántas quedan arriba', () => {

@@ -167,6 +167,16 @@ kbd {
   background: #39404a;
 }
 
+/* Botón de idioma (js/boton-idioma.js): el globo es de trazo. */
+.barra__idioma svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
 .estado-red {
   display: inline-flex;
   align-items: center;

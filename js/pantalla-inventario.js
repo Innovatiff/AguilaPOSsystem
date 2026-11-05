@@ -31,6 +31,7 @@ import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from 
 import {
   claveDia, sumarDias, inicioDia, diasEntre, chip, mostrarMensaje, descargarCSV, fechaHora, cuando, filaDato,
 } from './bo.js';
+import { t, numero } from './idioma.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'inventario.html' });
@@ -49,7 +50,7 @@ const guardar = (clave, valor) => {
   } catch { /* sin almacenamiento: no pasa nada */ }
 };
 
-if (EN_CATALOGO) $('titulo-pagina').textContent = 'Recibir mercancía';
+if (EN_CATALOGO) $('titulo-pagina').textContent = t('Recibir mercancía');
 
 let catalogo = new Map();
 let porUPC = new Map();
@@ -91,6 +92,8 @@ function buscar(consulta, maximo = 8) {
 
 const codigoDe = (l) => l.upc ?? (l.plu ? `PLU ${l.plu}` : '');
 const avisar = (tipo, texto) => mostrarMensaje($('mensaje'), tipo, texto);
+/** "1 producto" · "12 productos". */
+const textoProductos = (n) => (n === 1 ? t('{n} producto', { n }) : t('{n} productos', { n }));
 
 function guardarBorrador() {
   const datos = { lineas, proveedor: $('r-proveedor').value, referencia: $('r-referencia').value, nota: $('r-nota').value };
@@ -106,7 +109,11 @@ function recuperarBorrador() {
     $('r-proveedor').value = datos.proveedor ?? '';
     $('r-referencia').value = datos.referencia ?? '';
     $('r-nota').value = datos.nota ?? '';
-    if (lineas.length) avisar('info', `Se recuperó la entrada que quedó sin registrar (${lineas.length} ${lineas.length === 1 ? 'producto' : 'productos'}).`);
+    if (lineas.length) {
+      avisar('info', lineas.length === 1
+        ? t('Se recuperó la entrada que quedó sin registrar ({n} producto).', { n: lineas.length })
+        : t('Se recuperó la entrada que quedó sin registrar ({n} productos).', { n: lineas.length }));
+    }
   } catch {
     guardar(BORRADOR, null);
   }
@@ -116,9 +123,9 @@ function pintarTotales() {
   const piezas = lineas.reduce((s, l) => s + (l.pesoGramos === null && Number.isInteger(l.cantidad) ? l.cantidad : 0), 0);
   const gramos = lineas.reduce((s, l) => s + (Number.isInteger(l.pesoGramos) ? l.pesoGramos : 0), 0);
   const conError = lineas.filter((l) => erroresDeLinea(l).length > 0).length;
-  $('lineas-total').textContent = lineas.length
-    ? `${lineas.length} ${lineas.length === 1 ? 'producto' : 'productos'} · ${textoCantidades({ piezas, gramos })}${conError ? ` · ${conError === 1 ? 'falta 1 cantidad' : `faltan ${conError} cantidades`}` : ''}`
-    : '';
+  const partes = lineas.length ? [textoProductos(lineas.length), textoCantidades({ piezas, gramos })] : [];
+  if (lineas.length && conError) partes.push(conError === 1 ? t('falta 1 cantidad') : t('faltan {n} cantidades', { n: conError }));
+  $('lineas-total').textContent = partes.join(' · ');
   $('btn-registrar').disabled = lineas.length === 0 || conError > 0;
   $('btn-descartar').disabled = lineas.length === 0;
 }
@@ -131,7 +138,7 @@ function campoCantidad(l) {
     autocomplete: 'off',
     value: peso ? textoKilos(l.pesoGramos) : String(l.cantidad ?? ''),
     placeholder: peso ? '0.000' : '',
-    'aria-label': `${peso ? 'Kilos' : 'Piezas'} de ${l.nombre}`,
+    'aria-label': peso ? t('Kilos de {nombre}', { nombre: l.nombre }) : t('Piezas de {nombre}', { nombre: l.nombre }),
     'aria-invalid': erroresDeLinea(l).length ? 'true' : null,
     dataset: { clave: claveDeLinea(l) },
   });
@@ -156,7 +163,7 @@ function campoCantidad(l) {
       $('r-codigo').focus();
     }
   });
-  return h('span', { class: 'recepcion__medida' }, entrada, h('span', { text: peso ? 'kg' : 'pzas' }));
+  return h('span', { class: 'recepcion__medida' }, entrada, h('span', { text: peso ? 'kg' : t('pzas') }));
 }
 
 function pintarLineas() {
@@ -166,10 +173,10 @@ function pintarLineas() {
     return h('tr', { class: clave === resaltar ? 'fila--resaltada' : null, dataset: { clave } },
       h('td', null,
         h('span', { class: 'recepcion__nombre', text: l.nombre }),
-        l.producto ? null : [' ', chip('Sin registrar', 'aviso')],
-        h('span', { class: 'recepcion__codigo-linea monoespaciada', text: codigoDe(l) || 'sin código' })),
+        l.producto ? null : [' ', chip(t('Sin registrar'), 'aviso')],
+        h('span', { class: 'recepcion__codigo-linea monoespaciada', text: codigoDe(l) || t('sin código') })),
       h('td', { class: 'num' }, campoCantidad(l)),
-      h('td', { class: 'num' }, h('button', { type: 'button', class: 'boton boton--enlace', 'aria-label': `Quitar ${l.nombre}`, title: 'Quitar', dataset: { quitar: clave }, text: 'Quitar' })));
+      h('td', { class: 'num' }, h('button', { type: 'button', class: 'boton boton--enlace', 'aria-label': t('Quitar {nombre}', { nombre: l.nombre }), title: t('Quitar'), dataset: { quitar: clave }, text: t('Quitar') })));
   }));
   $('tabla-lineas').hidden = lineas.length === 0;
   $('lineas-vacio').hidden = lineas.length > 0;
@@ -209,7 +216,7 @@ function agregar(producto, cantidad = null) {
       linea.cantidad = Math.min((linea.cantidad ?? 0) + (cantidad ?? 1), LIMITES_RECEPCION.piezas);
     }
   } else if (lineas.length >= LIMITES_RECEPCION.lineas) {
-    avisar('error', `Una entrada lleva como máximo ${LIMITES_RECEPCION.lineas} productos: registra esta y sigue en otra.`);
+    avisar('error', t('Una entrada lleva como máximo {n} productos: registra esta y sigue en otra.', { n: LIMITES_RECEPCION.lineas }));
     return;
   }
   lineas.unshift(linea);
@@ -218,7 +225,7 @@ function agregar(producto, cantidad = null) {
   pintarLineas();
   guardarBorrador();
   if (esDePeso(producto) || linea.cantidad === null) {
-    avisar('info', `${linea.nombre}: escribe los kilos que llegaron.`);
+    avisar('info', t('{nombre}: escribe los kilos que llegaron.', { nombre: linea.nombre }));
     enfocarCantidad(clave);
   } else {
     avisar('', '');
@@ -230,7 +237,7 @@ function agregar(producto, cantidad = null) {
 function ofrecerNuevo(upc, cantidad) {
   ocultarSugerencias();
   pendienteNuevo = { upc, cantidad: cantidad ?? 1 };
-  $('nuevo-texto').textContent = `El código ${upc} no está en el catálogo. Si llegó, escribe qué es y entra a la entrega como «sin registrar» (después se da de alta en Productos o Captura rápida).`;
+  $('nuevo-texto').textContent = t('El código {upc} no está en el catálogo. Si llegó, escribe qué es y entra a la entrega como «sin registrar» (después se da de alta en Productos o Captura rápida).', { upc });
   $('nuevo-nombre').value = '';
   $('form-nuevo').hidden = false;
   $('nuevo-nombre').focus();
@@ -249,7 +256,7 @@ function procesar(texto) {
   if (/^\d{4,5}$/.test(codigo)) {
     const producto = elegir(porPLU.get(codigo));
     if (producto) agregar(producto, cantidad);
-    else avisar('error', `No hay ningún producto con el PLU ${codigo}.`);
+    else avisar('error', t('No hay ningún producto con el PLU {plu}.', { plu: codigo }));
     return;
   }
   if (/^\d+$/.test(codigo)) {
@@ -268,7 +275,7 @@ function procesar(texto) {
   }
   const lista = activo >= 0 && sugeridos.length ? [sugeridos[activo]] : buscar(codigo);
   if (lista.length === 0) {
-    avisar('error', `No se encontró «${codigo}» en el catálogo.`);
+    avisar('error', t('No se encontró «{codigo}» en el catálogo.', { codigo }));
     return;
   }
   agregar(lista[0], cantidad);
@@ -284,7 +291,7 @@ function pintarSugerencias() {
     dataset: { indice: i },
   },
   h('strong', { text: [p.marca, p.nombre].filter(Boolean).join(' ') }),
-  h('span', { class: 'secundario', text: [p.presentacion, p.upc ?? (p.plu ? `PLU ${p.plu}` : ''), esDePeso(p) ? 'por kilo' : '', p.activo === false ? 'inactivo' : ''].filter(Boolean).join(' · ') }))));
+  h('span', { class: 'secundario', text: [p.presentacion, p.upc ?? (p.plu ? `PLU ${p.plu}` : ''), esDePeso(p) ? t('por kilo') : '', p.activo === false ? t('inactivo') : ''].filter(Boolean).join(' · ') }))));
   lista.hidden = sugeridos.length === 0;
   if (activo >= 0) $('r-codigo').setAttribute('aria-activedescendant', `sugerencia-${activo}`);
   else $('r-codigo').removeAttribute('aria-activedescendant');
@@ -390,7 +397,7 @@ function limpiarEntrada() {
 }
 
 $('btn-descartar').addEventListener('click', () => {
-  if (lineas.length && !window.confirm('¿Descartar los productos capturados de esta entrada?')) return;
+  if (lineas.length && !window.confirm(t('¿Descartar los productos capturados de esta entrada?'))) return;
   limpiarEntrada();
   avisar('', '');
   $('r-codigo').focus();
@@ -412,14 +419,18 @@ $('btn-registrar').addEventListener('click', async () => {
   }
   $('btn-registrar').disabled = true;
   const { promesa } = registrarRecepcion(datos);
-  promesa.catch((error) => avisar('error', `La entrada no se guardó: ${mensajeError(error)}`));
+  promesa.catch((error) => avisar('error', t('La entrada no se guardó: {error}', { error: mensajeError(error) })));
   try {
     const estado = await esperarConfirmacion(promesa);
     limpiarEntrada();
-    avisar('ok', `Entrada registrada: ${datos.productos} ${datos.productos === 1 ? 'producto' : 'productos'}, ${textoCantidades(datos)}${datos.proveedor ? ` de ${datos.proveedor}` : ''}.${estado === 'pendiente' ? ' Sin señal: se enviará en cuanto vuelva.' : ''}`);
+    const valores = { productos: textoProductos(datos.productos), cantidades: textoCantidades(datos), proveedor: datos.proveedor };
+    const registrada = datos.proveedor
+      ? t('Entrada registrada: {productos}, {cantidades} de {proveedor}.', valores)
+      : t('Entrada registrada: {productos}, {cantidades}.', valores);
+    avisar('ok', estado === 'pendiente' ? [registrada, t('Sin señal: se enviará en cuanto vuelva.')].join(' ') : registrada);
     $('r-codigo').focus();
   } catch (error) {
-    avisar('error', `No se pudo registrar la entrada: ${mensajeError(error)}`);
+    avisar('error', t('No se pudo registrar la entrada: {error}', { error: mensajeError(error) }));
     pintarTotales();
   }
 });
@@ -439,19 +450,19 @@ $('btn-camara').addEventListener('click', async () => {
   if (camara.abriendo) return;
   camara.abriendo = true;
   $('escaner-linterna').hidden = true;
-  estadoCamara('Iniciando cámara…');
+  estadoCamara(t('Iniciando cámara…'));
   if (!escaner.open) escaner.showModal();
   try {
     camara.controles = await abrirEscaner($('escaner-video'), {
       alDetectar: ({ texto }) => {
         confirmarLectura();
         procesar(texto);
-        estadoCamara(`Leído ${texto}. Apunta al siguiente o cierra.`, 'ok');
+        estadoCamara(t('Leído {codigo}. Apunta al siguiente o cierra.', { codigo: texto }), 'ok');
         if (pendienteNuevo || lineas[0]?.cantidad === null) escaner.close();
       },
       alError: (error) => estadoCamara(mensajeCamara(error), 'error'),
     });
-    estadoCamara('Apunta al código de barras');
+    estadoCamara(t('Apunta al código de barras'));
     $('escaner-linterna').hidden = !camara.controles.tieneLinterna;
   } catch (error) {
     estadoCamara(mensajeCamara(error), 'error');
@@ -481,7 +492,7 @@ let recepciones = [];
 let visibles = [];
 let dejarDeEscuchar = null;
 
-const nombreTienda = (id) => tiendas.find((t) => t.id === id)?.nombre ?? id;
+const nombreTienda = (id) => tiendas.find((tienda) => tienda.id === id)?.nombre ?? id;
 const filtros = () => ({ tienda: $('f-tienda').value, proveedor: $('f-proveedor').value, buscar: $('f-buscar').value });
 
 function llenarSelect(select, pares, todos) {
@@ -499,12 +510,12 @@ function kpi(etiqueta, valor, detalle = '') {
 
 function pintarHistorial() {
   const enUso = new Set(recepciones.map((r) => r.tienda).filter(Boolean));
-  const paresTienda = tiendas.filter((t) => t.activo !== false || enUso.has(t.id)).map((t) => [t.id, t.nombre]);
+  const paresTienda = tiendas.filter((tienda) => tienda.activo !== false || enUso.has(tienda.id)).map((tienda) => [tienda.id, tienda.nombre]);
   for (const id of enUso) if (!paresTienda.some(([valor]) => valor === id)) paresTienda.push([id, id]);
-  if (recepciones.some((r) => !r.tienda)) paresTienda.push(['-', 'Sin tienda']);
-  llenarSelect($('f-tienda'), paresTienda, 'Todas');
+  if (recepciones.some((r) => !r.tienda)) paresTienda.push(['-', t('Sin tienda')]);
+  llenarSelect($('f-tienda'), paresTienda, t('Todas'));
   const proveedores = [...new Set(recepciones.map((r) => r.proveedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-  llenarSelect($('f-proveedor'), proveedores.map((p) => [p, p]), 'Todos');
+  llenarSelect($('f-proveedor'), proveedores.map((p) => [p, p]), t('Todos'));
 
   const f = filtros();
   visibles = recepciones.filter((r) => cumpleFiltrosRecepcion(r, f));
@@ -512,24 +523,28 @@ function pintarHistorial() {
   const totales = totalesRecepciones(visibles, { buscar: f.buscar });
 
   $('kpis').replaceChildren(
-    kpi('Entregas', String(totales.entregas), totales.anuladas ? `${totales.anuladas} anulada${totales.anuladas === 1 ? '' : 's'} (no cuentan)` : `${desde === hasta ? 'del día' : 'en el periodo'}`),
-    kpi('Piezas recibidas', totales.piezas.toLocaleString('es-MX')),
-    kpi('Kilos recibidos', totales.gramos ? formatearPeso(totales.gramos) : '0 kg', 'productos a granel'),
-    kpi('Productos distintos', String(totales.productos)),
+    kpi(t('Entregas'), String(totales.entregas), totales.anuladas
+      ? (totales.anuladas === 1 ? t('{n} anulada (no cuentan)', { n: totales.anuladas }) : t('{n} anuladas (no cuentan)', { n: totales.anuladas }))
+      : (desde === hasta ? t('del día') : t('en el periodo'))),
+    kpi(t('Piezas recibidas'), numero(totales.piezas)),
+    kpi(t('Kilos recibidos'), totales.gramos ? formatearPeso(totales.gramos) : '0 kg', t('productos a granel')),
+    kpi(t('Productos distintos'), String(totales.productos)),
   );
 
-  $('contador-productos').textContent = resumen.length ? `${resumen.length} ${resumen.length === 1 ? 'producto' : 'productos'}` : '';
+  $('contador-productos').textContent = resumen.length ? textoProductos(resumen.length) : '';
   $('tabla-productos').hidden = resumen.length === 0;
   $('vacio-productos').hidden = resumen.length > 0;
   $('tabla-productos').tBodies[0].replaceChildren(...resumen.map((p) => h('tr', null,
-    h('td', null, p.nombre, p.producto ? null : [' ', chip('Sin registrar', 'aviso')]),
+    h('td', null, p.nombre, p.producto ? null : [' ', chip(t('Sin registrar'), 'aviso')]),
     h('td', { class: 'monoespaciada', text: p.upc ?? (p.plu ? `PLU ${p.plu}` : '—') }),
     h('td', { class: 'num' }, h('strong', { text: textoCantidades(p) })),
     h('td', { class: 'num', text: String(p.entregas) }),
     h('td', { text: cuando(p.ultima) }),
     h('td', { text: p.proveedores.join(', ') || '—' }))));
 
-  $('contador-entregas').textContent = visibles.length ? `${visibles.length} ${visibles.length === 1 ? 'entrega' : 'entregas'}` : '';
+  $('contador-entregas').textContent = visibles.length
+    ? (visibles.length === 1 ? t('{n} entrega', { n: visibles.length }) : t('{n} entregas', { n: visibles.length }))
+    : '';
   $('tabla-entregas').hidden = visibles.length === 0;
   $('vacio-entregas').hidden = visibles.length > 0;
   $('tabla-entregas').tBodies[0].replaceChildren(...visibles.map((r) => h('tr', { tabindex: 0, class: r.anulada ? 'fila--anulada' : null, dataset: { id: r.id } },
@@ -540,7 +555,7 @@ function pintarHistorial() {
     h('td', { text: r.recibidoPorNombre }),
     h('td', { class: 'num', text: String(r.productos) }),
     h('td', { class: `num${r.anulada ? ' tachado' : ''}`, text: textoCantidades(r) }),
-    h('td', null, r.anulada ? chip('Anulada', 'alerta') : chip('Recibida', 'abierto'), r.pendiente ? [' ', chip('Por enviar', 'aviso')] : null))));
+    h('td', null, r.anulada ? chip(t('Anulada'), 'alerta') : chip(t('Recibida'), 'abierto'), r.pendiente ? [' ', chip(t('Por enviar'), 'aviso')] : null))));
 
   // Proveedores conocidos para el campo de la entrada (los del catálogo y los de las entregas).
   const conocidos = new Set(proveedores);
@@ -552,7 +567,7 @@ function ajustarRango() {
   if (hasta < desde) [desde, hasta] = [hasta, desde];
   if (diasEntre(desde, hasta).length > MAXIMO_DIAS) {
     desde = sumarDias(hasta, -(MAXIMO_DIAS - 1));
-    avisar('aviso', `Se muestran como máximo ${MAXIMO_DIAS} días: desde el ${desde}.`);
+    avisar('aviso', t('Se muestran como máximo {n} días: desde el {desde}.', { n: MAXIMO_DIAS, desde }));
   }
   $('f-desde').value = desde;
   $('f-hasta').value = hasta;
@@ -568,7 +583,7 @@ function escuchar() {
   dejarDeEscuchar = observarRecepciones({ desde: inicioDia(desde), hasta: inicioDia(sumarDias(hasta, 1)) }, (lista) => {
     recepciones = lista;
     pintarHistorial();
-  }, (error) => avisar('error', `No se pudieron cargar las entregas: ${mensajeError(error)}`));
+  }, (error) => avisar('error', t('No se pudieron cargar las entregas: {error}', { error: mensajeError(error) })));
   pintarHistorial();
 }
 
@@ -601,44 +616,45 @@ $('btn-exportar').addEventListener('click', () => {
 
 function abrirEntrega(r) {
   const lineasTabla = h('table', { class: 'tabla tabla--compacta' },
-    h('thead', null, h('tr', null, h('th', { text: 'Producto' }), h('th', { text: 'Código' }), h('th', { class: 'num', text: 'Cantidad' }))),
+    h('thead', null, h('tr', null, h('th', { text: t('Producto') }), h('th', { text: t('Código') }), h('th', { class: 'num', text: t('Cantidad') }))),
     h('tbody', null, (r.lineas ?? []).map((l) => h('tr', null,
-      h('td', null, l.nombre, l.producto ? null : [' ', chip('Sin registrar', 'aviso')]),
+      h('td', null, l.nombre, l.producto ? null : [' ', chip(t('Sin registrar'), 'aviso')]),
       h('td', { class: 'monoespaciada', text: codigoDe(l) || '—' }),
       h('td', { class: 'num', text: textoLinea(l) })))),
-    h('tfoot', null, h('tr', null, h('td', { colspan: 2, text: `${r.productos} ${r.productos === 1 ? 'producto' : 'productos'}` }), h('td', { class: 'num', text: textoCantidades(r) }))));
+    h('tfoot', null, h('tr', null, h('td', { colspan: 2, text: textoProductos(r.productos) }), h('td', { class: 'num', text: textoCantidades(r) }))));
   const anular = esAdmin && !r.anulada
-    ? h('button', { type: 'button', class: 'boton boton--peligro', id: 'btn-anular-entrega', text: 'Anular entrada' })
+    ? h('button', { type: 'button', class: 'boton boton--peligro', id: 'btn-anular-entrega', text: t('Anular entrada') })
     : null;
-  const dialogo = h('dialog', { class: 'editor editor--entrega', 'aria-label': 'Entrega' },
+  const titulo = t('Entrega del {fecha}', { fecha: cuando(r.fecha) });
+  const dialogo = h('dialog', { class: 'editor editor--entrega', 'aria-label': t('Entrega') },
     h('div', { class: 'editor__form' },
       h('header', { class: 'editor__cabecera' },
-        h('h2', null, `Entrega del ${cuando(r.fecha)} `, r.anulada ? chip('Anulada', 'alerta') : chip('Recibida', 'abierto')),
-        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
+        h('h2', null, `${titulo} `, r.anulada ? chip(t('Anulada'), 'alerta') : chip(t('Recibida'), 'abierto')),
+        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: t('Cerrar') })),
       h('div', { class: 'editor__cuerpo editor__cuerpo--simple' },
         h('dl', { class: 'ficha ficha--compacta' },
-          filaDato('Fecha', fechaHora(r.fecha)),
-          filaDato('Tienda', r.tienda ? nombreTienda(r.tienda) : '—'),
-          filaDato('Proveedor', r.proveedor ?? '—'),
-          filaDato('Factura o remisión', r.referencia ?? '—'),
-          filaDato('Recibió', r.recibidoPorNombre),
-          r.nota ? filaDato('Nota', r.nota) : null,
-          r.anulada ? filaDato('Anulada', `${r.anuladaEn ? fechaHora(r.anuladaEn) : ''} (${r.anuladaPor})`) : null),
+          filaDato(t('Fecha'), fechaHora(r.fecha)),
+          filaDato(t('Tienda'), r.tienda ? nombreTienda(r.tienda) : '—'),
+          filaDato(t('Proveedor'), r.proveedor ?? '—'),
+          filaDato(t('Factura o remisión'), r.referencia ?? '—'),
+          filaDato(t('Recibió'), r.recibidoPorNombre),
+          r.nota ? filaDato(t('Nota'), r.nota) : null,
+          r.anulada ? filaDato(t('Anulada'), `${r.anuladaEn ? fechaHora(r.anuladaEn) : ''} (${r.anuladaPor})`) : null),
         h('div', { class: 'tabla-desplazable' }, lineasTabla),
         anular ? h('div', { class: 'acciones' }, anular) : null)));
   dialogo.addEventListener('click', (e) => {
     if (e.target.closest('[data-cerrar]')) dialogo.close();
   });
   anular?.addEventListener('click', async () => {
-    if (!window.confirm('¿Anular esta entrada? Seguirá a la vista, tachada, y dejará de contar en lo que llegó.')) return;
+    if (!window.confirm(t('¿Anular esta entrada? Seguirá a la vista, tachada, y dejará de contar en lo que llegó.'))) return;
     anular.disabled = true;
     try {
       await anularRecepcion(r.id, personal.usuario);
       dialogo.close();
-      avisar('ok', `Entrada anulada${r.proveedor ? ` (${r.proveedor})` : ''}.`);
+      avisar('ok', r.proveedor ? t('Entrada anulada ({proveedor}).', { proveedor: r.proveedor }) : t('Entrada anulada.'));
     } catch (error) {
       anular.disabled = false;
-      avisar('error', `No se pudo anular la entrada: ${mensajeError(error)}`);
+      avisar('error', t('No se pudo anular la entrada: {error}', { error: mensajeError(error) }));
     }
   });
   dialogo.addEventListener('close', () => dialogo.remove());
@@ -669,16 +685,16 @@ pintarLineas();
 observarTiendas((lista) => {
   tiendas = lista;
   const actual = $('r-tienda').value || leer(TIENDA) || '';
-  const activas = lista.filter((t) => t.activo !== false);
-  $('r-tienda').replaceChildren(h('option', { value: '', text: 'Sin especificar' }), ...activas.map((t) => h('option', { value: t.id, text: t.nombre })));
-  $('r-tienda').value = activas.some((t) => t.id === actual) ? actual : (activas.length === 1 ? activas[0].id : '');
+  const activas = lista.filter((tienda) => tienda.activo !== false);
+  $('r-tienda').replaceChildren(h('option', { value: '', text: t('Sin especificar') }), ...activas.map((tienda) => h('option', { value: tienda.id, text: tienda.nombre })));
+  $('r-tienda').value = activas.some((tienda) => tienda.id === actual) ? actual : (activas.length === 1 ? activas[0].id : '');
   pintarHistorial();
 }, () => {});
 
 observarCatalogo(({ catalogo: mapa }) => {
   catalogo = mapa;
   indexar();
-}, (error) => avisar('error', `No se pudo cargar el catálogo: ${mensajeError(error)}`));
+}, (error) => avisar('error', t('No se pudo cargar el catálogo: {error}', { error: mensajeError(error) })));
 
 escuchar();
 $('r-codigo').focus();

@@ -16,8 +16,14 @@
  * cantidad × precio e importe y el total, con su total en efectivo cuando el
  * redondeo a 5 ¢ lo cambia); el cobro (lo pagado y lo que falta); y la venta
  * registrada (gracias y su cambio, unos segundos, luego la bienvenida).
+ *
+ * Idioma: el de la caja. Cada estado dice en qué idioma viene; si es otro, la
+ * pantalla lo guarda y se recarga en ese idioma. Antes de tener caja (o si un
+ * administrador la desconectó) tiene su propio botón de idioma.
  */
 import { CANAL_CLIENTE, SILENCIO_MS, GRACIAS_MS, ANTIGUEDAD_MAXIMA_MS, esEstadoValido } from './pantalla-cliente.js';
+import { t, idioma, meridiano, IDIOMAS, CLAVE_IDIOMA } from './idioma.js';
+import { botonIdioma } from './boton-idioma.js';
 
 const $ = (id) => document.getElementById(id);
 const CLAVE_TIENDA = 'aguila.cliente.tienda';
@@ -126,7 +132,7 @@ function pintarVenta(e) {
   }
 
   const lista = $('lineas');
-  lista.replaceChildren(...(e.ocultas ? [el('li', 'lineas-cliente__ocultas', `… y ${e.ocultas} artículos más arriba`)] : []), ...e.lineas.map((l) => nodoLinea(l, destacado?.id)));
+  lista.replaceChildren(...(e.ocultas ? [el('li', 'lineas-cliente__ocultas', t('… y {n} artículos más arriba', { n: e.ocultas }))] : []), ...e.lineas.map((l) => nodoLinea(l, destacado?.id)));
   (lista.querySelector('.linea-cliente--ultima') ?? lista.lastElementChild)?.scrollIntoView({ block: 'nearest' });
 
   $('t-articulos').textContent = String(e.articulos);
@@ -135,38 +141,38 @@ function pintarVenta(e) {
   $('t-descuento').textContent = e.descuento ?? '';
   $('t-impuesto-nombre').textContent = e.impuestoNombre;
   $('t-impuesto').textContent = e.impuesto;
-  $('t-total-nombre').textContent = e.devolucion ? 'Total a devolver' : 'Total';
+  $('t-total-nombre').textContent = e.devolucion ? t('Total a devolver') : t('Total');
   $('t-total').textContent = e.total;
   $('t-efectivo').hidden = !e.totalEfectivo;
-  $('t-efectivo').textContent = e.totalEfectivo ? `En efectivo: ${e.totalEfectivo}` : '';
+  $('t-efectivo').textContent = e.totalEfectivo ? t('En efectivo: {monto}', { monto: e.totalEfectivo }) : '';
   $('t-ahorro').hidden = !e.ahorro || e.devolucion;
-  $('t-ahorro').textContent = e.ahorro ? `Usted ahorra ${e.ahorro}` : '';
+  $('t-ahorro').textContent = e.ahorro ? t('Usted ahorra {monto}', { monto: e.ahorro }) : '';
 
   const cobro = e.fase === 'cobro' ? e.cobro : null;
   $('cobro').hidden = !cobro;
   document.body.classList.toggle('cliente--cobrando', !!cobro);
   if (cobro) {
     $('c-pagado').textContent = cobro.pagado;
-    $('c-falta-nombre').textContent = e.devolucion ? 'Por devolver' : 'Falta';
+    $('c-falta-nombre').textContent = e.devolucion ? t('Por devolver') : t('Falta');
     $('c-falta').textContent = cobro.falta;
     $('c-indicacion').textContent = e.devolucion
       ? ''
-      : cobro.tarjeta ? 'Pague en la terminal y siga sus indicaciones.' : `Forma de pago: ${cobro.metodo}`;
+      : cobro.tarjeta ? t('Pague en la terminal y siga sus indicaciones.') : t('Forma de pago: {metodo}', { metodo: cobro.metodo });
   }
 }
 
 function pintarGracias(e) {
   vista('gracias');
-  $('g-mensaje').textContent = e.devolucion ? 'Devolución registrada' : e.mensaje;
-  $('g-total-nombre').textContent = e.devolucion ? 'Total devuelto' : 'Total';
+  $('g-mensaje').textContent = e.devolucion ? t('Devolución registrada') : e.mensaje;
+  $('g-total-nombre').textContent = e.devolucion ? t('Total devuelto') : t('Total');
   $('g-total').textContent = e.total;
-  $('g-pagos-nombre').textContent = e.devolucion ? 'Se le devolvió' : 'Pagó';
+  $('g-pagos-nombre').textContent = e.devolucion ? t('Se le devolvió') : t('Pagó');
   $('g-pagos').textContent = e.pagos.length ? e.pagos.map((p) => `${p.metodo} ${p.importe}`).join(' + ') : '—';
   $('g-cambio-fila').hidden = !e.cambio;
   $('g-cambio').textContent = e.cambio ?? '';
   $('g-ahorro').hidden = !e.ahorro || e.devolucion;
-  $('g-ahorro').textContent = e.ahorro ? `Hoy ahorró ${e.ahorro}` : '';
-  $('g-folio').textContent = e.folio ? `Ticket ${e.folio}` : '';
+  $('g-ahorro').textContent = e.ahorro ? t('Hoy ahorró {monto}', { monto: e.ahorro }) : '';
+  $('g-folio').textContent = e.folio ? t('Ticket {numero}', { numero: e.folio }) : '';
 }
 
 // ------------------------------------------------------------- pintar según lo último que se sabe
@@ -179,35 +185,38 @@ function caduco(ahora) {
 }
 
 function pintar() {
+  pintarBotonIdioma();
   if (configurando) return;
   const ahora = Date.now();
   $('tienda').textContent = nombreTienda();
   $('caja').textContent = estado?.caja || emparejamiento?.cajaNombre || '';
-  $('atiende').textContent = estado?.atiende && conectada && !caduco(ahora) ? `Le atiende ${estado.atiende}` : '';
+  $('atiende').textContent = estado?.atiende && conectada && !caduco(ahora) ? t('Le atiende {nombre}', { nombre: estado.atiende }) : '';
   $('sin-red').hidden = !enTableta() || navigator.onLine;
   $('btn-configurar').hidden = !enTableta() || !!document.fullscreenElement;
 
   let actual;
   if (enTableta() && desconectadaPorAdmin) {
     actual = 'desconectada';
-    if (actual !== vistaAntes) aviso('Tableta sin caja', `Un administrador desconectó esta tableta de ${emparejamiento.cajaNombre}. Toca «Configurar» para emparejarla de nuevo.`, 'configurar');
+    if (actual !== vistaAntes) {
+      aviso(t('Tableta sin caja'), t('Un administrador desconectó esta tableta de {caja}. Toca «Configurar» para emparejarla de nuevo.', { caja: emparejamiento.cajaNombre }), 'configurar');
+    }
   } else if (enTableta() && !conectada) {
     actual = 'conectando';
-    if (actual !== vistaAntes) aviso('¡Bienvenido!', nombreTienda(), 'bienvenida');
+    if (actual !== vistaAntes) aviso(t('¡Bienvenido!'), nombreTienda(), 'bienvenida');
   } else if (!enTableta() && !canal) {
     actual = 'sin-canal';
-    if (actual !== vistaAntes) aviso('Pantalla del cliente', 'Este navegador no puede recibir a la caja. Usa Chrome o Edge al día.', 'error', { boton: true });
+    if (actual !== vistaAntes) aviso(t('Pantalla del cliente'), t('Este navegador no puede recibir a la caja. Usa Chrome o Edge al día.'), 'error', { boton: true });
   } else if (!enTableta() && !conectada) {
     actual = 'esperando';
     if (actual !== vistaAntes) {
-      aviso('Pantalla del cliente', 'En la segunda pantalla de la caja: abre la caja en esta misma computadora y este navegador. En una tableta: toca «Usar en una tableta» y que un administrador elija la caja.', 'configurar', { boton: true });
+      aviso(t('Pantalla del cliente'), t('En la segunda pantalla de la caja: abre la caja en esta misma computadora y este navegador. En una tableta: toca «Usar en una tableta» y que un administrador elija la caja.'), 'configurar', { boton: true });
     }
   } else if (caduco(ahora) || estado.fase === 'libre' || (estado.fase === 'cobrado' && ahora - recibidoEn > GRACIAS_MS)) {
     actual = `bienvenida|${nombreTienda()}`;
-    if (actual !== vistaAntes) aviso('¡Bienvenido!', nombreTienda(), 'bienvenida');
+    if (actual !== vistaAntes) aviso(t('¡Bienvenido!'), nombreTienda(), 'bienvenida');
   } else if (estado.fase === 'cerrada') {
     actual = `cerrada|${nombreTienda()}`;
-    if (actual !== vistaAntes) aviso('Caja cerrada', nombreTienda(), 'cerrada');
+    if (actual !== vistaAntes) aviso(t('Caja cerrada'), nombreTienda(), 'cerrada');
   } else if (estado.fase === 'cobrado') {
     actual = `gracias|${firma}`;
     if (actual !== vistaAntes) pintarGracias(estado);
@@ -218,11 +227,29 @@ function pintar() {
   vistaAntes = actual;
 }
 
+/**
+ * La caja habla en otro idioma: se guarda en este aparato y se recarga en ese
+ * idioma. Si aquí no se puede guardar, se queda como está (para no recargar
+ * sin fin).
+ */
+function seguirIdioma(deLaCaja) {
+  if (!IDIOMAS.includes(deLaCaja) || deLaCaja === idioma()) return false;
+  try {
+    localStorage.setItem(CLAVE_IDIOMA, deLaCaja);
+    if (localStorage.getItem(CLAVE_IDIOMA) !== deLaCaja) return false;
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 /** Llega un estado de la caja (por el canal o por la tableta). */
 function recibir(nuevo, { servidor = null } = {}) {
   conectada = true;
   ultimoMensaje = Date.now();
   if (!esEstadoValido(nuevo)) return;
+  if (seguirIdioma(nuevo.idioma)) return;
   servidorMs = servidor;
   const texto = JSON.stringify(nuevo);
   if (texto === firma) return;
@@ -249,6 +276,10 @@ if (canal) {
   });
   if (!enTableta()) canal.postMessage({ tipo: 'hola' });
 }
+// La caja de esta misma computadora cambió de idioma: la pantalla también.
+window.addEventListener('storage', (e) => {
+  if (e.key === CLAVE_IDIOMA && IDIOMAS.includes(e.newValue) && e.newValue !== idioma() && !enTableta()) window.location.reload();
+});
 
 // ------------------------------------------------------------- tableta: escuchar su pantalla
 
@@ -305,7 +336,8 @@ function abrirConfigurar() {
   $('t-cajas').hidden = true;
   $('t-secreto').value = '';
   mensajeConfigurar(null);
-  $('t-actual').textContent = enTableta() ? `Ahora esta tableta muestra ${emparejamiento.cajaNombre}.` : '';
+  $('t-actual').textContent = enTableta() ? t('Ahora esta tableta muestra {caja}.', { caja: emparejamiento.cajaNombre }) : '';
+  pintarBotonIdioma();
   $('t-identificador').focus();
   vigilarConfigurar();
 }
@@ -324,13 +356,13 @@ function pintarCajas() {
   lista.replaceChildren(...sesionAdmin.cajas.map((caja) => {
     const li = el('li', 'configurar-cliente__caja');
     const datos = el('div', 'configurar-cliente__datos');
-    datos.append(el('strong', null, caja.nombre), el('span', null, caja.tienda), el('small', null, caja.conectada ? 'Ya tiene una tableta' : 'Sin tableta'));
-    const usar = el('button', 'boton-cliente boton-cliente--principal', 'Mostrar esta caja');
+    datos.append(el('strong', null, caja.nombre), el('span', null, caja.tienda), el('small', null, caja.conectada ? t('Ya tiene una tableta') : t('Sin tableta')));
+    const usar = el('button', 'boton-cliente boton-cliente--principal', t('Mostrar esta caja'));
     usar.type = 'button';
     usar.addEventListener('click', () => elegirCaja(caja));
     li.append(datos, usar);
     if (caja.conectada) {
-      const quitar = el('button', 'boton-cliente', 'Desconectar tableta');
+      const quitar = el('button', 'boton-cliente', t('Desconectar tableta'));
       quitar.type = 'button';
       quitar.addEventListener('click', () => desconectarCaja(caja));
       li.append(quitar);
@@ -341,7 +373,7 @@ function pintarCajas() {
 
 async function elegirCaja(caja) {
   vigilarConfigurar();
-  mensajeConfigurar('Emparejando…', 'info');
+  mensajeConfigurar(t('Emparejando…'), 'info');
   try {
     const m = await tableta();
     emparejamiento = await m.emparejar(caja, sesionAdmin.personal);
@@ -358,15 +390,22 @@ async function elegirCaja(caja) {
 
 async function desconectarCaja(caja) {
   vigilarConfigurar();
-  if (!window.confirm(`¿Desconectar la tableta de ${caja.nombre}? Esa caja deja de mandarle su ticket.`)) return;
+  if (!window.confirm(t('¿Desconectar la tableta de {caja}? Esa caja deja de mandarle su ticket.', { caja: caja.nombre }))) return;
   try {
     await (await tableta()).desconectar(caja);
     caja.conectada = false;
     pintarCajas();
-    mensajeConfigurar(`${caja.nombre} ya no tiene tableta.`, 'ok');
+    mensajeConfigurar(t('{caja} ya no tiene tableta.', { caja: caja.nombre }), 'ok');
   } catch (error) {
     mensajeConfigurar((await tableta()).mensajeDe(error));
   }
+}
+
+// Botón de idioma: solo mientras la pantalla no tiene caja (con caja, habla el idioma de la caja).
+const idiomaPantalla = botonIdioma({ clase: 'cliente__completa cliente__idioma' });
+document.querySelector('.cliente__botones').prepend(idiomaPantalla);
+function pintarBotonIdioma() {
+  idiomaPantalla.hidden = !configurando && conectada && !desconectadaPorAdmin;
 }
 
 $('btn-tableta').addEventListener('click', abrirConfigurar);
@@ -378,7 +417,7 @@ $('form-tableta').addEventListener('submit', async (e) => {
   vigilarConfigurar();
   const boton = $('t-entrar');
   boton.disabled = true;
-  mensajeConfigurar('Comprobando…', 'info');
+  mensajeConfigurar(t('Comprobando…'), 'info');
   try {
     const m = await tableta();
     sesionAdmin = await m.entrarAdmin($('t-identificador').value, $('t-secreto').value);
@@ -400,7 +439,7 @@ document.addEventListener('pointerdown', () => { if (configurando) vigilarConfig
 function reloj() {
   const f = new Date();
   const h24 = f.getHours();
-  $('reloj').textContent = `${h24 % 12 === 0 ? 12 : h24 % 12}:${String(f.getMinutes()).padStart(2, '0')} ${h24 < 12 ? 'a.m.' : 'p.m.'}`;
+  $('reloj').textContent = `${h24 % 12 === 0 ? 12 : h24 % 12}:${String(f.getMinutes()).padStart(2, '0')} ${meridiano(h24)}`;
 }
 
 function alternarPantallaCompleta() {

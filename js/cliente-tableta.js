@@ -16,10 +16,11 @@ import { huellaPantalla, claveCajaValida } from './nip.js';
 import { crearPantalla, borrarPantalla, hayTableta, observarPantalla } from './pantalla-remota.js';
 import { estadoCliente } from './pantalla-cliente.js';
 import { configConDefectos } from './config-pos.js';
+import { t } from './idioma.js';
 
 const aviso = (texto) => Object.assign(new Error(texto), { code: 'cliente/aviso' });
 
-/** Mensaje para el administrador (en español) de cualquier error. */
+/** Mensaje para el administrador (en el idioma elegido) de cualquier error. */
 export const mensajeDe = (error) => (error?.code === 'cliente/aviso' ? error.message : mensajeError(error));
 
 /** La tableta trabaja sin sesión: se cierra la que hubiera quedado (p. ej. si se cerró la página a media configuración). */
@@ -35,12 +36,12 @@ export async function sinSesion() {
 export async function entrarAdmin(identificador, secreto) {
   const { personal } = await iniciarSesion(identificador, secreto);
   try {
-    if (personal.rol !== 'admin') throw aviso('Solo un administrador puede emparejar la tableta.');
+    if (personal.rol !== 'admin') throw aviso(t('Solo un administrador puede emparejar la tableta.'));
     const secretoCaja = await getDoc(doc(db, 'secretos', 'caja'));
     const clave = secretoCaja.exists() ? secretoCaja.data().clave : null;
-    if (!claveCajaValida(clave)) throw aviso('Todavía no hay cajas configuradas: primero un administrador asigna la computadora de la caja.');
+    if (!claveCajaValida(clave)) throw aviso(t('Todavía no hay cajas configuradas: primero un administrador asigna la computadora de la caja.'));
     const cajas = (await listarCajas()).filter((c) => c.activo);
-    if (cajas.length === 0) throw aviso('No hay cajas activas. Da de alta las cajas en el back office (Cajas).');
+    if (cajas.length === 0) throw aviso(t('No hay cajas activas. Da de alta las cajas en el back office (Cajas).'));
     const tiendas = new Map();
     const lista = [];
     for (const c of cajas) {

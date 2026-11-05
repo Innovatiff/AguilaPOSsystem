@@ -14,6 +14,8 @@ import { formatearPrecio, indicadorFiscal } from './precios.js';
 import { interpretarCodigoBalanza } from './ticket.js';
 import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from './escaner.js';
 import { h } from './dom.js';
+import { t, numero } from './idioma.js';
+import { botonIdioma } from './boton-idioma.js';
 
 const $ = (id) => document.getElementById(id);
 const MAXIMO_RESULTADOS = 40;
@@ -51,14 +53,14 @@ function mostrarConsulta() {
   $('usuario').textContent = personal.nombre;
   $('btn-salir').hidden = false;
   $('btn-camara').hidden = !camaraDisponible();
-  $('estado-catalogo').textContent = 'Cargando el catálogo…';
+  $('estado-catalogo').textContent = t('Cargando el catálogo…');
   dejarCatalogo = observarCatalogo(({ catalogo: actual, desdeCache }) => {
     catalogo = actual;
     if (!desdeCache || actual.size > 0) catalogoListo = true;
     const activos = [...actual.values()].filter((p) => p.activo).length;
     $('estado-catalogo').textContent = desdeCache
-      ? `Sin conexión: ${activos.toLocaleString('en-CA')} productos guardados en este equipo`
-      : `Catálogo al día · ${activos.toLocaleString('en-CA')} productos`;
+      ? t('Sin conexión: {n} productos guardados en este equipo', { n: numero(activos) })
+      : t('Catálogo al día · {n} productos', { n: numero(activos) });
     // Si cambia el producto que está en pantalla (precio, nombre…), la ficha se
     // actualiza sola; si no hay ficha, la lista de resultados se vuelve a pintar.
     if (!$('tarjeta').hidden && productoMostrado) {
@@ -68,7 +70,7 @@ function mostrarConsulta() {
       pintarResultados();
     }
   }, (error) => {
-    $('estado-catalogo').textContent = `No se pudo cargar el catálogo: ${mensajeError(error)}`;
+    $('estado-catalogo').textContent = t('No se pudo cargar el catálogo: {error}', { error: mensajeError(error) });
   });
   if (!window.matchMedia('(pointer: coarse)').matches) $('buscar').focus();
 }
@@ -77,21 +79,22 @@ $('form-acceso').addEventListener('submit', async (e) => {
   e.preventDefault();
   const boton = $('btn-entrar');
   boton.disabled = true;
-  boton.textContent = 'Entrando…';
+  boton.textContent = t('Entrando…');
   try {
     ({ personal } = await iniciarSesion($('correo').value, $('nip').value));
     mostrarConsulta();
   } catch (error) {
     const codigo = String(error?.code ?? '');
     mostrarAcceso(['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(codigo)
-      ? 'Correo o NIP incorrectos.'
+      ? t('Correo o NIP incorrectos.')
       : mensajeError(error));
   } finally {
     boton.disabled = false;
-    boton.textContent = 'Entrar';
+    boton.textContent = t('Entrar');
   }
 });
 
+$('btn-salir').before(botonIdioma({ clase: 'nav-idioma consulta__idioma' }));
 $('btn-salir').addEventListener('click', async () => {
   await cerrarSesionSilenciosa().catch(() => {});
   mostrarAcceso();
@@ -139,7 +142,7 @@ function pintarResultados() {
   const texto = $('buscar').value.trim();
   const lista = texto.length >= 2 && !/^\d{6,}$/.test(texto) ? buscarTexto(texto) : [];
   $('resultados').replaceChildren(...lista.map((p) => h('li', null, h('button', { type: 'button', dataset: { id: p.id } },
-    h('span', { class: 'consulta__nombre' }, [p.marca, p.nombre].filter(Boolean).join(' '), p.activo === false ? h('span', { class: 'chip chip--aviso', text: 'Inactivo' }) : null),
+    h('span', { class: 'consulta__nombre' }, [p.marca, p.nombre].filter(Boolean).join(' '), p.activo === false ? h('span', { class: 'chip chip--aviso', text: t('Inactivo') }) : null),
     h('small', { text: [p.presentacion, p.upc ?? (p.plu ? `PLU ${p.plu}` : '')].filter(Boolean).join(' · ') || ' ' }),
     h('strong', { text: precioDe(p) })))));
 }
@@ -151,8 +154,8 @@ function mostrarProducto(p, { desplazar = true } = {}) {
   $('t-nombre').textContent = [p.marca, p.nombre].filter(Boolean).join(' ');
   $('t-sub').textContent = [p.presentacion, p.descriptor].filter(Boolean).join(' · ') || ' ';
   $('t-precio').textContent = formatearPrecio((porPeso ? p.precioPorKgCentavos : p.precioCentavos) ?? 0);
-  $('t-unidad').textContent = porPeso ? 'por kg' : 'c/u';
-  $('t-fiscal').textContent = p.claseFiscal === 'gravado' ? `${indicadorFiscal(p.claseFiscal)} · se le suma el HST al cobrar` : 'Sin impuesto';
+  $('t-unidad').textContent = porPeso ? t('por kg') : t('c/u');
+  $('t-fiscal').textContent = p.claseFiscal === 'gravado' ? `${indicadorFiscal(p.claseFiscal)} · ${t('se le suma el HST al cobrar')}` : t('Sin impuesto');
   $('t-inactivo').hidden = p.activo !== false;
   const datos = [];
   if (p.upc) {
@@ -162,10 +165,10 @@ function mostrarProducto(p, { desplazar = true } = {}) {
     } catch {
       tipo = '';
     }
-    datos.push(['Código', `${p.upc}${tipo}`]);
+    datos.push([t('Código'), `${p.upc}${tipo}`]);
   }
   if (p.plu) datos.push(['PLU', p.plu]);
-  if (porPeso && p.precioCentavos) datos.push(['Etiqueta de referencia', formatearPrecio(p.precioCentavos)]);
+  if (porPeso && p.precioCentavos) datos.push([t('Etiqueta de referencia'), formatearPrecio(p.precioCentavos)]);
   $('t-datos').replaceChildren(...datos.flatMap(([dt, dd]) => [h('dt', { text: dt }), h('dd', { text: dd })]));
   $('tarjeta').hidden = false;
   $('resultados').replaceChildren();
@@ -176,7 +179,7 @@ function noEncontrado(texto) {
   productoMostrado = null;
   $('tarjeta').hidden = true;
   $('no-encontrado').hidden = false;
-  $('no-encontrado').textContent = `No hay ningún producto con «${texto}». Avisa al administrador.`;
+  $('no-encontrado').textContent = t('No hay ningún producto con «{texto}». Avisa al administrador.', { texto });
 }
 
 async function consultar(texto) {
@@ -224,7 +227,7 @@ $('btn-camara').addEventListener('click', async () => {
   if (estadoCamara.abriendo) return;
   estadoCamara.abriendo = true;
   $('escaner-linterna').hidden = true;
-  estadoDelEscaner('Iniciando cámara…');
+  estadoDelEscaner(t('Iniciando cámara…'));
   if (!escaner.open) escaner.showModal();
   try {
     estadoCamara.controles = await abrirEscaner($('escaner-video'), {
@@ -239,7 +242,7 @@ $('btn-camara').addEventListener('click', async () => {
       },
       alError: (error) => estadoDelEscaner(mensajeCamara(error), 'error'),
     });
-    estadoDelEscaner('Apunta al código de barras');
+    estadoDelEscaner(t('Apunta al código de barras'));
     $('escaner-linterna').hidden = !estadoCamara.controles.tieneLinterna;
   } catch (error) {
     estadoDelEscaner(mensajeCamara(error), 'error');

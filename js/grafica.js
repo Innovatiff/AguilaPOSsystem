@@ -11,6 +11,10 @@
  * equivalente en la página (los valores nunca dependen del tooltip).
  */
 import { h, s } from './dom.js';
+import { t } from './idioma.js';
+
+/** Porcentaje entero para mostrar: "13 %" en español, "13%" en inglés. */
+const porcentaje = (n) => t('{n} %', { n });
 
 /** Escala de números redondos: tope y paso para unas 4 divisiones. */
 export function escalaBonita(maximo, divisiones = 4) {
@@ -69,7 +73,7 @@ export function graficaColumnas(contenedor, { descripcion, alto = 230, formatoVa
     const marcas = [];
     for (let v = 0; v <= tope + 1e-9; v += paso) marcas.push(v);
     const etiquetasEje = marcas.map(dolaresEje);
-    const izquierda = Math.max(...etiquetasEje.map((t) => t.length)) * 7 + 12;
+    const izquierda = Math.max(...etiquetasEje.map((etiqueta) => etiqueta.length)) * 7 + 12;
     const arriba = 18;
     const abajo = 24;
     const derecha = 6;
@@ -152,15 +156,15 @@ export function graficaColumnas(contenedor, { descripcion, alto = 230, formatoVa
 export function barraSegmentada(partes, descripcion) {
   const total = partes.reduce((acc, p) => acc + Math.max(0, p.valor), 0);
   const barra = h('div', { class: 'segmentos', role: 'img' });
-  const nombre = partes.filter((p) => p.valor > 0).map((p) => `${p.nombre} ${p.texto ?? ''} (${Math.round((p.valor / total) * 100)} %)`).join(', ');
-  barra.setAttribute('aria-label', total > 0 ? `${descripcion}: ${nombre}` : `${descripcion}: sin datos`);
+  const nombre = partes.filter((p) => p.valor > 0).map((p) => `${p.nombre} ${p.texto ?? ''} (${porcentaje(Math.round((p.valor / total) * 100))})`).join(', ');
+  barra.setAttribute('aria-label', total > 0 ? `${descripcion}: ${nombre}` : t('{descripcion}: sin datos', { descripcion }));
   if (total <= 0) {
     barra.classList.add('segmentos--vacia');
     return barra;
   }
   for (const p of partes) {
     if (p.valor <= 0) continue;
-    const parte = h('span', { class: 'segmentos__parte', title: `${p.nombre}: ${p.texto ?? ''} (${Math.round((p.valor / total) * 100)} %)` });
+    const parte = h('span', { class: 'segmentos__parte', title: `${p.nombre}: ${p.texto ?? ''} (${porcentaje(Math.round((p.valor / total) * 100))})` });
     parte.style.flexGrow = String(p.valor);
     parte.style.background = p.color;
     barra.append(parte);

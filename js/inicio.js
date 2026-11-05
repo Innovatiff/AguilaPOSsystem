@@ -12,7 +12,8 @@ import { observarCatalogo, observarTiendas } from './productos.js';
 import { pendienteImpresion } from './esquema.js';
 import { armarFichaPersonal } from './identidad.js';
 import { db, doc, setDoc, collection, onSnapshot, Timestamp } from './firebase.js';
-import { METODOS_PAGO, NOMBRE_METODO } from './ticket.js';
+import { t } from './idioma.js';
+import { METODOS_PAGO, nombreMetodo } from './ticket.js';
 import { milisDe } from './turnos.js';
 import { configConDefectos } from './config-pos.js';
 import { dinero, claveDia, fechaLarga, hora, saludo, metodosDe, chip, abrirTicket } from './bo.js';
@@ -22,7 +23,7 @@ const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'index.html' });
 
 const $ = (id) => document.getElementById(id);
-const fallo = (que) => (error) => avisar(`No se pudo cargar ${que}: ${mensajeError(error)}`, 'error', 0);
+const fallo = (que) => (error) => avisar(t('No se pudo cargar {que}: {error}', { que, error: mensajeError(error) }), 'error', 0);
 
 /** Colores de la barra de formas de pago: orden categórico fijo, validado (ver dataviz). */
 const COLOR_METODO = Object.freeze({ efectivo: '#2a78d6', debito: '#eb6834', credito: '#1baf7a', otro: '#eda100' });
@@ -40,7 +41,7 @@ $('saludo').textContent = saludo(personal.nombre);
 $('contenido').hidden = false;
 
 const grafica = graficaColumnas($('grafica-horas'), {
-  descripcion: 'Ventas por hora de hoy',
+  descripcion: t('Ventas por hora de hoy'),
   formatoValor: (centavos) => dinero(centavos),
 });
 
@@ -77,14 +78,14 @@ function resumirDia() {
 
 function pintarKpis(r) {
   $('kpi-total').textContent = dinero(r.total);
-  $('kpi-total-detalle').textContent = r.devuelto ? `Todas las cajas, con impuesto · ${dinero(r.devuelto)} devuelto` : 'Todas las cajas, con impuesto';
+  $('kpi-total-detalle').textContent = r.devuelto ? t('Todas las cajas, con impuesto · {devuelto} devuelto', { devuelto: dinero(r.devuelto) }) : t('Todas las cajas, con impuesto');
   $('kpi-tickets').textContent = r.tickets.toLocaleString('en-CA');
-  $('kpi-devoluciones').textContent = r.devoluciones === 1 ? '1 devolución' : `${r.devoluciones} devoluciones`;
+  $('kpi-devoluciones').textContent = r.devoluciones === 1 ? t('1 devolución') : t('{n} devoluciones', { n: r.devoluciones });
   $('kpi-promedio').textContent = r.tickets ? dinero(Math.round(r.vendido / r.tickets)) : '—';
-  $('kpi-articulos').textContent = r.tickets ? `${(r.articulos / r.tickets).toFixed(1)} artículos por ticket` : 'Sin ventas todavía';
-  $('kpi-impuesto-etiqueta').textContent = `${config.impuestoNombre} cobrado`;
+  $('kpi-articulos').textContent = r.tickets ? t('{n} artículos por ticket', { n: (r.articulos / r.tickets).toFixed(1) }) : t('Sin ventas todavía');
+  $('kpi-impuesto-etiqueta').textContent = t('{impuesto} cobrado', { impuesto: config.impuestoNombre });
   $('kpi-impuesto').textContent = dinero(r.impuesto);
-  $('kpi-netas').textContent = `Ventas netas sin impuesto: ${dinero(r.netas)}`;
+  $('kpi-netas').textContent = t('Ventas netas sin impuesto: {monto}', { monto: dinero(r.netas) });
 }
 
 function pintarHoras(r) {
@@ -97,7 +98,7 @@ function pintarHoras(r) {
     datos.push({
       etiqueta: `${String(hh).padStart(2, '0')}:00`,
       valor: Math.max(0, celda.total),
-      detalle: celda.tickets === 1 ? '1 ticket' : `${celda.tickets} tickets`,
+      detalle: celda.tickets === 1 ? t('1 ticket') : t('{n} tickets', { n: celda.tickets }),
     });
   }
   grafica.actualizar(datos);
@@ -109,12 +110,12 @@ function pintarHoras(r) {
 
 function pintarPagos(r) {
   const cobrado = METODOS_PAGO.reduce((acc, m) => acc + Math.max(0, r.porMetodo[m]), 0);
-  const partes = METODOS_PAGO.map((m) => ({ nombre: NOMBRE_METODO[m], valor: Math.max(0, r.porMetodo[m]), color: COLOR_METODO[m], texto: dinero(r.porMetodo[m]) }));
-  $('barra-pagos').replaceChildren(barraSegmentada(partes, 'Formas de pago de hoy'));
+  const partes = METODOS_PAGO.map((m) => ({ nombre: nombreMetodo(m), valor: Math.max(0, r.porMetodo[m]), color: COLOR_METODO[m], texto: dinero(r.porMetodo[m]) }));
+  $('barra-pagos').replaceChildren(barraSegmentada(partes, t('Formas de pago de hoy')));
   $('lista-pagos').replaceChildren(...METODOS_PAGO.map((m) => h('li', null,
     h('span', { class: 'muestra-color', style: `background:${COLOR_METODO[m]}` }),
-    h('span', { text: NOMBRE_METODO[m] }),
-    h('span', { class: 'parte', text: cobrado > 0 ? `${Math.round((Math.max(0, r.porMetodo[m]) / cobrado) * 100)} %` : '' }),
+    h('span', { text: nombreMetodo(m) }),
+    h('span', { class: 'parte', text: cobrado > 0 ? t('{n} %', { n: Math.round((Math.max(0, r.porMetodo[m]) / cobrado) * 100) }) : '' }),
     h('span', { class: 'cifra', text: dinero(r.porMetodo[m]) }))));
 }
 
@@ -125,13 +126,13 @@ function pintarCajas(r) {
     let estado;
     let detalle;
     if (!caja.activo) {
-      estado = chip('Desactivada', 'aviso');
+      estado = chip(t('Desactivada'), 'aviso');
       detalle = tienda;
     } else if (caja.turnoActual) {
-      estado = chip('Abierta', 'abierto');
-      detalle = `${caja.turnoCajeroNombre} desde las ${hora(caja.turnoDesde)} · ${dinero(r.porTurno.get(caja.turnoActual) ?? 0)} hoy`;
+      estado = chip(t('Abierta'), 'abierto');
+      detalle = t('{cajera} desde las {hora} · {vendido} hoy', { cajera: caja.turnoCajeroNombre, hora: hora(caja.turnoDesde), vendido: dinero(r.porTurno.get(caja.turnoActual) ?? 0) });
     } else {
-      estado = chip('Libre', 'neutro');
+      estado = chip(t('Libre'), 'neutro');
       detalle = tienda;
     }
     const nombre = caja.turnoActual
@@ -148,7 +149,7 @@ function pintarUltimos() {
   $('tabla-ultimos').tBodies[0].replaceChildren(...ultimos.map((v) => {
     const fila = h('tr', { tabindex: 0, dataset: { id: v.id } },
       h('td', { text: hora(v.fecha) }),
-      h('td', null, v.folio, v.tipo === 'devolucion' ? h('span', { class: 'secundario', text: 'Devolución' }) : null),
+      h('td', null, v.folio, v.tipo === 'devolucion' ? h('span', { class: 'secundario', text: t('Devolución') }) : null),
       h('td', { text: v.cajaNombre }),
       h('td', { text: v.cajeroNombre }),
       h('td', { text: metodosDe(v) }),
@@ -187,11 +188,11 @@ function pintarTodo() {
 
 function escucharDia() {
   dejarVentas?.();
-  $('fecha-hoy').textContent = `${fechaLarga(dia)} · todas las cajas, al momento`;
+  $('fecha-hoy').textContent = t('{fecha} · todas las cajas, al momento', { fecha: fechaLarga(dia) });
   dejarVentas = observarVentasDelDia(dia, (lista) => {
     ventas = lista;
     pintarTodo();
-  }, fallo('las ventas de hoy'));
+  }, fallo(t('las ventas de hoy')));
 }
 escucharDia();
 
@@ -207,18 +208,18 @@ setInterval(() => {
 observarCajas((lista) => {
   cajas = lista;
   pintarTodo();
-}, fallo('las cajas'));
+}, fallo(t('las cajas')));
 
 observarConfigPos((c) => {
   config = c;
   pintarTodo();
-}, fallo('la configuración del POS'));
+}, fallo(t('la configuración del POS')));
 
 observarTiendas((lista) => {
-  tiendas = new Map(lista.map((t) => [t.id, t]));
-  $('ind-tiendas').textContent = String(lista.filter((t) => t.activo).length);
+  tiendas = new Map(lista.map((tienda) => [tienda.id, tienda]));
+  $('ind-tiendas').textContent = String(lista.filter((tienda) => tienda.activo).length);
   pintarTodo();
-}, fallo('las tiendas'));
+}, fallo(t('las tiendas')));
 
 observarCatalogo(({ catalogo }) => {
   let activos = 0;
@@ -230,16 +231,16 @@ observarCatalogo(({ catalogo }) => {
   }
   $('ind-productos').textContent = activos.toLocaleString('en-CA');
   $('ind-pendientes').textContent = pendientes.toLocaleString('en-CA');
-}, fallo('el catálogo'));
+}, fallo(t('el catálogo')));
 
 onSnapshot(collection(db, 'staff'), (resultado) => {
   $('ind-empleados').textContent = String(resultado.docs.filter((d) => d.data().activo === true).length);
-}, fallo('el personal'));
+}, fallo(t('el personal')));
 
 // Ficha anterior a Gestión (solo nombre, rol, activo): se completa una vez, sin cambiar nada más.
 if (!personal.completa) {
   const ahora = Timestamp.fromMillis(Date.now());
   const ficha = { ...armarFichaPersonal({ usuario: personal.usuario, tipo: 'correo', nombre: personal.nombre, rol: personal.rol, activo: true, tienda: personal.tienda }, personal.usuario), creadoEn: ahora, actualizadoEn: ahora };
-  setDoc(doc(db, 'staff', personal.usuario), ficha).catch((error) => avisar(`No se pudo completar tu ficha: ${mensajeError(error)}`, 'error', 0));
+  setDoc(doc(db, 'staff', personal.usuario), ficha).catch((error) => avisar(t('No se pudo completar tu ficha: {error}', { error: mensajeError(error) }), 'error', 0));
 }
 

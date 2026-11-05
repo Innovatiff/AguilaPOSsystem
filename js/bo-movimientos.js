@@ -8,9 +8,10 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
+import { t, tc } from './idioma.js';
 import { observarEventos } from './pos-datos.js';
 import { claveDia, sumarDias, inicioDia, chip, mostrarMensaje } from './bo.js';
-import { infoEvento, horaConSegundos, cumpleFiltros, GRUPOS_EVENTO } from './eventos.js';
+import { infoEvento, horaConSegundos, cumpleFiltros, textoEvento, GRUPOS_EVENTO } from './eventos.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'movimientos.html' });
@@ -51,11 +52,11 @@ function fila(e) {
         chip(info.etiqueta, info.chip),
         h('strong', { text: e.cajeroNombre || e.cajero }),
         h('span', { class: 'movimiento__caja', text: e.cajaNombre || e.caja })),
-      h('p', { class: 'movimiento__texto', text: e.texto })),
+      h('p', { class: 'movimiento__texto', text: textoEvento(e) })),
   ];
   const clase = `movimiento${info.tono ? ` movimiento--${info.tono}` : ''}${nuevo ? ' movimiento--nuevo' : ''}`;
   const fila = e.folio
-    ? h('a', { class: 'movimiento__fila', href: `transacciones.html?folio=${encodeURIComponent(e.folio)}`, title: `Abrir el recibo ${e.folio}` }, contenido)
+    ? h('a', { class: 'movimiento__fila', href: `transacciones.html?folio=${encodeURIComponent(e.folio)}`, title: t('Abrir el recibo {folio}', { folio: e.folio }) }, contenido)
     : h('div', { class: 'movimiento__fila' }, contenido);
   return h('li', { class: clase, dataset: { tipo: e.tipo } }, fila);
 }
@@ -63,20 +64,33 @@ function fila(e) {
 function pintar() {
   const cajas = new Map(eventos.map((e) => [e.caja, e.cajaNombre || e.caja]));
   const personas = new Map(eventos.map((e) => [e.cajero, e.cajeroNombre || e.cajero]));
-  llenarSelect($('f-caja'), [...cajas].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), 'Todas');
-  llenarSelect($('f-cajero'), [...personas].sort((a, b) => a[1].localeCompare(b[1], 'es')), 'Todos');
+  llenarSelect($('f-caja'), [...cajas].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), t('Todas'));
+  llenarSelect($('f-cajero'), [...personas].sort((a, b) => a[1].localeCompare(b[1], 'es')), t('Todos'));
 
   const f = filtros();
   const lista = eventos.filter((e) => cumpleFiltros(e, f));
   $('lista-movimientos').replaceChildren(...lista.map(fila));
   $('vacio').hidden = lista.length > 0;
   $('vacio').textContent = eventos.length === 0
-    ? (dia === claveDia() ? 'Todavía no hay movimientos hoy. Aparecen aquí en cuanto una caja vende.' : 'No hubo movimientos ese día.')
-    : 'Ningún movimiento con esos filtros.';
-  $('pie').textContent = todos
-    ? `${eventos.length} movimientos del día${lista.length !== eventos.length ? ` · ${lista.length} con estos filtros` : ''}.`
-    : `Los últimos ${Math.min(ULTIMOS, eventos.length)} movimientos del día. «Ver todos los movimientos» trae el día completo.`;
+    ? (dia === claveDia() ? t('Todavía no hay movimientos hoy. Aparecen aquí en cuanto una caja vende.') : t('No hubo movimientos ese día.'))
+    : t('Ningún movimiento con esos filtros.');
+  $('pie').textContent = todos ? textoTodos(eventos.length, lista.length) : textoUltimos(Math.min(ULTIMOS, eventos.length));
   vistos = new Set(eventos.map((e) => e.id));
+}
+
+/** «10 movimientos del día.» (y cuántos dejan los filtros). En inglés, «1 event» en singular. */
+function textoTodos(n, filtrados) {
+  if (filtrados !== n) {
+    const valores = { n, filtrados };
+    return n === 1 ? tc('uno', '{n} movimientos del día · {filtrados} con estos filtros.', valores) : t('{n} movimientos del día · {filtrados} con estos filtros.', valores);
+  }
+  return n === 1 ? tc('uno', '{n} movimientos del día.', { n }) : t('{n} movimientos del día.', { n });
+}
+
+function textoUltimos(n) {
+  return n === 1
+    ? tc('uno', 'Los últimos {n} movimientos del día. «Ver todos los movimientos» trae el día completo.', { n })
+    : t('Los últimos {n} movimientos del día. «Ver todos los movimientos» trae el día completo.', { n });
 }
 
 function escuchar() {
@@ -85,7 +99,7 @@ function escuchar() {
   primeraCarga = true;
   const hoy = dia === claveDia();
   $('en-vivo').hidden = !hoy;
-  $('btn-todos').textContent = todos ? 'Ver solo los últimos' : 'Ver todos los movimientos';
+  $('btn-todos').textContent = todos ? t('Ver solo los últimos') : t('Ver todos los movimientos');
   for (const boton of document.querySelectorAll('[data-dia]')) {
     boton.setAttribute('aria-pressed', String(sumarDias(claveDia(), Number(boton.dataset.dia)) === dia));
   }
@@ -104,7 +118,7 @@ function escuchar() {
       pintar();
     }
     if (!desdeCache) primeraCarga = false; // de aquí en adelante, lo que llegue se resalta
-  }, (error) => mostrarMensaje($('mensaje'), 'error', `No se pudieron cargar los movimientos: ${mensajeError(error)}`));
+  }, (error) => mostrarMensaje($('mensaje'), 'error', t('No se pudieron cargar los movimientos: {error}', { error: mensajeError(error) })));
   pintar();
 }
 

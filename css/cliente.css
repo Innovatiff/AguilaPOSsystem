@@ -123,6 +123,25 @@ body.sin-cursor * {
   cursor: pointer;
 }
 
+/* Botón de idioma (js/boton-idioma.js): mientras la pantalla no tiene caja. */
+.cliente__idioma {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.cliente__idioma[hidden] {
+  display: none;
+}
+
+.cliente__idioma svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
 /* ---------------------------------------------------------------- avisos: bienvenida, cerrada, esperando */
 .aviso-cliente {
   display: grid;

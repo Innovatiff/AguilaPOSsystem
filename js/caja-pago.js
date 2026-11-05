@@ -4,7 +4,8 @@
  * reembolso. Las tarjetas se cobran en la terminal del banco: aquí solo se
  * registra el pago ya aprobado. El cálculo vive en js/ticket.js.
  */
-import { METODOS_PAGO, NOMBRE_METODO, estadoCobro, registrarPago, cobrado } from './ticket.js';
+import { METODOS_PAGO, nombreMetodo, estadoCobro, registrarPago, cobrado } from './ticket.js';
+import { t } from './idioma.js';
 import { centavosDesdeTexto } from './precios.js';
 import { h, icono, dinero, abrirDialogo, tecladoNumerico, confirmar } from './caja-ui.js';
 
@@ -35,20 +36,20 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
 
   const cifraTotal = h('strong', { text: dinero(Math.abs(totalCentavos)) });
   const cifraEfectivo = h('strong');
-  const filaEfectivo = h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? 'En efectivo (redondeado)' : 'Total en efectivo (redondeado)' }), cifraEfectivo);
+  const filaEfectivo = h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? t('En efectivo (redondeado)') : t('Total en efectivo (redondeado)') }), cifraEfectivo);
   const cifraPagado = h('strong', { text: dinero(0) });
   const cifraFalta = h('strong');
-  const etiquetaFalta = h('span', { text: devolucion ? 'A devolver' : 'Falta' });
+  const etiquetaFalta = h('span', { text: devolucion ? t('A devolver') : t('Falta') });
   const filaFalta = h('div', { class: 'pago__cifra pago__cifra--falta' }, etiquetaFalta, cifraFalta);
-  const lista = h('ul', { class: 'pago__lista', 'aria-label': 'Pagos registrados' });
+  const lista = h('ul', { class: 'pago__lista', 'aria-label': t('Pagos registrados') });
 
   const botonesMetodo = METODOS_PAGO.map((m) => h('button', {
     type: 'button',
     class: 'opcion',
     'aria-pressed': m === metodo ? 'true' : 'false',
     dataset: { metodo: m },
-  }, icono(ICONO_METODO[m]), h('span', { text: NOMBRE_METODO[m] }), h('kbd', { text: TECLA_METODO[m] })));
-  const metodos = h('div', { class: 'metodos', role: 'group', 'aria-label': 'Forma de pago' }, botonesMetodo);
+  }, icono(ICONO_METODO[m]), h('span', { text: nombreMetodo(m) }), h('kbd', { text: TECLA_METODO[m] })));
+  const metodos = h('div', { class: 'metodos', role: 'group', 'aria-label': t('Forma de pago') }, botonesMetodo);
 
   const idCampo = 'pago-monto';
   const etiquetaMonto = h('label', { for: idCampo });
@@ -57,9 +58,9 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
   const nota = h('p', { class: 'dlg__nota' });
 
   const resumen = h('div', { class: 'pago__resumen' },
-    h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? 'Total a devolver' : 'Total' }), cifraTotal),
+    h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? t('Total a devolver') : t('Total') }), cifraTotal),
     filaEfectivo,
-    h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? 'Devuelto' : 'Pagado' }), cifraPagado),
+    h('div', { class: 'pago__cifra' }, h('span', { text: devolucion ? t('Devuelto') : t('Pagado') }), cifraPagado),
     filaFalta,
     lista);
   const captura = h('div', { class: 'pago__captura', style: 'display:grid; gap:10px; align-content:start' },
@@ -83,11 +84,11 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
     cifraPagado.textContent = dinero(Math.abs(cobrado(pagos)));
 
     lista.replaceChildren(...pagos.map((p, i) => h('li', null,
-      h('span', { text: `${NOMBRE_METODO[p.metodo]}${p.recibidoCentavos ? ` (recibido ${dinero(p.recibidoCentavos)})` : ''}` }),
+      h('span', { text: p.recibidoCentavos ? t('{metodo} (recibido {monto})', { metodo: nombreMetodo(p.metodo), monto: dinero(p.recibidoCentavos) }) : nombreMetodo(p.metodo) }),
       h('span', null, dinero(Math.abs(p.importeCentavos)), ' ', h('button', {
         type: 'button',
-        text: 'Quitar',
-        'aria-label': `Quitar el pago ${i + 1}`,
+        text: t('Quitar'),
+        'aria-label': t('Quitar el pago {n}', { n: i + 1 }),
         onclick: () => {
           pagos.splice(i, 1);
           pintar();
@@ -97,30 +98,32 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
 
     for (const boton of botonesMetodo) boton.setAttribute('aria-pressed', String(boton.dataset.metodo === metodo));
     if (metodo === 'efectivo') {
-      etiquetaMonto.textContent = devolucion ? 'Efectivo a devolver' : 'Efectivo recibido';
+      etiquetaMonto.textContent = devolucion ? t('Efectivo a devolver') : t('Efectivo recibido');
       campo.placeholder = dinero(pendienteEfectivo);
       campo.disabled = devolucion; // la devolución en efectivo es siempre por lo pendiente
       nota.textContent = devolucion
-        ? `Entrega ${dinero(pendienteEfectivo)} al cliente (redondeado a 5 ¢).`
-        : 'Vacío = pago exacto. En efectivo el total se redondea a 5 ¢.';
+        ? t('Entrega {monto} al cliente (redondeado a 5 ¢).', { monto: dinero(pendienteEfectivo) })
+        : t('Vacío = pago exacto. En efectivo el total se redondea a 5 ¢.');
       rapidos.hidden = devolucion;
       rapidos.replaceChildren(...montosRapidos(pendienteEfectivo).map((monto, i) => h('button', {
         type: 'button',
         class: 'btn',
-        text: i === 0 ? `Exacto ${dinero(monto)}` : dinero(monto),
+        text: i === 0 ? t('Exacto {monto}', { monto: dinero(monto) }) : dinero(monto),
         onclick: () => ctxDialogo?.pulsar({ rapido: monto }),
       })));
     } else {
-      etiquetaMonto.textContent = devolucion ? `Monto a devolver con ${NOMBRE_METODO[metodo].toLowerCase()}` : `Monto con ${NOMBRE_METODO[metodo].toLowerCase()}`;
+      etiquetaMonto.textContent = devolucion
+        ? t('Monto a devolver con {metodo}', { metodo: nombreMetodo(metodo).toLowerCase() })
+        : t('Monto con {metodo}', { metodo: nombreMetodo(metodo).toLowerCase() });
       campo.placeholder = dinero(pendiente);
       campo.disabled = false;
       rapidos.hidden = true;
       rapidos.replaceChildren();
       nota.textContent = metodo === 'otro'
-        ? 'Vale, cheque u otra forma de pago. Vacío = todo lo que falta.'
+        ? t('Vale, cheque u otra forma de pago. Vacío = todo lo que falta.')
         : devolucion
-          ? 'Haz el reembolso en la terminal y registra aquí el monto aprobado.'
-          : 'Cobra en la terminal y registra el pago cuando salga APROBADO. Vacío = todo lo que falta.';
+          ? t('Haz el reembolso en la terminal y registra aquí el monto aprobado.')
+          : t('Cobra en la terminal y registra el pago cuando salga APROBADO. Vacío = todo lo que falta.');
     }
   }
 
@@ -135,7 +138,7 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
   function aplicar(montoCentavos) {
     const estado = estadoCobro(totalCentavos, pagos);
     if (metodo === 'efectivo' && !devolucion && montoCentavos > Math.abs(estado.pendienteEfectivoCentavos) + EXCESO_MAXIMO_CENTAVOS) {
-      throw new Error(`El monto recibido (${dinero(montoCentavos)}) es demasiado alto. Revisa lo que escribiste.`);
+      throw new Error(t('El monto recibido ({monto}) es demasiado alto. Revisa lo que escribiste.', { monto: dinero(montoCentavos) }));
     }
     const resultado = registrarPago(totalCentavos, pagos, { metodo, montoCentavos });
     pagos.push(resultado.pago);
@@ -152,7 +155,7 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
     const texto = campo.value.trim();
     if (texto === '') return 0;
     const centavos = centavosDesdeTexto(texto);
-    if (centavos <= 0) throw new Error('El monto debe ser mayor que cero.');
+    if (centavos <= 0) throw new Error(t('El monto debe ser mayor que cero.'));
     return centavos;
   }
 
@@ -162,13 +165,13 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
   });
 
   return abrirDialogo({
-    titulo: devolucion ? `Reembolso · ${dinero(Math.abs(totalCentavos))}` : `Cobrar · ${dinero(totalCentavos)}`,
+    titulo: devolucion ? t('Reembolso · {monto}', { monto: dinero(Math.abs(totalCentavos)) }) : t('Cobrar · {monto}', { monto: dinero(totalCentavos) }),
     clase: 'dlg--ancho',
     cuerpo: [h('div', { class: 'pago' }, resumen, captura)],
     esc: 'cancelar',
     botones: [
-      { texto: 'Volver al ticket', valor: 'cancelar' },
-      { texto: devolucion ? 'Registrar reembolso' : 'Registrar pago', valor: 'aplicar', principal: true, clase: 'btn--exito' },
+      { texto: t('Volver al ticket'), valor: 'cancelar' },
+      { texto: devolucion ? t('Registrar reembolso') : t('Registrar pago'), valor: 'aplicar', principal: true, clase: 'btn--exito' },
     ],
     alAbrir: (ctx) => {
       ctxDialogo = ctx;
@@ -197,10 +200,10 @@ export function cobrar({ totalCentavos, devolucion = false, alCambiar = null }) 
         if (pagos.length > 0) {
           const tarjetas = pagos.some((p) => p.metodo !== 'efectivo');
           const seguro = await confirmar({
-            titulo: 'Descartar los pagos',
-            texto: `Hay ${pagos.length} pago(s) registrado(s) en este cobro. Si vuelves al ticket se descartan.`,
-            nota: tarjetas ? 'Si un pago con tarjeta ya se aprobó en la terminal, anúlalo también en la terminal.' : null,
-            aceptar: 'Descartar y volver',
+            titulo: t('Descartar los pagos'),
+            texto: t('Hay {n} pago(s) registrado(s) en este cobro. Si vuelves al ticket se descartan.', { n: pagos.length }),
+            nota: tarjetas ? t('Si un pago con tarjeta ya se aprobó en la terminal, anúlalo también en la terminal.') : null,
+            aceptar: t('Descartar y volver'),
             peligro: true,
           });
           if (!seguro) return;

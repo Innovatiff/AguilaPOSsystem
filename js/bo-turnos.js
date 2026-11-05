@@ -8,16 +8,17 @@
 import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
+import { t, tc } from './idioma.js';
 import { observarTurnosAbiertos, leerTurnosEntre, leerTurnoCompleto, cerrarTurno, observarVentasDelDia, observarConfigPos } from './pos-datos.js';
 import { observarTiendas, esperarConfirmacion } from './productos.js';
-import { METODOS_PAGO, NOMBRE_METODO } from './ticket.js';
-import { resumirTurno, minutosTurno, diferenciasResumen, milisDe, NOMBRE_MOVIMIENTO, ventasNetas } from './turnos.js';
+import { METODOS_PAGO, nombreMetodo } from './ticket.js';
+import { resumirTurno, minutosTurno, diferenciasResumen, milisDe, nombreMovimiento, ventasNetas } from './turnos.js';
 import { reciboTurno, imprimir } from './recibo.js';
 import { configConDefectos } from './config-pos.js';
 import { centavosDesdeTexto } from './precios.js';
 import {
   dinero, claveDia, sumarDias, inicioDia, fechaHora, hora, formatearDuracion, chip, abrirTicket,
-  descargarCSV, csvMonto, mostrarMensaje, metodosDe,
+  descargarCSV, csvMonto, mostrarMensaje, metodosDe, textoMotivo,
 } from './bo.js';
 
 const { personal } = await requerirPersonal();
@@ -39,18 +40,23 @@ $('f-desde').value = desde;
 $('f-hasta').value = hasta;
 $('contenido').hidden = false;
 
-const minutosDe = (t) => (t.estado === 'cerrado' && t.resumen ? t.resumen.minutos : minutosTurno(t));
+const minutosDe = (tu) => (tu.estado === 'cerrado' && tu.resumen ? tu.resumen.minutos : minutosTurno(tu));
 
-function estadoTurno(t) {
+function estadoTurno(tu) {
   const chips = [];
-  if (t.estado === 'abierto') chips.push(chip('Abierto', 'abierto'));
-  else if (t.diferenciaCentavos === null || t.diferenciaCentavos === undefined) chips.push(chip('Sin conteo', 'neutro'));
-  else if (t.diferenciaCentavos === 0) chips.push(chip('Cuadra', 'abierto'));
-  else if (t.diferenciaCentavos < 0) chips.push(chip('Faltante', 'alerta'));
-  else chips.push(chip('Sobrante', 'aviso'));
-  if (t.cierreForzado) chips.push(chip('Cerrado por admin', 'neutro'));
+  if (tu.estado === 'abierto') chips.push(chip(t('Abierto'), 'abierto'));
+  else if (tu.diferenciaCentavos === null || tu.diferenciaCentavos === undefined) chips.push(chip(t('Sin conteo'), 'neutro'));
+  else if (tu.diferenciaCentavos === 0) chips.push(chip(t('Cuadra'), 'abierto'));
+  else if (tu.diferenciaCentavos < 0) chips.push(chip(t('Faltante'), 'alerta'));
+  else chips.push(chip(t('Sobrante'), 'aviso'));
+  if (tu.cierreForzado) chips.push(chip(t('Cerrado por admin'), 'neutro'));
   return chips;
 }
+
+/** Plurales del inglés para textos que en español van con «(s)» o siempre en plural (así el español queda igual). */
+const cajasVendiendo = (n) => (n === 1 ? tc('uno', '{n} caja(s) vendiendo', { n }) : t('{n} caja(s) vendiendo', { n }));
+const personas = (n) => (n === 1 ? tc('uno', '{n} persona(s)', { n }) : t('{n} persona(s)', { n }));
+const cuantosTurnos = (n) => (n === 1 ? t('1 turno') : t('{n} turnos', { n }));
 
 // ------------------------------------------------------------- abiertos ahora
 
@@ -60,28 +66,28 @@ function pintarAbiertos() {
   const lista = [...abiertos].sort((a, b) => (milisDe(a.abiertoEn) ?? 0) - (milisDe(b.abiertoEn) ?? 0));
   $('abiertos-vacio').hidden = lista.length > 0;
   $('tabla-abiertos').hidden = lista.length === 0;
-  $('abiertos-nota').textContent = lista.length ? `${lista.length} caja(s) vendiendo` : '';
-  $('tabla-abiertos').tBodies[0].replaceChildren(...lista.map((t) => h('tr', { tabindex: 0, dataset: { id: t.id } },
-    h('td', null, t.cajeroNombre, h('span', { class: 'secundario', text: t.cajero })),
-    h('td', { text: t.cajaNombre }),
-    h('td', { text: fechaHora(t.abiertoEn) }),
-    h('td', { class: 'num', text: formatearDuracion(minutosTurno(t)) }),
-    h('td', { class: 'num', text: dinero(t.fondoInicialCentavos) }),
-    h('td', { class: 'num', text: dinero(vendidoPorTurno.get(t.id) ?? 0) }),
-    h('td', { class: 'num' }, h('button', { type: 'button', class: 'boton boton--pequeno', text: 'Ver' })))));
+  $('abiertos-nota').textContent = lista.length ? cajasVendiendo(lista.length) : '';
+  $('tabla-abiertos').tBodies[0].replaceChildren(...lista.map((tu) => h('tr', { tabindex: 0, dataset: { id: tu.id } },
+    h('td', null, tu.cajeroNombre, h('span', { class: 'secundario', text: tu.cajero })),
+    h('td', { text: tu.cajaNombre }),
+    h('td', { text: fechaHora(tu.abiertoEn) }),
+    h('td', { class: 'num', text: formatearDuracion(minutosTurno(tu)) }),
+    h('td', { class: 'num', text: dinero(tu.fondoInicialCentavos) }),
+    h('td', { class: 'num', text: dinero(vendidoPorTurno.get(tu.id) ?? 0) }),
+    h('td', { class: 'num' }, h('button', { type: 'button', class: 'boton boton--pequeno', text: t('Ver') })))));
 }
 
 // ------------------------------------------------------------- periodo
 
 const filtrosActuales = () => ({ caja: $('f-caja').value, persona: $('f-persona').value, estado: $('f-estado').value });
 
-function cumple(t, f) {
-  if (f.caja && t.caja !== f.caja) return false;
-  if (f.persona && t.cajero !== f.persona) return false;
-  if (f.estado === 'cerrado' && t.estado !== 'cerrado') return false;
-  if (f.estado === 'abierto' && t.estado !== 'abierto') return false;
-  if (f.estado === 'diferencia' && !(t.diferenciaCentavos)) return false;
-  if (f.estado === 'forzado' && !t.cierreForzado) return false;
+function cumple(tu, f) {
+  if (f.caja && tu.caja !== f.caja) return false;
+  if (f.persona && tu.cajero !== f.persona) return false;
+  if (f.estado === 'cerrado' && tu.estado !== 'cerrado') return false;
+  if (f.estado === 'abierto' && tu.estado !== 'abierto') return false;
+  if (f.estado === 'diferencia' && !(tu.diferenciaCentavos)) return false;
+  if (f.estado === 'forzado' && !tu.cierreForzado) return false;
   return true;
 }
 
@@ -93,12 +99,12 @@ function llenarSelect(select, pares, todos) {
 
 function filtrados() {
   const f = filtrosActuales();
-  return turnos.filter((t) => cumple(t, f)).sort((a, b) => (milisDe(b.abiertoEn) ?? 0) - (milisDe(a.abiertoEn) ?? 0));
+  return turnos.filter((tu) => cumple(tu, f)).sort((a, b) => (milisDe(b.abiertoEn) ?? 0) - (milisDe(a.abiertoEn) ?? 0));
 }
 
 function pintarPeriodo() {
-  llenarSelect($('f-caja'), [...new Map(turnos.map((t) => [t.caja, t.cajaNombre]))].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), 'Todas');
-  llenarSelect($('f-persona'), [...new Map(turnos.map((t) => [t.cajero, t.cajeroNombre]))].sort((a, b) => a[1].localeCompare(b[1], 'es')), 'Todas');
+  llenarSelect($('f-caja'), [...new Map(turnos.map((tu) => [tu.caja, tu.cajaNombre]))].sort((a, b) => a[1].localeCompare(b[1], 'es', { numeric: true })), t('Todas'));
+  llenarSelect($('f-persona'), [...new Map(turnos.map((tu) => [tu.cajero, tu.cajeroNombre]))].sort((a, b) => a[1].localeCompare(b[1], 'es')), t('Todas'));
   const lista = filtrados();
   let minutos = 0;
   let vendido = 0;
@@ -107,47 +113,50 @@ function pintarPeriodo() {
   let sobrantes = 0;
   let nSobrantes = 0;
   let cerrados = 0;
-  for (const t of lista) {
-    minutos += minutosDe(t);
-    if (t.estado === 'cerrado') {
+  for (const tu of lista) {
+    minutos += minutosDe(tu);
+    if (tu.estado === 'cerrado') {
       cerrados += 1;
-      vendido += t.resumen?.totalCentavos ?? 0;
-      if (t.diferenciaCentavos < 0) {
-        faltantes += -t.diferenciaCentavos;
+      vendido += tu.resumen?.totalCentavos ?? 0;
+      if (tu.diferenciaCentavos < 0) {
+        faltantes += -tu.diferenciaCentavos;
         nFaltantes += 1;
-      } else if (t.diferenciaCentavos > 0) {
-        sobrantes += t.diferenciaCentavos;
+      } else if (tu.diferenciaCentavos > 0) {
+        sobrantes += tu.diferenciaCentavos;
         nSobrantes += 1;
       }
     }
   }
   $('k-turnos').textContent = String(lista.length);
-  $('k-turnos-detalle').textContent = `${cerrados} cerrados · ${lista.length - cerrados} abiertos`;
+  $('k-turnos-detalle').textContent = t('{cerrados} cerrados · {abiertos} abiertos', { cerrados, abiertos: lista.length - cerrados });
   $('k-horas').textContent = formatearDuracion(minutos);
-  $('k-horas-detalle').textContent = `${new Set(lista.map((t) => t.cajero)).size} persona(s)`;
+  $('k-horas-detalle').textContent = personas(new Set(lista.map((tu) => tu.cajero)).size);
   $('k-vendido').textContent = dinero(vendido);
   $('k-faltantes').textContent = dinero(faltantes);
-  $('k-faltantes-detalle').textContent = nFaltantes === 1 ? '1 turno' : `${nFaltantes} turnos`;
+  $('k-faltantes-detalle').textContent = cuantosTurnos(nFaltantes);
   $('k-sobrantes').textContent = dinero(sobrantes);
-  $('k-sobrantes-detalle').textContent = nSobrantes === 1 ? '1 turno' : `${nSobrantes} turnos`;
+  $('k-sobrantes-detalle').textContent = cuantosTurnos(nSobrantes);
 
-  $('contador').textContent = lista.length === turnos.length ? `${lista.length} turnos` : `${lista.length} de ${turnos.length} turnos`;
+  // En español «1 turnos» (como siempre); en inglés, «1 shift».
+  $('contador').textContent = lista.length !== turnos.length
+    ? t('{n} de {total} turnos', { n: lista.length, total: turnos.length })
+    : lista.length === 1 ? tc('uno', '{n} turnos', { n: 1 }) : t('{n} turnos', { n: lista.length });
   $('vacio').hidden = lista.length > 0;
   $('tabla-turnos').hidden = lista.length === 0;
-  $('tabla-turnos').tBodies[0].replaceChildren(...lista.map((t) => {
-    const r = t.resumen;
-    return h('tr', { tabindex: 0, dataset: { id: t.id } },
-      h('td', null, t.cajeroNombre, h('span', { class: 'secundario', text: t.cajero })),
-      h('td', { text: t.cajaNombre }),
-      h('td', { text: fechaHora(t.abiertoEn) }),
-      h('td', { text: t.cerradoEn ? fechaHora(t.cerradoEn) : '—' }),
-      h('td', { class: 'num', text: formatearDuracion(minutosDe(t)) }),
+  $('tabla-turnos').tBodies[0].replaceChildren(...lista.map((tu) => {
+    const r = tu.resumen;
+    return h('tr', { tabindex: 0, dataset: { id: tu.id } },
+      h('td', null, tu.cajeroNombre, h('span', { class: 'secundario', text: tu.cajero })),
+      h('td', { text: tu.cajaNombre }),
+      h('td', { text: fechaHora(tu.abiertoEn) }),
+      h('td', { text: tu.cerradoEn ? fechaHora(tu.cerradoEn) : '—' }),
+      h('td', { class: 'num', text: formatearDuracion(minutosDe(tu)) }),
       h('td', { class: 'num', text: r ? String(r.ventas + r.devoluciones) : '—' }),
       h('td', { class: 'num', text: r ? dinero(r.totalCentavos) : '—' }),
       h('td', { class: 'num', text: r ? dinero(r.efectivo.esperadoCentavos) : '—' }),
-      h('td', { class: 'num', text: t.efectivoContadoCentavos === null || t.efectivoContadoCentavos === undefined ? '—' : dinero(t.efectivoContadoCentavos) }),
-      h('td', { class: 'num', text: t.diferenciaCentavos === null || t.diferenciaCentavos === undefined ? '—' : dinero(t.diferenciaCentavos) }),
-      h('td', null, estadoTurno(t)));
+      h('td', { class: 'num', text: tu.efectivoContadoCentavos === null || tu.efectivoContadoCentavos === undefined ? '—' : dinero(tu.efectivoContadoCentavos) }),
+      h('td', { class: 'num', text: tu.diferenciaCentavos === null || tu.diferenciaCentavos === undefined ? '—' : dinero(tu.diferenciaCentavos) }),
+      h('td', null, estadoTurno(tu)));
   }));
 }
 
@@ -163,7 +172,7 @@ async function cargarPeriodo() {
     mostrarMensaje($('mensaje'), '', '');
   } catch (error) {
     turnos = [];
-    mostrarMensaje($('mensaje'), 'error', `No se pudieron cargar los turnos: ${mensajeError(error)}`);
+    mostrarMensaje($('mensaje'), 'error', t('No se pudieron cargar los turnos: {error}', { error: mensajeError(error) }));
   }
   pintarPeriodo();
 }
@@ -191,12 +200,12 @@ async function abrirDetalle(id) {
   try {
     datos = await leerTurnoCompleto(id);
   } catch (error) {
-    mostrarMensaje($('mensaje'), 'error', `No se pudo leer el turno: ${mensajeError(error)}`);
+    mostrarMensaje($('mensaje'), 'error', t('No se pudo leer el turno: {error}', { error: mensajeError(error) }));
     return;
   }
   const { turno, ventas, movimientos } = datos;
   if (!turno) {
-    mostrarMensaje($('mensaje'), 'error', 'Ese turno no existe.');
+    mostrarMensaje($('mensaje'), 'error', t('Ese turno no existe.'));
     return;
   }
   const abierto = turno.estado === 'abierto';
@@ -209,34 +218,34 @@ async function abrirDetalle(id) {
 
   const e = resumen.efectivo;
   const ficha = h('dl', { class: 'ficha ficha--compacta' },
-    filaDato('Persona', `${turno.cajeroNombre} (${turno.cajero})`),
-    filaDato('Caja', `${turno.cajaNombre} · ${turno.tiendaNombre}`),
-    filaDato('Apertura', fechaHora(turno.abiertoEn)),
-    filaDato('Cierre', abierto ? 'Sigue abierto' : fechaHora(turno.cerradoEn)),
-    filaDato('Horas en caja', formatearDuracion(abierto ? minutosTurno(turno) : resumen.minutos)),
-    filaDato('Fondo inicial', dinero(turno.fondoInicialCentavos)),
-    filaDato('Efectivo esperado', dinero(e.esperadoCentavos)),
-    turno.efectivoContadoCentavos !== null && turno.efectivoContadoCentavos !== undefined ? filaDato('Contado', dinero(turno.efectivoContadoCentavos)) : null,
-    turno.diferenciaCentavos !== null && turno.diferenciaCentavos !== undefined ? filaDato('Diferencia', h('strong', { text: dinero(turno.diferenciaCentavos) })) : null,
-    turno.cierreForzado ? filaDato('Cerró', `${turno.cerradoPor} (administrador)`) : null,
-    turno.notaCierre ? filaDato('Nota', turno.notaCierre) : null);
+    filaDato(t('Persona'), `${turno.cajeroNombre} (${turno.cajero})`),
+    filaDato(t('Caja'), `${turno.cajaNombre} · ${turno.tiendaNombre}`),
+    filaDato(t('Apertura'), fechaHora(turno.abiertoEn)),
+    filaDato(t('Cierre'), abierto ? t('Sigue abierto') : fechaHora(turno.cerradoEn)),
+    filaDato(t('Horas en caja'), formatearDuracion(abierto ? minutosTurno(turno) : resumen.minutos)),
+    filaDato(t('Fondo inicial'), dinero(turno.fondoInicialCentavos)),
+    filaDato(t('Efectivo esperado'), dinero(e.esperadoCentavos)),
+    turno.efectivoContadoCentavos !== null && turno.efectivoContadoCentavos !== undefined ? filaDato(t('Contado'), dinero(turno.efectivoContadoCentavos)) : null,
+    turno.diferenciaCentavos !== null && turno.diferenciaCentavos !== undefined ? filaDato(t('Diferencia'), h('strong', { text: dinero(turno.diferenciaCentavos) })) : null,
+    turno.cierreForzado ? filaDato(t('Cerró'), t('{quien} (administrador)', { quien: turno.cerradoPor })) : null,
+    turno.notaCierre ? filaDato(t('Nota'), turno.notaCierre) : null);
 
   const cifras = h('div', { class: 'datos-bo' },
-    datoResumen('Tickets', String(resumen.ventas + resumen.devoluciones)),
-    datoResumen('Total', dinero(resumen.totalCentavos)),
-    datoResumen('Ventas netas', dinero(ventasNetas(resumen))),
+    datoResumen(t('Tickets'), String(resumen.ventas + resumen.devoluciones)),
+    datoResumen(t('Total'), dinero(resumen.totalCentavos)),
+    datoResumen(t('Ventas netas'), dinero(ventasNetas(resumen))),
     datoResumen(config.impuestoNombre, dinero(resumen.impuestoCentavos)),
-    ...METODOS_PAGO.map((m) => datoResumen(NOMBRE_METODO[m], dinero(resumen.porMetodo[m] ?? 0))),
-    datoResumen('Descuentos', dinero(resumen.descuentosCentavos)),
-    datoResumen('Devoluciones', `${resumen.devoluciones} · ${dinero(resumen.devolucionesCentavos)}`),
-    datoResumen('Líneas anuladas', `${resumen.lineasAnuladas} · ${dinero(resumen.lineasAnuladasCentavos)}`),
-    datoResumen('Tickets cancelados', `${resumen.cancelaciones} · ${dinero(resumen.cancelacionesCentavos)}`),
-    datoResumen('Aperturas de cajón', String(resumen.aperturasCajon)),
-    datoResumen('Con autorización', String(resumen.autorizadas)));
+    ...METODOS_PAGO.map((m) => datoResumen(nombreMetodo(m), dinero(resumen.porMetodo[m] ?? 0))),
+    datoResumen(t('Descuentos'), dinero(resumen.descuentosCentavos)),
+    datoResumen(t('Devoluciones'), `${resumen.devoluciones} · ${dinero(resumen.devolucionesCentavos)}`),
+    datoResumen(t('Líneas anuladas'), `${resumen.lineasAnuladas} · ${dinero(resumen.lineasAnuladasCentavos)}`),
+    datoResumen(t('Tickets cancelados'), `${resumen.cancelaciones} · ${dinero(resumen.cancelacionesCentavos)}`),
+    datoResumen(t('Aperturas de cajón'), String(resumen.aperturasCajon)),
+    datoResumen(t('Con autorización'), String(resumen.autorizadas)));
 
   const ordenadas = [...ventas].sort((a, b) => (milisDe(a.fecha) ?? 0) - (milisDe(b.fecha) ?? 0));
   const tablaVentas = h('table', { class: 'tabla tabla--compacta tabla--clic' },
-    h('thead', null, h('tr', null, h('th', { text: 'Hora' }), h('th', { text: 'Ticket' }), h('th', { text: 'Pago' }), h('th', { class: 'num', text: 'Total' }))),
+    h('thead', null, h('tr', null, h('th', { text: t('Hora') }), h('th', { text: t('Ticket') }), h('th', { text: t('Pago') }), h('th', { class: 'num', text: t('Total') }))),
     h('tbody', null, ordenadas.map((v) => h('tr', { tabindex: 0, dataset: { id: v.id }, class: v.tipo === 'devolucion' ? 'fila--devolucion' : null },
       h('td', { text: hora(v.fecha) }), h('td', { class: 'monoespaciada', text: v.folio }), h('td', { text: metodosDe(v) }), h('td', { class: 'num', text: dinero(v.totalCentavos) })))));
   tablaVentas.addEventListener('click', (ev) => {
@@ -246,29 +255,30 @@ async function abrirDetalle(id) {
   });
   const ordenMov = [...movimientos].sort((a, b) => (milisDe(a.fecha) ?? 0) - (milisDe(b.fecha) ?? 0));
   const tablaMovimientos = h('table', { class: 'tabla tabla--compacta' },
-    h('thead', null, h('tr', null, h('th', { text: 'Hora' }), h('th', { text: 'Movimiento' }), h('th', { text: 'Motivo' }), h('th', { class: 'num', text: 'Monto' }))),
+    h('thead', null, h('tr', null, h('th', { text: t('Hora') }), h('th', { text: tc('efectivo', 'Movimiento') }), h('th', { text: t('Motivo') }), h('th', { class: 'num', text: t('Monto') }))),
     h('tbody', null, ordenMov.map((m) => h('tr', null,
-      h('td', { text: hora(m.fecha) }), h('td', { text: NOMBRE_MOVIMIENTO[m.tipo] ?? m.tipo }), h('td', { text: m.motivo ?? '' }),
+      h('td', { text: hora(m.fecha) }), h('td', { text: nombreMovimiento(m.tipo) }), h('td', { text: textoMotivo(m) }),
       h('td', { class: 'num', text: m.tipo === 'apertura' ? '' : dinero(m.importeCentavos) })))));
 
   const mensaje = h('p', { class: 'mensaje', role: 'status', hidden: true });
-  const botonCorte = h('button', { type: 'button', class: 'boton', text: abierto ? 'Imprimir corte X' : 'Imprimir corte Z' });
-  const botonVerificar = abierto ? null : h('button', { type: 'button', class: 'boton boton--claro', text: 'Verificar contra las ventas' });
-  const botonCerrarTurno = abierto ? h('button', { type: 'button', class: 'boton boton--peligro', text: 'Cerrar este turno' }) : null;
-  const dialogo = h('dialog', { class: 'editor editor--turno', 'aria-label': `Turno de ${turno.cajeroNombre}` },
+  const botonCorte = h('button', { type: 'button', class: 'boton', text: abierto ? t('Imprimir corte X') : t('Imprimir corte Z') });
+  const botonVerificar = abierto ? null : h('button', { type: 'button', class: 'boton boton--claro', text: t('Verificar contra las ventas') });
+  const botonCerrarTurno = abierto ? h('button', { type: 'button', class: 'boton boton--peligro', text: t('Cerrar este turno') }) : null;
+  const titulo = t('Turno de {cajera} · {caja}', { cajera: turno.cajeroNombre, caja: turno.cajaNombre });
+  const dialogo = h('dialog', { class: 'editor editor--turno', 'aria-label': t('Turno de {cajera}', { cajera: turno.cajeroNombre }) },
     h('div', { class: 'editor__form' },
       h('header', { class: 'editor__cabecera' },
-        h('h2', null, `Turno de ${turno.cajeroNombre} · ${turno.cajaNombre} `, estadoTurno(turno)),
-        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
+        h('h2', null, `${titulo} `, estadoTurno(turno)),
+        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: t('Cerrar') })),
       mensaje,
       h('div', { class: 'editor__cuerpo editor__cuerpo--ticket' },
         h('div', null,
           ficha,
           cifras,
-          h('h3', { class: 'subtitulo-bo', text: `Tickets (${ventas.length})` }),
-          ventas.length ? tablaVentas : h('p', { class: 'nota', text: 'Sin tickets.' }),
-          h('h3', { class: 'subtitulo-bo', text: `Movimientos de efectivo (${movimientos.length})` }),
-          movimientos.length ? tablaMovimientos : h('p', { class: 'nota', text: 'Sin retiros, entradas ni aperturas de cajón.' })),
+          h('h3', { class: 'subtitulo-bo', text: t('Tickets ({n})', { n: ventas.length }) }),
+          ventas.length ? tablaVentas : h('p', { class: 'nota', text: t('Sin tickets.') }),
+          h('h3', { class: 'subtitulo-bo', text: t('Movimientos de efectivo ({n})', { n: movimientos.length }) }),
+          movimientos.length ? tablaMovimientos : h('p', { class: 'nota', text: t('Sin retiros, entradas ni aperturas de cajón.') })),
         h('div', { class: 'vista-recibo-bo' }, vista)),
       h('footer', { class: 'editor__pie' }, botonCorte, botonVerificar, botonCerrarTurno)));
 
@@ -278,15 +288,20 @@ async function abrirDetalle(id) {
   botonCorte.addEventListener('click', () => imprimir(corte()));
   botonVerificar?.addEventListener('click', () => {
     if (!turno.resumen) {
-      mostrarMensaje(mensaje, 'error', 'Este turno no tiene resumen guardado.');
+      mostrarMensaje(mensaje, 'error', t('Este turno no tiene resumen guardado.'));
       return;
     }
     const diferencias = diferenciasResumen(turno.resumen, recalculado);
     if (diferencias.length === 0) {
-      mostrarMensaje(mensaje, 'ok', `Cuadra: el corte guardado coincide con los ${ventas.length} tickets y ${movimientos.length} movimientos registrados.`);
+      mostrarMensaje(mensaje, 'ok', t('Cuadra: el corte guardado coincide con los {tickets} tickets y {movimientos} movimientos registrados.', { tickets: ventas.length, movimientos: movimientos.length }));
     } else {
-      const lista = diferencias.map((d) => `${d.campo}: guardado ${d.campo.startsWith('ventas') || d.campo === 'devoluciones' ? d.guardado : dinero(d.guardado)}, ahora ${d.campo.startsWith('ventas') || d.campo === 'devoluciones' ? d.recalculado : dinero(d.recalculado)}`).join(' · ');
-      mostrarMensaje(mensaje, 'error', `No cuadra (${lista}). Suele pasar si una caja sin conexión envió tickets después del cierre.`);
+      // {campo} es el nombre del campo del resumen (ventas, totalCentavos…): se muestra tal cual.
+      const lista = diferencias.map((d) => t('{campo}: guardado {guardado}, ahora {ahora}', {
+        campo: d.campo,
+        guardado: d.campo.startsWith('ventas') || d.campo === 'devoluciones' ? d.guardado : dinero(d.guardado),
+        ahora: d.campo.startsWith('ventas') || d.campo === 'devoluciones' ? d.recalculado : dinero(d.recalculado),
+      })).join(' · ');
+      mostrarMensaje(mensaje, 'error', t('No cuadra ({diferencias}). Suele pasar si una caja sin conexión envió tickets después del cierre.', { diferencias: lista }));
     }
   });
   botonCerrarTurno?.addEventListener('click', async () => {
@@ -305,18 +320,19 @@ async function abrirDetalle(id) {
 /** Cierra desde el back office un turno que quedó abierto (la cajera se fue sin cerrar). */
 function cerrarComoAdmin(turno, ventas, movimientos) {
   return new Promise((resolver) => {
-    const contado = h('input', { id: 'cierre-contado', inputmode: 'decimal', autocomplete: 'off', placeholder: 'Opcional, ej. 154.50' });
-    const nota = h('input', { id: 'cierre-nota', autocomplete: 'off', maxlength: 200, value: 'Cerrado desde el back office' });
+    const contado = h('input', { id: 'cierre-contado', inputmode: 'decimal', autocomplete: 'off', placeholder: t('Opcional, ej. 154.50') });
+    // Nota propuesta, editable: se guarda tal como queda (en el idioma de quien cierra), como una nota escrita a mano.
+    const nota = h('input', { id: 'cierre-nota', autocomplete: 'off', maxlength: 200, value: t('Cerrado desde el back office') });
     const mensaje = h('p', { class: 'mensaje', role: 'status', hidden: true });
-    const confirmar = h('button', { type: 'submit', class: 'boton boton--peligro', text: 'Cerrar el turno' });
+    const confirmar = h('button', { type: 'submit', class: 'boton boton--peligro', text: t('Cerrar el turno') });
     const forma = h('form', { class: 'editor__form', novalidate: true },
-      h('header', { class: 'editor__cabecera' }, h('h2', { text: `Cerrar el turno de ${turno.cajeroNombre}` })),
+      h('header', { class: 'editor__cabecera' }, h('h2', { text: t('Cerrar el turno de {cajera}', { cajera: turno.cajeroNombre }) })),
       h('div', { class: 'editor__cuerpo editor__cuerpo--simple' },
-        h('p', { class: 'nota', text: `${turno.cajaNombre} · abierto desde ${fechaHora(turno.abiertoEn)}. La caja queda libre y el turno se cierra a tu nombre. Si la caja sigue encendida, la cajera verá que su turno se cerró.` }),
-        h('div', { class: 'campo' }, h('label', { for: 'cierre-contado', text: 'Efectivo contado en el cajón ($)' }), contado),
-        h('div', { class: 'campo' }, h('label', { for: 'cierre-nota', text: 'Nota' }), nota),
+        h('p', { class: 'nota', text: t('{caja} · abierto desde {desde}. La caja queda libre y el turno se cierra a tu nombre. Si la caja sigue encendida, la cajera verá que su turno se cerró.', { caja: turno.cajaNombre, desde: fechaHora(turno.abiertoEn) }) }),
+        h('div', { class: 'campo' }, h('label', { for: 'cierre-contado', text: t('Efectivo contado en el cajón ($)') }), contado),
+        h('div', { class: 'campo' }, h('label', { for: 'cierre-nota', text: t('Nota') }), nota),
         mensaje),
-      h('footer', { class: 'editor__pie' }, confirmar, h('button', { type: 'button', class: 'boton boton--claro', 'data-cancelar': '', text: 'Cancelar' })));
+      h('footer', { class: 'editor__pie' }, confirmar, h('button', { type: 'button', class: 'boton boton--claro', 'data-cancelar': '', text: t('Cancelar') })));
     const dialogo = h('dialog', { class: 'editor editor--angosto' }, forma);
     let resultado = false;
     forma.addEventListener('click', (ev) => {
@@ -338,11 +354,11 @@ function cerrarComoAdmin(turno, ventas, movimientos) {
         const promesa = cerrarTurno({ turno, resumen, contadoCentavos, conteo: null, diferenciaCentavos: diferencia, nota: nota.value.trim() || null, quien: personal.usuario });
         promesa.catch(() => {});
         const estado = await esperarConfirmacion(promesa, 10000);
-        if (estado === 'pendiente') throw new Error('Sin conexión con el servidor: el cierre se enviará al volver la red.');
+        if (estado === 'pendiente') throw new Error(t('Sin conexión con el servidor: el cierre se enviará al volver la red.'));
         resultado = true;
         dialogo.close();
       } catch (error) {
-        mostrarMensaje(mensaje, 'error', `No se pudo cerrar: ${error?.code ? mensajeError(error) : error.message}`);
+        mostrarMensaje(mensaje, 'error', t('No se pudo cerrar: {error}', { error: error?.code ? mensajeError(error) : error.message }));
         confirmar.disabled = false;
       }
     });
@@ -394,22 +410,23 @@ for (const id of ['f-caja', 'f-persona', 'f-estado']) $(id).addEventListener('ch
 $('filtros').addEventListener('submit', (ev) => ev.preventDefault());
 
 $('btn-exportar').addEventListener('click', () => {
-  const filas = [['persona', 'codigo', 'caja', 'apertura', 'cierre', 'minutos', 'horas', 'tickets', 'vendido', 'efectivo_esperado', 'contado', 'diferencia', 'cerrado_por_admin']];
-  for (const t of [...filtrados()].reverse()) {
-    const minutos = minutosDe(t);
+  // Reporte para personas (horas): encabezados y «sí» en el idioma elegido; números, fechas y códigos tal cual.
+  const filas = [[t('persona'), t('codigo'), t('caja'), t('apertura'), t('cierre'), t('minutos'), t('horas'), t('tickets'), t('vendido'), t('efectivo_esperado'), t('contado'), t('diferencia'), t('cerrado_por_admin')]];
+  for (const tu of [...filtrados()].reverse()) {
+    const minutos = minutosDe(tu);
     filas.push([
-      t.cajeroNombre, t.cajero, t.cajaNombre, fechaHora(t.abiertoEn), t.cerradoEn ? fechaHora(t.cerradoEn) : '', minutos, (minutos / 60).toFixed(2),
-      t.resumen ? t.resumen.ventas + t.resumen.devoluciones : '', t.resumen ? csvMonto(t.resumen.totalCentavos) : '',
-      t.resumen ? csvMonto(t.resumen.efectivo.esperadoCentavos) : '', csvMonto(t.efectivoContadoCentavos), csvMonto(t.diferenciaCentavos), t.cierreForzado ? 'sí' : '',
+      tu.cajeroNombre, tu.cajero, tu.cajaNombre, fechaHora(tu.abiertoEn), tu.cerradoEn ? fechaHora(tu.cerradoEn) : '', minutos, (minutos / 60).toFixed(2),
+      tu.resumen ? tu.resumen.ventas + tu.resumen.devoluciones : '', tu.resumen ? csvMonto(tu.resumen.totalCentavos) : '',
+      tu.resumen ? csvMonto(tu.resumen.efectivo.esperadoCentavos) : '', csvMonto(tu.efectivoContadoCentavos), csvMonto(tu.diferenciaCentavos), tu.cierreForzado ? t('sí') : '',
     ]);
   }
-  descargarCSV(`turnos-${desde}-a-${hasta}.csv`, filas);
+  descargarCSV(t('turnos-{desde}-a-{hasta}.csv', { desde, hasta }), filas);
 });
 
 observarTurnosAbiertos((lista) => {
   abiertos = lista;
   pintarAbiertos();
-}, (error) => mostrarMensaje($('mensaje'), 'error', `No se pudieron cargar los turnos abiertos: ${mensajeError(error)}`));
+}, (error) => mostrarMensaje($('mensaje'), 'error', t('No se pudieron cargar los turnos abiertos: {error}', { error: mensajeError(error) })));
 
 let diaVentas = claveDia();
 let dejarVentas = observarVentasDelDia(diaVentas, (lista) => {
@@ -428,7 +445,7 @@ setInterval(() => {
   pintarAbiertos();
 }, 60000);
 
-observarTiendas((lista) => { tiendas = new Map(lista.map((t) => [t.id, t])); }, () => {});
+observarTiendas((lista) => { tiendas = new Map(lista.map((tienda) => [tienda.id, tienda])); }, () => {});
 observarConfigPos((c) => { config = c; }, () => {});
 
 const turnoPedido = parametros.get('turno');

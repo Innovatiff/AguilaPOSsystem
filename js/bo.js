@@ -4,11 +4,12 @@
  * chips de estado y la ficha de un ticket con su recibo y reimpresión.
  */
 import { h } from './dom.js';
-import { formatearMonto, formatearPeso, NOMBRE_METODO, claveDia } from './ticket.js';
+import { t, tc, locale, diaYHora } from './idioma.js';
+import { formatearMonto, formatearPeso, nombreMetodo, claveDia } from './ticket.js';
 import { milisDe, formatearDuracion } from './turnos.js';
 import { reciboVenta, imprimir, fechaHora } from './recibo.js';
 import { aCSV } from './csv.js';
-import { infoEvento, horaConSegundos } from './eventos.js';
+import { infoEvento, horaConSegundos, textoEvento, traducirTextoEvento } from './eventos.js';
 
 export const dinero = formatearMonto;
 export { claveDia, fechaHora, formatearDuracion };
@@ -35,8 +36,9 @@ export function diasEntre(desde, hasta) {
   return dias;
 }
 
-const formatoLargo = new Intl.DateTimeFormat('es-CA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-const formatoCorto = new Intl.DateTimeFormat('es-CA', { weekday: 'short', day: 'numeric', month: 'short' });
+// En el idioma elegido (cambiarlo recarga la página): "Lunes, 2 de noviembre de 2026" / "Monday, November 2, 2026".
+const formatoLargo = new Intl.DateTimeFormat(locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const formatoCorto = new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
 
 const conMayuscula = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
@@ -52,17 +54,11 @@ export function fechaCorta(valor) {
   return conMayuscula(formatoCorto.format(fecha));
 }
 
-const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sept', 'oct', 'nov', 'dic'];
-
-/** "mié, 4 de nov 01:19 p.m." (hora local, 12 horas). */
+/** "mié, 4 de nov 01:19 p.m." / "Wed, Nov 4 01:19 PM" (hora local, 12 horas). */
 export function cuando(valor) {
   const ms = milisDe(valor);
   if (ms === null) return '—';
-  const f = new Date(ms);
-  const h24 = f.getHours();
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${DIAS_CORTOS[f.getDay()]}, ${f.getDate()} de ${MESES_CORTOS[f.getMonth()]} ${String(h12).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')} ${h24 < 12 ? 'a.m.' : 'p.m.'}`;
+  return diaYHora(new Date(ms));
 }
 
 /** "08:02" en hora local. */
@@ -76,7 +72,7 @@ export function hora(valor) {
 /** Saludo según la hora del día. */
 export function saludo(nombre, ahora = new Date()) {
   const horaDia = ahora.getHours();
-  const parte = horaDia < 12 ? 'Buenos días' : horaDia < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const parte = horaDia < 12 ? t('Buenos días') : horaDia < 19 ? t('Buenas tardes') : t('Buenas noches');
   // Un correo no es un nombre: quien no tiene nombre puesto recibe solo el saludo.
   const primero = String(nombre ?? '').trim().split(/\s+/)[0];
   return primero && !primero.includes('@') ? `${parte}, ${primero}` : parte;
@@ -84,19 +80,32 @@ export function saludo(nombre, ahora = new Date()) {
 
 // ------------------------------------------------------------- textos y piezas
 
-/** "Efectivo $20.00 + Débito $5.07" (lo cobrado, o lo devuelto en una devolución). */
+/** "Efectivo $20.00 + Débito $5.07" (lo cobrado, o lo devuelto en una devolución), en el idioma elegido. */
 export function textoPagos(venta) {
   if (!venta.pagos?.length) return '—';
   return venta.pagos.map((p) => {
-    const recibio = p.metodo === 'efectivo' && p.recibidoCentavos > Math.abs(p.importeCentavos) ? ` (recibió ${dinero(p.recibidoCentavos)})` : '';
-    return `${NOMBRE_METODO[p.metodo] ?? p.metodo} ${dinero(Math.abs(p.importeCentavos))}${recibio}`;
+    const pago = `${nombreMetodo(p.metodo)} ${dinero(Math.abs(p.importeCentavos))}`;
+    return p.metodo === 'efectivo' && p.recibidoCentavos > Math.abs(p.importeCentavos)
+      ? t('{pago} (recibió {recibido})', { pago, recibido: dinero(p.recibidoCentavos) })
+      : pago;
   }).join(' + ');
 }
 
-/** Métodos usados, sin montos: "Efectivo + Débito". */
+/** Métodos usados, sin montos: "Efectivo + Débito" (en el idioma elegido). */
 export function metodosDe(venta) {
-  const nombres = [...new Set((venta.pagos ?? []).map((p) => NOMBRE_METODO[p.metodo] ?? p.metodo))];
+  const nombres = [...new Set((venta.pagos ?? []).map((p) => nombreMetodo(p.metodo)))];
   return nombres.length ? nombres.join(' + ') : '—';
+}
+
+/**
+ * Motivo de un movimiento de efectivo para mostrar. El de un ticket cancelado lo
+ * escribe la caja en español («3 artículo(s)», «Ticket en espera cancelado al
+ * cerrar el turno»): se muestra en el idioma elegido, como los movimientos en
+ * vivo. Lo que teclea la cajera (retiros, entradas…) es dato y queda tal cual.
+ */
+export function textoMotivo(movimiento) {
+  const motivo = movimiento?.motivo ?? '';
+  return movimiento?.tipo === 'cancelacion' ? traducirTextoEvento(motivo) : motivo;
 }
 
 /** Chip de estado con punto y texto (el color nunca va solo). */
@@ -135,12 +144,12 @@ export function filaDato(termino, valor) {
  * resuelve a la lista (js/pos-datos.js, historialDeVenta / historialDeCancelacion).
  */
 export function seccionHistorial(promesa) {
-  const lista = h('ol', { class: 'historial-auditoria' }, h('li', { class: 'nota', text: 'Cargando el historial…' }));
-  const seccion = h('section', { class: 'historial-auditoria__seccion', 'aria-label': 'Historial de auditoría' },
-    h('h3', { text: 'Historial de auditoría' }), lista);
+  const lista = h('ol', { class: 'historial-auditoria' }, h('li', { class: 'nota', text: t('Cargando el historial…') }));
+  const seccion = h('section', { class: 'historial-auditoria__seccion', 'aria-label': t('Historial de auditoría') },
+    h('h3', { text: t('Historial de auditoría') }), lista);
   Promise.resolve(promesa).then((eventos) => {
     if (!eventos?.length) {
-      lista.replaceChildren(h('li', { class: 'nota', text: 'Sin movimientos registrados para este ticket (los tickets anteriores a «Movimientos en vivo» no tienen historial).' }));
+      lista.replaceChildren(h('li', { class: 'nota', text: t('Sin movimientos registrados para este ticket (los tickets anteriores a «Movimientos en vivo» no tienen historial).') }));
       return;
     }
     lista.replaceChildren(...eventos.map((e) => {
@@ -149,11 +158,11 @@ export function seccionHistorial(promesa) {
       return h('li', { class: `historial-auditoria__item${info.tono ? ` historial-auditoria__item--${info.tono}` : ''}` },
         h('span', { class: 'historial-auditoria__hora', text: `${reloj} ${meridiano}` }),
         chip(info.etiqueta, info.chip),
-        h('span', { class: 'historial-auditoria__texto', text: e.texto }),
+        h('span', { class: 'historial-auditoria__texto', text: textoEvento(e) }),
         h('span', { class: 'secundario', text: e.cajeroNombre || e.cajero }));
     }));
   }).catch(() => {
-    lista.replaceChildren(h('li', { class: 'nota', text: 'No se pudo cargar el historial de auditoría.' }));
+    lista.replaceChildren(h('li', { class: 'nota', text: t('No se pudo cargar el historial de auditoría.') }));
   });
   return seccion;
 }
@@ -161,19 +170,20 @@ export function seccionHistorial(promesa) {
 /** Ficha de un ticket cancelado (sin recibo): quién, cuándo, cuánto y su historial. */
 export function abrirCancelacion(movimiento, { cajaNombre = '', historial = null } = {}) {
   const datos = h('dl', { class: 'ficha ficha--compacta' },
-    filaDato('Fecha', fechaHora(movimiento.fecha)),
-    filaDato('Caja', cajaNombre || movimiento.caja),
-    filaDato('Atendió', `${movimiento.cajeroNombre} (${movimiento.cajero})`),
-    filaDato('Importe cancelado', h('strong', { text: dinero(movimiento.importeCentavos) })),
-    movimiento.motivo ? filaDato('Detalle', movimiento.motivo) : null);
-  const dialogo = h('dialog', { class: 'editor editor--ticket', 'aria-label': 'Ticket cancelado' },
+    filaDato(t('Fecha'), fechaHora(movimiento.fecha)),
+    filaDato(t('Caja'), cajaNombre || movimiento.caja),
+    filaDato(t('Atendió'), `${movimiento.cajeroNombre} (${movimiento.cajero})`),
+    filaDato(t('Importe cancelado'), h('strong', { text: dinero(movimiento.importeCentavos) })),
+    movimiento.motivo ? filaDato(t('Detalle'), textoMotivo(movimiento)) : null);
+  const titulo = t('Ticket cancelado');
+  const dialogo = h('dialog', { class: 'editor editor--ticket', 'aria-label': titulo },
     h('div', { class: 'editor__form' },
       h('header', { class: 'editor__cabecera' },
-        h('h2', null, 'Ticket cancelado ', chip('Anulada', 'alerta')),
-        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
+        h('h2', null, `${titulo} `, chip(t('Anulada'), 'alerta')),
+        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: t('Cerrar') })),
       h('div', { class: 'editor__cuerpo editor__cuerpo--simple' },
         datos,
-        h('p', { class: 'nota', text: 'Un ticket cancelado no se cobró ni generó recibo; queda en el corte del turno como cancelación.' }),
+        h('p', { class: 'nota', text: t('Un ticket cancelado no se cobró ni generó recibo; queda en el corte del turno como cancelación.') }),
         historial ? seccionHistorial(historial) : null)));
   dialogo.addEventListener('click', (e) => {
     if (e.target.closest('[data-cerrar]')) dialogo.close();
@@ -196,42 +206,42 @@ export function abrirTicket(venta, { tienda = null, config = {}, alVerTurno = nu
 
   const lineas = h('table', { class: 'tabla tabla--compacta' },
     h('thead', null, h('tr', null,
-      h('th', { text: 'Artículo' }), h('th', { class: 'num', text: 'Cantidad' }), h('th', { class: 'num', text: 'Precio' }),
-      h('th', { class: 'num', text: 'Descuento' }), h('th', { class: 'num', text: 'Importe' }))),
+      h('th', { text: t('Artículo') }), h('th', { class: 'num', text: t('Cantidad') }), h('th', { class: 'num', text: t('Precio') }),
+      h('th', { class: 'num', text: t('Descuento') }), h('th', { class: 'num', text: t('Importe') }))),
     h('tbody', null, venta.lineas.map((l) => h('tr', null,
       h('td', null, l.nombre, l.presentacion ? h('span', { class: 'secundario', text: l.presentacion }) : null,
-        l.precioOriginalCentavos !== null && l.precioOriginalCentavos !== undefined ? h('span', { class: 'secundario', text: `Precio cambiado (era ${dinero(l.precioOriginalCentavos)})` }) : null,
-        l.departamento ? h('span', { class: 'secundario', text: 'Venta libre por departamento' }) : null),
+        l.precioOriginalCentavos !== null && l.precioOriginalCentavos !== undefined ? h('span', { class: 'secundario', text: t('Precio cambiado (era {precio})', { precio: dinero(l.precioOriginalCentavos) }) }) : null,
+        l.departamento ? h('span', { class: 'secundario', text: tc('linea', 'Venta libre por departamento') }) : null),
       h('td', { class: 'num', text: l.unidad === 'peso' ? formatearPeso(l.pesoGramos) : String(l.cantidad) }),
       h('td', { class: 'num', text: `${dinero(l.precioUnitarioCentavos)}${l.unidad === 'peso' ? '/kg' : ''}` }),
       h('td', { class: 'num', text: l.descuentoCentavos + l.descuentoTicketCentavos ? dinero(-(l.descuentoCentavos + l.descuentoTicketCentavos)) : '' }),
       h('td', { class: 'num', text: `${dinero(l.netoCentavos)}${l.claseFiscal === 'gravado' ? ' T' : ''}` })))));
 
   const datos = h('dl', { class: 'ficha ficha--compacta' },
-    filaDato('Fecha', fechaHora(venta.fecha)),
-    filaDato('Caja', `${venta.cajaNombre} · ${venta.tiendaNombre}`),
-    filaDato('Atendió', `${venta.cajeroNombre} (${venta.cajero})`),
-    filaDato('Total', h('strong', { text: dinero(venta.totalCentavos) })),
-    filaDato(devolucion ? 'Reembolso' : 'Pago', textoPagos(venta)),
-    venta.cambioCentavos > 0 ? filaDato('Cambio', dinero(venta.cambioCentavos)) : null,
-    venta.redondeoCentavos ? filaDato('Redondeo', dinero(venta.redondeoCentavos)) : null,
-    venta.autorizadoPor ? filaDato('Autorizó', venta.autorizadoPor) : null,
-    venta.ventaOriginal ? filaDato('Ticket original', venta.ventaOriginal) : null,
-    venta.lineasAnuladas ? filaDato('Líneas anuladas', `${venta.lineasAnuladas} (${dinero(venta.lineasAnuladasCentavos)})`) : null);
+    filaDato(t('Fecha'), fechaHora(venta.fecha)),
+    filaDato(t('Caja'), `${venta.cajaNombre} · ${venta.tiendaNombre}`),
+    filaDato(t('Atendió'), `${venta.cajeroNombre} (${venta.cajero})`),
+    filaDato(t('Total'), h('strong', { text: dinero(venta.totalCentavos) })),
+    filaDato(devolucion ? t('Reembolso') : t('Pago'), textoPagos(venta)),
+    venta.cambioCentavos > 0 ? filaDato(t('Cambio'), dinero(venta.cambioCentavos)) : null,
+    venta.redondeoCentavos ? filaDato(t('Redondeo'), dinero(venta.redondeoCentavos)) : null,
+    venta.autorizadoPor ? filaDato(t('Autorizó'), venta.autorizadoPor) : null,
+    venta.ventaOriginal ? filaDato(t('Ticket original'), venta.ventaOriginal) : null,
+    venta.lineasAnuladas ? filaDato(t('Líneas anuladas'), `${venta.lineasAnuladas} (${dinero(venta.lineasAnuladasCentavos)})`) : null);
 
-  const botonTurno = alVerTurno ? h('button', { type: 'button', class: 'boton boton--claro', text: 'Ver el turno' }) : null;
+  const botonTurno = alVerTurno ? h('button', { type: 'button', class: 'boton boton--claro', text: t('Ver el turno') }) : null;
   const dialogo = h('dialog', { class: 'editor editor--ticket', 'aria-label': `Ticket ${venta.folio}` },
     h('div', { class: 'editor__form' },
       h('header', { class: 'editor__cabecera' },
-        h('h2', null, `Ticket ${venta.folio} `, devolucion ? chip('Devolución', 'alerta') : null),
-        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: 'Cerrar' })),
+        h('h2', null, `Ticket ${venta.folio} `, devolucion ? chip(t('Devolución'), 'alerta') : null),
+        h('button', { type: 'button', class: 'boton boton--secundario', 'data-cerrar': '', text: t('Cerrar') })),
       h('div', { class: 'editor__cuerpo editor__cuerpo--ticket' },
         h('div', null, datos, lineas, historial ? seccionHistorial(historial) : null),
         h('div', { class: 'vista-recibo-bo' }, recibo)),
       h('footer', { class: 'editor__pie' },
-        h('button', { type: 'button', class: 'boton', 'data-reimprimir': '', text: 'Reimprimir recibo' }),
+        h('button', { type: 'button', class: 'boton', 'data-reimprimir': '', text: t('Reimprimir recibo') }),
         botonTurno,
-        h('span', { class: 'nota', text: 'La copia sale marcada como COPIA.' }))));
+        h('span', { class: 'nota', text: t('La copia sale marcada como COPIA.') }))));
   dialogo.addEventListener('click', (e) => {
     if (e.target.closest('[data-cerrar]')) dialogo.close();
     else if (e.target.closest('[data-reimprimir]')) imprimir(reciboVenta(venta, { tienda, config, copia: true }));

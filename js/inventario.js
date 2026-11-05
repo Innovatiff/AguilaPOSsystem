@@ -13,6 +13,7 @@
  */
 import { normalizarTexto } from './esquema.js';
 import { formatearPeso } from './ticket.js';
+import { t, tc, numero } from './idioma.js';
 
 export const LIMITES_RECEPCION = Object.freeze({
   lineas: 300,
@@ -27,7 +28,7 @@ export const LIMITES_RECEPCION = Object.freeze({
 /** "MASECA Harina de maíz 1.8 kg": marca, nombre y presentación. */
 export function nombreCompleto(producto) {
   return [producto?.marca, producto?.nombre, producto?.presentacion]
-    .filter((t) => typeof t === 'string' && t.trim() !== '')
+    .filter((parte) => typeof parte === 'string' && parte.trim() !== '')
     .join(' ')
     .slice(0, LIMITES_RECEPCION.nombre) || 'Producto';
 }
@@ -35,9 +36,9 @@ export function nombreCompleto(producto) {
 /** Piezas tecleadas: entero de 1 a 99 999. */
 export function piezasDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim();
-  if (!/^\d{1,5}$/.test(limpio)) throw new Error('Cantidad no válida: escribe un número entero de piezas (1 a 99 999).');
+  if (!/^\d{1,5}$/.test(limpio)) throw new Error(t('Cantidad no válida: escribe un número entero de piezas (1 a 99 999).'));
   const piezas = Number.parseInt(limpio, 10);
-  if (piezas < 1) throw new Error('La cantidad debe ser al menos 1 pieza.');
+  if (piezas < 1) throw new Error(t('La cantidad debe ser al menos 1 pieza.'));
   return piezas;
 }
 
@@ -45,9 +46,9 @@ export function piezasDesdeTexto(texto) {
 export function kilosDesdeTexto(texto) {
   const limpio = String(texto ?? '').trim().replace(/\s*kg$/i, '').replace(',', '.');
   const coincidencia = /^(\d{1,5})?(?:\.(\d{0,3}))?$/.exec(limpio);
-  if (!coincidencia || limpio === '' || limpio === '.') throw new Error('Peso no válido: escribe los kilos, por ejemplo 12.500');
+  if (!coincidencia || limpio === '' || limpio === '.') throw new Error(t('Peso no válido: escribe los kilos, por ejemplo 12.500'));
   const gramos = Number.parseInt(coincidencia[1] ?? '0', 10) * 1000 + Number.parseInt((coincidencia[2] ?? '').padEnd(3, '0'), 10);
-  if (gramos <= 0) throw new Error('El peso debe ser mayor que cero.');
+  if (gramos <= 0) throw new Error(t('El peso debe ser mayor que cero.'));
   return gramos;
 }
 
@@ -88,7 +89,7 @@ export function lineaDeRecepcion(producto, { cantidad = null, pesoGramos = null 
 /** Línea de algo que llegó y no está en el catálogo: su código y el nombre que se teclea. */
 export function lineaSinRegistrar({ upc = null, nombre, cantidad = 1 }) {
   const limpio = String(nombre ?? '').trim().replace(/\s+/g, ' ');
-  if (limpio === '') throw new Error('Escribe el nombre del producto.');
+  if (limpio === '') throw new Error(t('Escribe el nombre del producto.'));
   return { producto: null, nombre: limpio.slice(0, LIMITES_RECEPCION.nombre), upc: upc || null, plu: null, cantidad, pesoGramos: null };
 }
 
@@ -102,12 +103,12 @@ export function claveDeLinea(l) {
 /** Errores de una línea (vacío = bien). */
 export function erroresDeLinea(l) {
   const errores = [];
-  if (typeof l?.nombre !== 'string' || l.nombre.trim() === '') errores.push('sin nombre');
+  if (typeof l?.nombre !== 'string' || l.nombre.trim() === '') errores.push(t('sin nombre'));
   if (l?.pesoGramos !== null && l?.pesoGramos !== undefined) {
-    if (!Number.isInteger(l.pesoGramos) || l.pesoGramos <= 0 || l.pesoGramos > LIMITES_RECEPCION.gramos) errores.push('peso no válido');
-    if (l.cantidad !== null) errores.push('una línea por peso no lleva piezas');
+    if (!Number.isInteger(l.pesoGramos) || l.pesoGramos <= 0 || l.pesoGramos > LIMITES_RECEPCION.gramos) errores.push(t('peso no válido'));
+    if (l.cantidad !== null) errores.push(t('una línea por peso no lleva piezas'));
   } else if (!Number.isInteger(l?.cantidad) || l.cantidad < 1 || l.cantidad > LIMITES_RECEPCION.piezas) {
-    errores.push(l?.cantidad === null || l?.cantidad === undefined ? 'falta el peso' : 'cantidad no válida');
+    errores.push(l?.cantidad === null || l?.cantidad === undefined ? t('falta el peso') : t('cantidad no válida'));
   }
   return errores;
 }
@@ -123,11 +124,12 @@ const textoONulo = (valor, maximo) => {
  * personal si algo no cuadra.
  */
 export function armarRecepcion({ lineas, tienda = null, proveedor = null, referencia = null, nota = null }, personal) {
-  if (!Array.isArray(lineas) || lineas.length === 0) throw new Error('Agrega al menos un producto a la entrada.');
+  if (!Array.isArray(lineas) || lineas.length === 0) throw new Error(t('Agrega al menos un producto a la entrada.'));
   const juntas = new Map();
   for (const l of lineas) {
     const errores = erroresDeLinea(l);
-    if (errores.length) throw new Error(`${l?.nombre || 'Una línea'}: ${errores.join(', ')}.`);
+    const cual = l?.nombre || t('Una línea');
+    if (errores.length) throw new Error(`${cual}: ${errores.join(', ')}.`);
     const clave = claveDeLinea(l);
     const previa = juntas.get(clave);
     if (!previa) {
@@ -144,16 +146,16 @@ export function armarRecepcion({ lineas, tienda = null, proveedor = null, refere
     } else if (previa.cantidad !== null && !l.pesoGramos) {
       previa.cantidad += l.cantidad;
     } else {
-      throw new Error(`${l.nombre}: no se puede recibir por piezas y por peso en la misma entrada.`);
+      throw new Error(t('{nombre}: no se puede recibir por piezas y por peso en la misma entrada.', { nombre: l.nombre }));
     }
   }
   const finales = [...juntas.values()];
-  if (finales.length > LIMITES_RECEPCION.lineas) throw new Error(`Una entrada lleva como máximo ${LIMITES_RECEPCION.lineas} productos; regístrala en dos.`);
+  if (finales.length > LIMITES_RECEPCION.lineas) throw new Error(t('Una entrada lleva como máximo {n} productos; regístrala en dos.', { n: LIMITES_RECEPCION.lineas }));
   for (const l of finales) {
-    if ((l.cantidad ?? 0) > LIMITES_RECEPCION.piezas) throw new Error(`${l.nombre}: como máximo ${LIMITES_RECEPCION.piezas} piezas por producto.`);
-    if ((l.pesoGramos ?? 0) > LIMITES_RECEPCION.gramos) throw new Error(`${l.nombre}: el peso es demasiado grande.`);
+    if ((l.cantidad ?? 0) > LIMITES_RECEPCION.piezas) throw new Error(t('{nombre}: como máximo {n} piezas por producto.', { nombre: l.nombre, n: LIMITES_RECEPCION.piezas }));
+    if ((l.pesoGramos ?? 0) > LIMITES_RECEPCION.gramos) throw new Error(t('{nombre}: el peso es demasiado grande.', { nombre: l.nombre }));
   }
-  if (tienda !== null && !/^[a-z0-9-]{2,40}$/.test(tienda)) throw new Error('La tienda no es válida.');
+  if (tienda !== null && !/^[a-z0-9-]{2,40}$/.test(tienda)) throw new Error(t('La tienda no es válida.'));
   return {
     tienda: tienda || null,
     proveedor: textoONulo(proveedor, LIMITES_RECEPCION.proveedor),
@@ -174,7 +176,7 @@ export function armarRecepcion({ lineas, tienda = null, proveedor = null, refere
 /** "48 piezas" · "1 pieza" · "12.500 kg" · "48 piezas · 12.500 kg" · "—". */
 export function textoCantidades({ piezas = 0, gramos = 0 } = {}) {
   const partes = [];
-  if (piezas) partes.push(`${piezas.toLocaleString('es-MX')} ${piezas === 1 ? 'pieza' : 'piezas'}`);
+  if (piezas) partes.push(piezas === 1 ? t('{n} pieza', { n: numero(piezas) }) : t('{n} piezas', { n: numero(piezas) }));
   if (gramos) partes.push(formatearPeso(gramos));
   return partes.join(' · ') || '—';
 }
@@ -198,7 +200,7 @@ export function cumpleFiltrosRecepcion(r, { tienda = '', proveedor = '', buscar 
   const terminos = normalizarTexto(buscar).split(' ').filter(Boolean);
   if (terminos.length) {
     const texto = normalizarTexto([r.proveedor, r.referencia, r.nota, r.recibidoPorNombre, ...(r.lineas ?? []).map((l) => `${l.nombre} ${l.upc ?? ''} ${l.plu ?? ''}`)].join(' '));
-    if (!terminos.every((t) => texto.includes(t))) return false;
+    if (!terminos.every((termino) => texto.includes(termino))) return false;
   }
   return true;
 }
@@ -208,7 +210,7 @@ export function lineaCoincide(l, buscar) {
   const terminos = normalizarTexto(buscar).split(' ').filter(Boolean);
   if (!terminos.length) return true;
   const texto = normalizarTexto(`${l.nombre} ${l.upc ?? ''} ${l.plu ?? ''}`);
-  return terminos.every((t) => texto.includes(t));
+  return terminos.every((termino) => texto.includes(termino));
 }
 
 /**
@@ -286,16 +288,20 @@ export function totalesRecepciones(recepciones, { buscar = '' } = {}) {
 /**
  * Filas del CSV: una por línea de cada entrega, de la más antigua a la más
  * reciente. `fechaTexto` y `nombreTienda` los pone quien llama (formato local).
+ * Es un reporte para personas: encabezados y estados en el idioma elegido.
  */
 export function filasCSVRecepciones(recepciones, { fechaTexto, nombreTienda, buscar = '' }) {
-  const filas = [['fecha', 'tienda', 'proveedor', 'referencia', 'recibio', 'producto', 'upc', 'plu', 'piezas', 'kg', 'estado', 'nota']];
+  const filas = [[
+    tc('csv', 'fecha'), tc('csv', 'tienda'), tc('csv', 'proveedor'), tc('csv', 'referencia'), tc('csv', 'recibio'), tc('csv', 'producto'),
+    'upc', 'plu', tc('csv', 'piezas'), 'kg', tc('csv', 'estado'), tc('csv', 'nota'),
+  ]];
   const ordenadas = [...recepciones].sort((a, b) => (milis(a.fecha) ?? 0) - (milis(b.fecha) ?? 0));
   for (const r of ordenadas) {
     for (const l of lineasVisibles(r, buscar)) {
       filas.push([
         fechaTexto(r.fecha), r.tienda ? nombreTienda(r.tienda) : '', r.proveedor ?? '', r.referencia ?? '', r.recibidoPorNombre ?? '',
         l.nombre, l.upc ?? '', l.plu ?? '', l.cantidad ?? '', l.pesoGramos ? textoKilos(l.pesoGramos) : '',
-        r.anulada ? 'anulada' : 'recibida', r.nota ?? '',
+        r.anulada ? tc('csv', 'anulada') : tc('csv', 'recibida'), r.nota ?? '',
       ]);
     }
   }

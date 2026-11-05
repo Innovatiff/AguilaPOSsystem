@@ -9,6 +9,8 @@
  *
  * El escáner USB de las estaciones no pasa por aquí: escribe como teclado.
  */
+import { t } from './idioma.js';
+
 export const FORMATOS = ['upc_a', 'ean_13', 'upc_e', 'ean_8'];
 const RUTA_ZXING = '../vendor/zxing/0.2.1/zxing-browser.js';
 const REPETICION_MS = 2500; // el mismo código no se vuelve a entregar antes de esto
@@ -18,20 +20,20 @@ export function camaraDisponible() {
   return typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && window.isSecureContext === true;
 }
 
-/** Mensaje en español para un fallo al abrir la cámara. */
+/** Mensaje para la persona (en el idioma elegido) ante un fallo al abrir la cámara. */
 export function mensajeCamara(error) {
   switch (error?.name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return 'Permite el acceso a la cámara en el navegador para escanear.';
+      return t('Permite el acceso a la cámara en el navegador para escanear.');
     case 'NotFoundError':
     case 'OverconstrainedError':
-      return 'No se encontró una cámara en este dispositivo.';
+      return t('No se encontró una cámara en este dispositivo.');
     case 'NotReadableError':
     case 'AbortError':
-      return 'La cámara está ocupada por otra aplicación.';
+      return t('La cámara está ocupada por otra aplicación.');
     default:
-      return `No se pudo abrir la cámara${error?.message ? ` (${error.message})` : ''}.`;
+      return error?.message ? t('No se pudo abrir la cámara ({error}).', { error: error.message }) : t('No se pudo abrir la cámara.');
   }
 }
 
@@ -149,7 +151,7 @@ export async function abrirEscaner(video, { alDetectar, alError = () => {} }) {
       } catch {
         // ya detenido
       }
-      for (const t of stream?.getTracks?.() ?? []) t.stop();
+      for (const canal of stream?.getTracks?.() ?? []) canal.stop();
       video.srcObject = null;
     },
   };

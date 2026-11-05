@@ -3,6 +3,7 @@
  * Sin Firebase, sin autenticación, sin navegación.
  */
 import { renderEtiqueta, ajustarEtiqueta, plantillaPara, leerMedidaMM } from './etiquetas.js';
+import { t, enIngles } from './idioma.js';
 
 // Solo campos del esquema products/{id}; los que la etiqueta no usa se omiten.
 const MUESTRAS = [
@@ -41,8 +42,8 @@ const MUESTRAS = [
 ];
 
 const TITULO_PLANTILLA = {
-  conCodigo: 'Plantilla A · conCodigo (pieza con UPC)',
-  sinCodigo: 'Plantilla B · sinCodigo (peso o sin UPC)',
+  conCodigo: t('Plantilla A · conCodigo (pieza con UPC)'),
+  sinCodigo: t('Plantilla B · sinCodigo (peso o sin UPC)'),
 };
 
 function pintarMuestras() {
@@ -63,7 +64,7 @@ function pintarMuestras() {
     } catch (error) {
       const aviso = document.createElement('p');
       aviso.className = 'error';
-      aviso.textContent = `No se pudo generar la etiqueta: ${error.message}`;
+      aviso.textContent = t('No se pudo generar la etiqueta: {error}', { error: error.message });
       figura.append(aviso);
     }
     contenedor.append(figura);
@@ -75,16 +76,25 @@ function ajustarTodas() {
 }
 
 function mostrarMedidas() {
-  const mm = (propiedad) => leerMedidaMM(propiedad).toLocaleString('es-MX', { maximumFractionDigits: 3 });
+  // Punto decimal en los dos idiomas (es-MX y en-CA): «0.33 mm».
+  const formato = enIngles() ? 'en-CA' : 'es-MX';
+  const mm = (propiedad) => leerMedidaMM(propiedad).toLocaleString(formato, { maximumFractionDigits: 3 });
   const util = (propiedad) =>
-    (leerMedidaMM(propiedad) - 2 * leerMedidaMM('--borde-impresora')).toLocaleString('es-MX', {
+    (leerMedidaMM(propiedad) - 2 * leerMedidaMM('--borde-impresora')).toLocaleString(formato, {
       maximumFractionDigits: 3,
     });
-  document.getElementById('medidas').textContent =
-    `Etiqueta ${mm('--tag-ancho')} × ${mm('--tag-alto')} mm · ` +
-    `área imprimible ${util('--tag-ancho')} × ${util('--tag-alto')} mm · ` +
-    `módulo ${mm('--barcode-modulo')} mm · zona silenciosa ${mm('--quiet-zone')} mm · ` +
-    `barras ${mm('--barcode-alto')} mm de alto`;
+  document.getElementById('medidas').textContent = t(
+    'Etiqueta {ancho} × {alto} mm · área imprimible {anchoUtil} × {altoUtil} mm · módulo {modulo} mm · zona silenciosa {zona} mm · barras {barras} mm de alto',
+    {
+      ancho: mm('--tag-ancho'),
+      alto: mm('--tag-alto'),
+      anchoUtil: util('--tag-ancho'),
+      altoUtil: util('--tag-alto'),
+      modulo: mm('--barcode-modulo'),
+      zona: mm('--quiet-zone'),
+      barras: mm('--barcode-alto'),
+    },
+  );
 }
 
 async function iniciar() {

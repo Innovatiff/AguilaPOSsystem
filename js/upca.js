@@ -16,6 +16,8 @@
  * debajo, el primero a la izquierda del símbolo.
  */
 
+import { t } from './idioma.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** Patrones L (paridad impar): empiezan en espacio, terminan en barra. */
@@ -62,7 +64,7 @@ function esGuarda(indice) {
  */
 export function digitoVerificadorGTIN(cuerpo) {
   if (!/^\d{11,12}$/.test(cuerpo)) {
-    throw new Error('Se necesitan 11 dígitos (UPC-A) o 12 (EAN-13) para calcular el verificador');
+    throw new Error(t('Se necesitan 11 dígitos (UPC-A) o 12 (EAN-13) para calcular el verificador'));
   }
   const n = cuerpo.length;
   let suma = 0;
@@ -80,7 +82,7 @@ export function digitoVerificadorGTIN(cuerpo) {
  */
 export function digitoVerificadorUPCA(once) {
   if (!/^\d{11}$/.test(once)) {
-    throw new Error('Se necesitan exactamente 11 dígitos para calcular el verificador');
+    throw new Error(t('Se necesitan exactamente 11 dígitos para calcular el verificador'));
   }
   return digitoVerificadorGTIN(once);
 }
@@ -95,23 +97,23 @@ export function digitoVerificadorUPCA(once) {
  */
 export function normalizarUPC(entrada) {
   const texto = String(entrada ?? '').replace(/\s+/g, '');
-  if (texto === '') throw new Error('El UPC está vacío');
-  if (!/^\d+$/.test(texto)) throw new Error(`El UPC "${texto}" contiene caracteres que no son dígitos`);
+  if (texto === '') throw new Error(t('El UPC está vacío'));
+  if (!/^\d+$/.test(texto)) throw new Error(t('El UPC "{texto}" contiene caracteres que no son dígitos', { texto }));
 
   let digitos = texto;
   if (digitos.length === 13 && digitos[0] === '0') digitos = digitos.slice(1); // forma EAN-13 de un UPC-A
   if (digitos.length === 8) {
     if (digitos[0] !== '0' && digitos[0] !== '1') {
-      throw new Error(`"${texto}" es un EAN-8, que todavía no se admite`);
+      throw new Error(t('"{texto}" es un EAN-8, que todavía no se admite', { texto }));
     }
     digitos = expandirUPCE(digitos); // UPC-E: forma comprimida de un UPC-A
   }
   if (digitos.length !== 12 && digitos.length !== 13) {
-    throw new Error(`El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13); "${texto}" tiene ${texto.length}`);
+    throw new Error(t('El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13); "{texto}" tiene {n}', { texto, n: texto.length }));
   }
   const esperado = digitoVerificadorGTIN(digitos.slice(0, -1));
   if (esperado !== digitos.charCodeAt(digitos.length - 1) - 48) {
-    throw new Error(`Dígito verificador incorrecto en "${texto}" (debería terminar en ${esperado})`);
+    throw new Error(t('Dígito verificador incorrecto en "{texto}" (debería terminar en {esperado})', { texto, esperado }));
   }
   return digitos;
 }
@@ -124,7 +126,7 @@ export function normalizarUPC(entrada) {
  * @returns {string} 12 dígitos
  */
 export function expandirUPCE(ocho) {
-  if (!/^[01]\d{7}$/.test(ocho)) throw new Error(`"${ocho}" no es un UPC-E (8 dígitos que empiezan por 0 o 1)`);
+  if (!/^[01]\d{7}$/.test(ocho)) throw new Error(t('"{codigo}" no es un UPC-E (8 dígitos que empiezan por 0 o 1)', { codigo: String(ocho) }));
   const sistema = ocho[0];
   const d = ocho.slice(1, 7);
   const verificador = ocho[7];
@@ -151,7 +153,7 @@ export function tipoDeCodigo(codigo) {
  */
 export function modulosUPCA(upc) {
   const digitos = normalizarUPC(upc);
-  if (digitos.length !== 12) throw new Error(`"${upc}" es un EAN-13; usa modulosEAN13 o modulosGTIN`);
+  if (digitos.length !== 12) throw new Error(t('"{codigo}" es un EAN-13; usa modulosEAN13 o modulosGTIN', { codigo: String(upc) }));
   let bits = GUARDA_LATERAL;
   for (let i = 0; i < 6; i += 1) bits += CODIGOS_L[digitos.charCodeAt(i) - 48];
   bits += GUARDA_CENTRAL;
@@ -167,7 +169,7 @@ export function modulosUPCA(upc) {
  */
 export function modulosEAN13(ean) {
   const digitos = normalizarUPC(ean);
-  if (digitos.length !== 13) throw new Error(`"${ean}" es un UPC-A; usa modulosUPCA o modulosGTIN`);
+  if (digitos.length !== 13) throw new Error(t('"{codigo}" es un UPC-A; usa modulosUPCA o modulosGTIN', { codigo: String(ean) }));
   const paridad = PARIDAD_EAN13[digitos.charCodeAt(0) - 48];
   let bits = GUARDA_LATERAL;
   for (let i = 1; i <= 6; i += 1) {
@@ -220,7 +222,7 @@ export function svgCodigoBarras(codigo, medidas) {
 
   for (const [nombre, valor] of Object.entries({ modulo, quietZone, altoBarras, tamanoDigitos })) {
     if (!(Number.isFinite(valor) && valor > 0)) {
-      throw new Error(`Medida inválida para el código de barras: ${nombre} = ${String(valor)}`);
+      throw new Error(t('Medida inválida para el código de barras: {nombre} = {valor}', { nombre, valor: String(valor) }));
     }
   }
   if (quietZone < QUIET_ZONE_MINIMA_MODULOS * modulo) {

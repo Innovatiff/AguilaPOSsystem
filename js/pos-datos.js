@@ -31,6 +31,7 @@ import {
 import { correoDeNip } from './auth.js';
 import { configConDefectos, armarConfigPos } from './config-pos.js';
 import { usuarioDe } from './identidad.js';
+import { t } from './idioma.js';
 
 const conId = (instantanea) => ({ id: instantanea.id, ...instantanea.data() });
 
@@ -392,7 +393,7 @@ export function registrarMovimiento({ turno, personal, tipo, importeCentavos = 0
 /** Comprueba el NIP (o contraseña) de quien tiene la sesión, contra Firebase. Necesita conexión. */
 export async function comprobarSecretoEnServidor(secreto) {
   const usuario = auth.currentUser;
-  if (!usuario?.email) throw Object.assign(new Error('Sin sesión'), { code: 'caja/sin-sesion' });
+  if (!usuario?.email) throw Object.assign(new Error(t('Sin sesión')), { code: 'caja/sin-sesion' });
   await reauthenticateWithCredential(usuario, EmailAuthProvider.credential(usuario.email, String(secreto)));
 }
 
@@ -413,7 +414,7 @@ export async function autorizarComoAdmin({ nip, claveCaja, tipo, turno, detalle 
     const ficha = await getDoc(doc(sesion.db, 'staff', admin));
     const datos = ficha.exists() ? ficha.data() : null;
     if (!datos || datos.activo !== true || datos.rol !== 'admin') {
-      throw Object.assign(new Error('Esa persona no es administradora: no puede autorizar.'), { code: 'caja/no-admin' });
+      throw Object.assign(new Error(t('Esa persona no es administradora: no puede autorizar.')), { code: 'caja/no-admin' });
     }
     const ref = doc(collection(sesion.db, 'autorizaciones'));
     await setDoc(ref, {

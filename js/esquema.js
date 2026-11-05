@@ -3,6 +3,7 @@
  * Módulo puro (sin Firebase ni DOM) para poder probarlo en Node y reutilizarlo
  * en el POS. Refleja exactamente lo que exigen las reglas de Firestore.
  */
+import { t } from './idioma.js';
 
 export const UNIDADES_VENTA = Object.freeze(['pieza', 'peso']);
 export const CLASES_FISCALES = Object.freeze(['gravado', 'tasaCero']);
@@ -132,7 +133,7 @@ export function agruparPorTienda(productos, tiendas) {
   const grupos = tiendas
     .map((tienda) => ({ tienda, productos: ordenados.filter((p) => p.tiendas.includes(tienda.id)) }))
     .filter((grupo) => grupo.productos.length > 0);
-  const conocidas = new Set(tiendas.map((t) => t.id));
+  const conocidas = new Set(tiendas.map((tienda) => tienda.id));
   const sinTienda = ordenados.filter((p) => !p.tiendas.some((id) => conocidas.has(id)));
   if (sinTienda.length > 0) grupos.push({ tienda: null, productos: sinTienda });
   return grupos;
@@ -166,44 +167,44 @@ const esTextoONulo = (v, maximo) => v === null || (typeof v === 'string' && v.le
 
 /**
  * Valida un documento de producto completo contra el esquema.
- * Devuelve la lista de errores (vacía si es válido), en español, para la UI.
+ * Devuelve la lista de errores (vacía si es válido), en el idioma elegido, para la UI.
  * Las marcas de tiempo se aceptan como cualquier objeto no nulo (Timestamp).
  */
 export function validarProducto(p) {
   const errores = [];
-  if (p === null || typeof p !== 'object') return ['El producto no es un objeto'];
+  if (p === null || typeof p !== 'object') return [t('El producto no es un objeto')];
 
   const claves = Object.keys(p);
-  for (const campo of CAMPOS_PRODUCTO) if (!claves.includes(campo)) errores.push(`Falta el campo ${campo}`);
-  for (const clave of claves) if (!CAMPOS_PRODUCTO.includes(clave)) errores.push(`Campo no permitido: ${clave}`);
+  for (const campo of CAMPOS_PRODUCTO) if (!claves.includes(campo)) errores.push(t('Falta el campo {campo}', { campo }));
+  for (const clave of claves) if (!CAMPOS_PRODUCTO.includes(clave)) errores.push(t('Campo no permitido: {clave}', { clave }));
   if (errores.length > 0) return errores;
 
-  if (!(p.upc === null || (typeof p.upc === 'string' && REGEX_UPC.test(p.upc)))) errores.push('El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13), o estar vacío');
-  if (!(p.plu === null || (typeof p.plu === 'string' && REGEX_PLU.test(p.plu)))) errores.push('El PLU debe tener 4 o 5 dígitos o estar vacío');
-  if (!(typeof p.nombre === 'string' && p.nombre.length > 0 && p.nombre.length <= LIMITES.nombre)) errores.push(`El nombre es obligatorio (máximo ${LIMITES.nombre} caracteres)`);
-  if (!esTextoONulo(p.marca, LIMITES.marca)) errores.push(`La marca no puede superar ${LIMITES.marca} caracteres`);
-  if (!esTextoONulo(p.descriptor, LIMITES.descriptor)) errores.push(`El descriptor no puede superar ${LIMITES.descriptor} caracteres`);
-  if (!(typeof p.presentacion === 'string' && p.presentacion.length <= LIMITES.presentacion)) errores.push(`La presentación debe ser texto (máximo ${LIMITES.presentacion} caracteres)`);
-  if (!(esEntero(p.precioCentavos) && p.precioCentavos >= 0 && p.precioCentavos <= LIMITES.precioCentavosMaximo)) errores.push('El precio debe ser un entero en centavos entre 0 y 9,999,999');
-  if (!UNIDADES_VENTA.includes(p.unidadVenta)) errores.push('La unidad de venta debe ser "pieza" o "peso"');
+  if (!(p.upc === null || (typeof p.upc === 'string' && REGEX_UPC.test(p.upc)))) errores.push(t('El código debe tener 12 dígitos (UPC-A) o 13 (EAN-13), o estar vacío'));
+  if (!(p.plu === null || (typeof p.plu === 'string' && REGEX_PLU.test(p.plu)))) errores.push(t('El PLU debe tener 4 o 5 dígitos o estar vacío'));
+  if (!(typeof p.nombre === 'string' && p.nombre.length > 0 && p.nombre.length <= LIMITES.nombre)) errores.push(t('El nombre es obligatorio (máximo {max} caracteres)', { max: LIMITES.nombre }));
+  if (!esTextoONulo(p.marca, LIMITES.marca)) errores.push(t('La marca no puede superar {max} caracteres', { max: LIMITES.marca }));
+  if (!esTextoONulo(p.descriptor, LIMITES.descriptor)) errores.push(t('El descriptor no puede superar {max} caracteres', { max: LIMITES.descriptor }));
+  if (!(typeof p.presentacion === 'string' && p.presentacion.length <= LIMITES.presentacion)) errores.push(t('La presentación debe ser texto (máximo {max} caracteres)', { max: LIMITES.presentacion }));
+  if (!(esEntero(p.precioCentavos) && p.precioCentavos >= 0 && p.precioCentavos <= LIMITES.precioCentavosMaximo)) errores.push(t('El precio debe ser un entero en centavos entre 0 y 9,999,999'));
+  if (!UNIDADES_VENTA.includes(p.unidadVenta)) errores.push(t('La unidad de venta debe ser "pieza" o "peso"'));
   if (p.unidadVenta === 'pieza') {
-    if (!(esEntero(p.precioCentavos) && p.precioCentavos > 0)) errores.push('Un producto por pieza necesita precio mayor que cero');
-    if (p.precioPorKgCentavos !== null) errores.push('Un producto por pieza no lleva precio por kilo');
+    if (!(esEntero(p.precioCentavos) && p.precioCentavos > 0)) errores.push(t('Un producto por pieza necesita precio mayor que cero'));
+    if (p.precioPorKgCentavos !== null) errores.push(t('Un producto por pieza no lleva precio por kilo'));
   }
-  if (p.unidadVenta === 'peso' && !(esEntero(p.precioPorKgCentavos) && p.precioPorKgCentavos > 0)) errores.push('Un producto por peso necesita precio por kilo en centavos, mayor que cero');
-  if (!CLASES_FISCALES.includes(p.claseFiscal)) errores.push('La clase fiscal debe ser "gravado" o "tasaCero"');
-  if (!(Array.isArray(p.tiendas) && p.tiendas.length <= LIMITES.tiendasMaximo && p.tiendas.every((t) => typeof t === 'string' && t !== ''))) errores.push('Las tiendas deben ser una lista de identificadores');
-  if (!(p.existencias === null || esEntero(p.existencias))) errores.push('Las existencias deben ser un entero o null');
-  if (!(p.costoCentavos === null || esEntero(p.costoCentavos))) errores.push('El costo debe ser un entero en centavos o null');
-  if (!esTextoONulo(p.proveedor, LIMITES.proveedor)) errores.push(`El proveedor no puede superar ${LIMITES.proveedor} caracteres`);
-  if (typeof p.activo !== 'boolean') errores.push('activo debe ser verdadero o falso');
-  if (!(p.ultimoPrecioImpresoCentavos === null || (esEntero(p.ultimoPrecioImpresoCentavos) && p.ultimoPrecioImpresoCentavos >= 0))) errores.push('El último precio impreso debe ser un entero en centavos o null');
-  if (!(p.fechaUltimaImpresion === null || esFechaISO(p.fechaUltimaImpresion))) errores.push('La fecha de última impresión debe ser "YYYY-MM-DD" o null');
-  if (!(Array.isArray(p.tokensBusqueda) && p.tokensBusqueda.length <= LIMITES.tokensMaximo)) errores.push('tokensBusqueda debe ser una lista');
-  if (!(p.creadoEn && typeof p.creadoEn === 'object')) errores.push('Falta creadoEn');
-  if (!(p.actualizadoEn && typeof p.actualizadoEn === 'object')) errores.push('Falta actualizadoEn');
+  if (p.unidadVenta === 'peso' && !(esEntero(p.precioPorKgCentavos) && p.precioPorKgCentavos > 0)) errores.push(t('Un producto por peso necesita precio por kilo en centavos, mayor que cero'));
+  if (!CLASES_FISCALES.includes(p.claseFiscal)) errores.push(t('La clase fiscal debe ser "gravado" o "tasaCero"'));
+  if (!(Array.isArray(p.tiendas) && p.tiendas.length <= LIMITES.tiendasMaximo && p.tiendas.every((id) => typeof id === 'string' && id !== ''))) errores.push(t('Las tiendas deben ser una lista de identificadores'));
+  if (!(p.existencias === null || esEntero(p.existencias))) errores.push(t('Las existencias deben ser un entero o null'));
+  if (!(p.costoCentavos === null || esEntero(p.costoCentavos))) errores.push(t('El costo debe ser un entero en centavos o null'));
+  if (!esTextoONulo(p.proveedor, LIMITES.proveedor)) errores.push(t('El proveedor no puede superar {max} caracteres', { max: LIMITES.proveedor }));
+  if (typeof p.activo !== 'boolean') errores.push(t('activo debe ser verdadero o falso'));
+  if (!(p.ultimoPrecioImpresoCentavos === null || (esEntero(p.ultimoPrecioImpresoCentavos) && p.ultimoPrecioImpresoCentavos >= 0))) errores.push(t('El último precio impreso debe ser un entero en centavos o null'));
+  if (!(p.fechaUltimaImpresion === null || esFechaISO(p.fechaUltimaImpresion))) errores.push(t('La fecha de última impresión debe ser "YYYY-MM-DD" o null'));
+  if (!(Array.isArray(p.tokensBusqueda) && p.tokensBusqueda.length <= LIMITES.tokensMaximo)) errores.push(t('tokensBusqueda debe ser una lista'));
+  if (!(p.creadoEn && typeof p.creadoEn === 'object')) errores.push(t('Falta {campo}', { campo: 'creadoEn' }));
+  if (!(p.actualizadoEn && typeof p.actualizadoEn === 'object')) errores.push(t('Falta {campo}', { campo: 'actualizadoEn' }));
   // Usuario estable de quien escribe: código de empleado (dígitos) o correo. Ver js/identidad.js.
-  if (!(typeof p.actualizadoPor === 'string' && (/^[0-9]{6}$/.test(p.actualizadoPor) || p.actualizadoPor.includes('@')))) errores.push('actualizadoPor debe ser el usuario de quien escribe (código o correo)');
+  if (!(typeof p.actualizadoPor === 'string' && (/^[0-9]{6}$/.test(p.actualizadoPor) || p.actualizadoPor.includes('@')))) errores.push(t('actualizadoPor debe ser el usuario de quien escribe (código o correo)'));
   return errores;
 }
 

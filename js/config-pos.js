@@ -3,10 +3,13 @@
  * Módulo puro: lo usan la caja, el back office (Configuración) y las pruebas.
  */
 import { TASA_HST_BP } from './ticket.js';
+import { t } from './idioma.js';
 
 /** Colores de las teclas de departamento (clases CSS de la caja, no colores libres). */
 export const COLORES_DEPARTAMENTO = Object.freeze(['verde', 'naranja', 'rojo', 'azul', 'amarillo', 'morado', 'turquesa', 'gris']);
 
+// Los nombres de los departamentos y el pie del recibo de fábrica son datos (se guardan en config/pos): no se traducen.
+// i18n:sin-revisar-inicio
 /** Teclas de departamento para vender artículos sin código o que no están en el catálogo. */
 export const DEPARTAMENTOS_DEFECTO = Object.freeze([
   { id: 'abarrotes', nombre: 'Abarrotes', claseFiscal: 'tasaCero', color: 'verde' },
@@ -30,6 +33,7 @@ export const CONFIG_POS_DEFECTO = Object.freeze({
   reciboPie: '¡Gracias por su compra!',
   departamentos: DEPARTAMENTOS_DEFECTO,
 });
+// i18n:sin-revisar-fin
 
 export const MAXIMO_DEPARTAMENTOS = 24;
 
@@ -55,11 +59,11 @@ export function configConDefectos(guardada) {
 /** Errores de una tecla de departamento (vacío si está bien). */
 export function validarDepartamento(d) {
   const errores = [];
-  if (!d || typeof d !== 'object') return ['Departamento no válido'];
-  if (typeof d.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(d.id)) errores.push('Identificador no válido');
-  if (typeof d.nombre !== 'string' || d.nombre.trim() === '' || d.nombre.length > 30) errores.push('El nombre debe tener de 1 a 30 caracteres');
-  if (!['gravado', 'tasaCero'].includes(d.claseFiscal)) errores.push('Clase fiscal no válida');
-  if (!COLORES_DEPARTAMENTO.includes(d.color)) errores.push('Color no válido');
+  if (!d || typeof d !== 'object') return [t('Departamento no válido')];
+  if (typeof d.id !== 'string' || !/^[a-z0-9-]{2,40}$/.test(d.id)) errores.push(t('Identificador no válido'));
+  if (typeof d.nombre !== 'string' || d.nombre.trim() === '' || d.nombre.length > 30) errores.push(t('El nombre debe tener de 1 a 30 caracteres'));
+  if (!['gravado', 'tasaCero'].includes(d.claseFiscal)) errores.push(t('Clase fiscal no válida'));
+  if (!COLORES_DEPARTAMENTO.includes(d.color)) errores.push(t('Color no válido'));
   return errores;
 }
 

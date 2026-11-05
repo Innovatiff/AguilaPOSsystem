@@ -39,6 +39,8 @@ Four apps share the site, the data and the service worker:
 | `js/recibo.js`, `css/recibo.css`, `js/code128.js` | thermal receipts (80/58 mm) and reports printed through the browser; Code 128 barcode of the receipt number |
 | `js/pos-datos.js`, `js/config-pos.js`, `js/verificador.js` | POS data in Firestore, POS settings with defaults, offline PIN verifier (PBKDF2 hash) |
 | `js/bo.js`, `js/grafica.js`, `js/dom.js`, `js/nav.js` | back office helpers, SVG charts, DOM builder, sidebar navigation |
+| `js/idioma.js`, `js/i18n/`, `js/traducir-pagina.js`, `js/idioma-temprano.js`, `js/boton-idioma.js` | Spanish / English: `t()` and dates per language, the English dictionaries by area, the static-page translator and the language button (see [Languages](#languages-español--english)) |
+| `herramientas/revisar-idioma.mjs` | lists every user-facing text without English (also run by the unit tests) |
 | `js/identidad.js`, `js/cuentas.js`, `js/personal.js`, `js/auth.js` | code ↔ account mapping and PIN rules, account creation, staff names, login guard |
 | `js/esquema.js`, `js/productos.js`, `js/upca.js`, `js/precios.js`, `js/etiquetas.js`, `js/csv.js`, `js/escaner.js` | catalog schema, product data, barcodes, prices, tags, CSV, camera scanner |
 | `css/etiquetas.css` | the shelf tag: every physical size is a `:root` variable in mm |
@@ -72,8 +74,10 @@ Against the emulators instead of the real project: `npm run emuladores`, and in
 - `npm run test:e2e` runs the browser scenarios in `pruebas/e2e/` against the
   Auth and Firestore emulators: `caja` (assign a computer, open a shift, sell,
   approvals, return, cash drop, lock, close with Z), `backoffice` (dashboard,
-  journal, shifts, reports, registers, settings), plus access, employees,
-  products, capture, printing and phone. It serves a temporary copy of the site
+  journal, shifts, reports, registers, settings), `idioma` (the whole register
+  in English: receipts, X and Z reports, switching language mid-sale, the
+  customer display following the register, live activity read in English),
+  plus access, employees, products, capture, printing and phone. It serves a temporary copy of the site
   with `js/config.js` pointing at the emulators, so your real config is
   untouched. `npm run test:e2e -- caja` runs a single scenario. Screenshots land
   in `pruebas/e2e/salida/`. Needs `npx playwright install chromium` once (or
@@ -392,6 +396,42 @@ kg for weighed items), picks the tax class and **Agregar al catálogo**; for a
 removal, **Quitar del catálogo** (the product becomes inactive: it disappears
 from the register, the price check, searches and tags; it can be reactivated in
 Productos) or **Rechazar** with a note.
+
+## Languages (Español / English)
+
+Every app (back office, register, customer display, price check, Catálogo and
+the sign-in pages) works in Spanish, the default, or in Canadian English. The
+globe button switches: in the sidebar, in the register's top bar, in the price
+check header, on the sign-in pages, and on a customer display that is not
+showing a register yet.
+
+- The choice is kept **per device** (`localStorage`, key `aguila.idioma`) and
+  applies to every page of the site on that device until someone switches
+  again. Switching reloads the page.
+- **Printing follows it**: receipts, the shift-opening slip, cash slips, X and
+  Z reports, reports and their CSVs come out in the language of the device. A
+  page keeps the language it was opened with until it reloads, so what prints
+  always matches what is on screen, even if another tab switched meanwhile.
+- **Register**: switching in the middle of a sale keeps the ticket and the held
+  tickets and does not lock the register (a normal reload still asks for the
+  PIN). The customer display follows the register's language by itself: right
+  away on the same computer, with the next update on a tablet.
+- **Data is never translated**: product, store, person, department and register
+  names, notes and a receipt message typed by the store stay as written. Only
+  the default receipt message, «¡Gracias por su compra!», prints as "Thank you
+  for your purchase!". Shelf labels carry product data only.
+- **Live activity** (`eventos/`) is stored in Spanish whatever language the
+  register is in, and each reader sees it in their own language
+  (`js/eventos.js` recognizes the stored templates). The catalog CSV
+  (import/export) is a file format and keeps its columns in both languages.
+- For developers: the Spanish text is the key, `t('Se guardó {nombre}.', { nombre })`
+  in `js/idioma.js`; the English lives in `js/i18n/en-*.js` by area; static
+  HTML is translated on load by exact text (`js/traducir-pagina.js`, with
+  `data-sin-traducir` for data). Text that is stored uses `tEs()` (always
+  Spanish). `node herramientas/revisar-idioma.mjs` lists anything missing, and
+  `pruebas/unitarias/idioma.test.mjs` fails when a user-facing text has no
+  English, its `{values}` differ, or two areas translate the same text
+  differently.
 
 ## Deploy (Netlify)
 

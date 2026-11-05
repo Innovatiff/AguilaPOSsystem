@@ -21,6 +21,7 @@ import { obtenerClaveCaja } from './clave-caja.js';
 import { huellaNip } from './nip.js';
 import { armarFichaPersonal, validarFichaPersonal, validarNIP, siguienteCodigo, esCorreo } from './identidad.js';
 import { normalizarTexto } from './esquema.js';
+import { t, tc } from './idioma.js';
 import {
   db, doc, getDoc, getDocs, query, where, runTransaction, writeBatch, collection, onSnapshot, Timestamp,
 } from './firebase.js';
@@ -30,7 +31,7 @@ pintarNavegacion({ personal: yo, activa: 'gestion/empleados.html' });
 
 const $ = (id) => document.getElementById(id);
 const ahora = () => Timestamp.fromMillis(Date.now());
-const NOMBRE_ROL = { admin: 'Administrador', empleado: 'Empleado' };
+const NOMBRE_ROL = { admin: () => t('Administrador'), empleado: () => t('Empleado') };
 
 const filtro = $('filtro');
 const verInactivos = $('ver-inactivos');
@@ -70,7 +71,7 @@ function boton(texto, alPulsar) {
 
 const tipoDe = (ficha) => ficha.tipo ?? 'correo'; // las fichas anteriores a Gestión son por correo
 const correoDe = (ficha) => ficha.correo ?? (tipoDe(ficha) === 'correo' ? ficha.id : null);
-const nombreTienda = (id) => (id ? (tiendas.find((t) => t.id === id)?.nombre ?? id) : '—');
+const nombreTienda = (id) => (id ? (tiendas.find((tienda) => tienda.id === id)?.nombre ?? id) : '—');
 /** ¿Tiene su NIP de caja registrado (huella con la versión de cuenta vigente)? */
 const nipRegistrado = (ficha) => conNip.get(ficha.id) === (ficha.cuentaVersion ?? 1);
 /** Colaborador por código al que todavía le falta el correo o el NIP de 6 dígitos registrado. */
@@ -103,12 +104,12 @@ observarTiendas(
     tiendas = lista;
     const select = $('e-tienda');
     const elegida = select.value;
-    select.replaceChildren(new Option('Sin asignar', ''));
-    for (const t of lista) select.append(new Option(`${t.nombre}${t.activo ? '' : ' (inactiva)'}`, t.id));
+    select.replaceChildren(new Option(t('Sin asignar'), ''));
+    for (const tienda of lista) select.append(new Option(tienda.activo ? `${tienda.nombre}` : t('{nombre} (inactiva)', { nombre: tienda.nombre }), tienda.id));
     select.value = elegida;
     pintar();
   },
-  (error) => mostrar(mensaje, 'error', `No se pudieron cargar las tiendas: ${mensajeError(error)}`),
+  (error) => mostrar(mensaje, 'error', t('No se pudieron cargar las tiendas: {error}', { error: mensajeError(error) })),
 );
 
 onSnapshot(
@@ -121,7 +122,7 @@ onSnapshot(
     $('contenido').hidden = false;
   },
   (error) => {
-    mostrar(mensaje, 'error', `No se pudo cargar el personal: ${mensajeError(error)}`);
+    mostrar(mensaje, 'error', t('No se pudo cargar el personal: {error}', { error: mensajeError(error) }));
     $('contenido').hidden = false;
   },
 );
@@ -152,12 +153,16 @@ function pintar() {
   cuerpo.replaceChildren(...lista.map(fila));
   const sin = $('sin-resultados');
   sin.hidden = lista.length > 0;
-  sin.textContent = fichas.size === 0 ? 'Todavía no hay personal registrado.' : `Sin resultados para «${filtro.value.trim()}».`;
+  sin.textContent = fichas.size === 0 ? t('Todavía no hay personal registrado.') : t('Sin resultados para «{busqueda}».', { busqueda: filtro.value.trim() });
 
   const pendientes = [...fichas.values()].filter((f) => f.activo === true && pendienteDeMigrar(f));
   const aviso = $('aviso-migracion');
   aviso.hidden = pendientes.length === 0;
-  aviso.textContent = pendientes.length === 0 ? '' : `${pendientes.length === 1 ? '1 persona todavía no puede' : `${pendientes.length} personas todavía no pueden`} entrar con correo y NIP: ${pendientes.map((f) => f.nombre).join(', ')}. Edítala para poner su correo y usa «Cambiar NIP» para darle un NIP de 6 dígitos.`;
+  const nombres = pendientes.map((f) => f.nombre).join(', ');
+  aviso.textContent = pendientes.length === 0 ? ''
+    : pendientes.length === 1
+      ? t('1 persona todavía no puede entrar con correo y NIP: {nombres}. Edítala para poner su correo y usa «Cambiar NIP» para darle un NIP de 6 dígitos.', { nombres })
+      : t('{n} personas todavía no pueden entrar con correo y NIP: {nombres}. Edítala para poner su correo y usa «Cambiar NIP» para darle un NIP de 6 dígitos.', { n: pendientes.length, nombres });
 }
 
 function chip(texto, tipo) {
@@ -172,34 +177,34 @@ function fila(ficha) {
 
   const nombre = crear('td');
   nombre.append(crear('strong', '', ficha.nombre ?? ''));
-  if (esYo) nombre.append(crear('span', 'secundario', 'tú'));
-  if (tipo === 'codigo') nombre.append(crear('span', 'secundario monoespaciada', `Nº ${ficha.id}`));
+  if (esYo) nombre.append(crear('span', 'secundario', t('tú')));
+  if (tipo === 'codigo') nombre.append(crear('span', 'secundario monoespaciada', t('Nº {codigo}', { codigo: ficha.id })));
 
   const acceso = crear('td');
   if (tipo === 'codigo') {
-    if (!ficha.correo) acceso.append(chip('Falta el correo', 'aviso'));
-    if (!nipRegistrado(ficha)) acceso.append(chip('Falta el NIP de caja', 'aviso'));
-    if (ficha.correo && nipRegistrado(ficha)) acceso.append(crear('span', '', 'Correo + NIP'));
+    if (!ficha.correo) acceso.append(chip(t('Falta el correo'), 'aviso'));
+    if (!nipRegistrado(ficha)) acceso.append(chip(t('Falta el NIP de caja'), 'aviso'));
+    if (ficha.correo && nipRegistrado(ficha)) acceso.append(crear('span', '', t('Correo + NIP')));
   } else {
-    acceso.append(crear('span', '', 'Correo + contraseña'));
-    acceso.append(crear('span', 'acceso-nota', 'Solo back office: sin NIP de caja'));
+    acceso.append(crear('span', '', t('Correo + contraseña')));
+    acceso.append(crear('span', 'acceso-nota', t('Solo back office: sin NIP de caja')));
   }
 
   tr.append(
     nombre,
     crear('td', 'correo-celda', correoDe(ficha) ?? '—'),
-    crear('td', '', NOMBRE_ROL[ficha.rol] ?? ficha.rol ?? ''),
+    crear('td', '', NOMBRE_ROL[ficha.rol]?.() ?? ficha.rol ?? ''),
     crear('td', '', nombreTienda(ficha.tienda)),
     acceso,
-    crear('td', '', ficha.rol === 'admin' ? 'Sí (admin)' : ficha.catalogo === true ? 'Sí' : 'No'),
-    crear('td', '', ficha.activo === true ? 'Activo' : 'Inactivo'),
+    crear('td', '', ficha.rol === 'admin' ? t('Sí (admin)') : ficha.catalogo === true ? t('Sí') : t('No')),
+    crear('td', '', ficha.activo === true ? t('Activo') : t('Inactivo')),
   );
 
   const acciones = crear('td', 'acciones-fila');
-  acciones.append(boton('Editar', () => abrirEditar(ficha)));
-  if (tipo === 'codigo' && !esYo) acciones.append(boton('Cambiar NIP', () => abrirNip(ficha)));
-  if (tipo === 'correo') acciones.append(boton('Enviar enlace de contraseña', () => enviarEnlace(ficha)));
-  if (!esYo) acciones.append(boton(ficha.activo === true ? 'Desactivar' : 'Activar', () => cambiarActivo(ficha)));
+  acciones.append(boton(t('Editar'), () => abrirEditar(ficha)));
+  if (tipo === 'codigo' && !esYo) acciones.append(boton(t('Cambiar NIP'), () => abrirNip(ficha)));
+  if (tipo === 'correo') acciones.append(boton(t('Enviar enlace de contraseña'), () => enviarEnlace(ficha)));
+  if (!esYo) acciones.append(boton(ficha.activo === true ? t('Desactivar') : t('Activar'), () => cambiarActivo(ficha)));
   tr.append(acciones);
   return tr;
 }
@@ -219,10 +224,10 @@ function loteFicha(ficha) {
 async function cambiarActivo(ficha) {
   const activar = ficha.activo !== true;
   const quien = ficha.nombre ?? ficha.id;
-  if (!activar && !window.confirm(`¿Desactivar a ${quien}? Dejará de poder entrar de inmediato (caja, consulta y Catálogo). Se puede reactivar después.`)) return;
+  if (!activar && !window.confirm(t('¿Desactivar a {quien}? Dejará de poder entrar de inmediato (caja, consulta y Catálogo). Se puede reactivar después.', { quien }))) return;
   try {
     await loteFicha(completar(ficha, { activo: activar })).commit();
-    mostrar(mensaje, 'ok', `${quien} ${activar ? 'reactivado: ya puede entrar' : 'desactivado: ya no puede entrar'}.`);
+    mostrar(mensaje, 'ok', activar ? t('{quien} reactivado: ya puede entrar.', { quien }) : t('{quien} desactivado: ya no puede entrar.', { quien }));
   } catch (error) {
     mostrar(mensaje, 'error', mensajeError(error));
   }
@@ -231,7 +236,7 @@ async function cambiarActivo(ficha) {
 async function enviarEnlace(ficha) {
   try {
     await enviarRestablecimiento(ficha.id);
-    mostrar(mensaje, 'ok', `Correo enviado a ${ficha.id} para crear una contraseña nueva (si la cuenta existe en Firebase).`);
+    mostrar(mensaje, 'ok', t('Correo enviado a {correo} para crear una contraseña nueva (si la cuenta existe en Firebase).', { correo: ficha.id }));
   } catch (error) {
     mostrar(mensaje, 'error', mensajeError(error));
   }
@@ -250,8 +255,8 @@ async function huellaLibre(nip, codigoPropio = null) {
   const existente = await getDoc(doc(db, 'nips', huella));
   if (existente.exists()) {
     const dueno = existente.data().codigo;
-    if (dueno === codigoPropio) throw fallo('Ese ya es su NIP. Escribe uno distinto.', $('e-secreto'));
-    throw fallo('Ese NIP ya lo tiene otra persona. Elige otro (o pulsa «Generar un NIP»).', $('e-secreto'));
+    if (dueno === codigoPropio) throw fallo(t('Ese ya es su NIP. Escribe uno distinto.'), $('e-secreto'));
+    throw fallo(t('Ese NIP ya lo tiene otra persona. Elige otro (o pulsa «Generar un NIP»).'), $('e-secreto'));
   }
   return huella;
 }
@@ -259,18 +264,18 @@ async function huellaLibre(nip, codigoPropio = null) {
 /** El correo no puede ser de otro colaborador. */
 async function correoLibre(correo, codigoPropio = null) {
   const otro = [...fichas.values()].find((f) => f.id !== codigoPropio && tipoDe(f) === 'codigo' && f.correo === correo);
-  if (otro) throw fallo(`Ese correo ya es de ${otro.nombre}.`, $('e-correo'));
+  if (otro) throw fallo(t('Ese correo ya es de {nombre}.', { nombre: otro.nombre }), $('e-correo'));
   const registro = await getDoc(doc(db, 'correos', correo));
   if (registro.exists() && registro.data().codigo !== codigoPropio) {
     const dueno = fichas.get(registro.data().codigo);
-    throw fallo(`Ese correo ya es de ${dueno?.nombre ?? `el colaborador ${registro.data().codigo}`}.`, $('e-correo'));
+    throw fallo(t('Ese correo ya es de {nombre}.', { nombre: dueno?.nombre ?? t('el colaborador {codigo}', { codigo: registro.data().codigo }) }), $('e-correo'));
   }
 }
 
 function leerCorreo() {
   const correo = $('e-correo').value.trim().toLowerCase();
-  if (correo === '') throw fallo('Escribe el correo.', $('e-correo'));
-  if (!esCorreo(correo)) throw fallo('Escribe un correo válido.', $('e-correo'));
+  if (correo === '') throw fallo(t('Escribe el correo.'), $('e-correo'));
+  if (!esCorreo(correo)) throw fallo(t('Escribe un correo válido.'), $('e-correo'));
   return correo;
 }
 
@@ -283,16 +288,16 @@ function ajustarFormulario() {
   $('grupo-secreto').hidden = modo === 'editar';
   $('e-correo').readOnly = Boolean(porCorreo);
   $('e-rol').disabled = modo === 'editar' && actual?.id === yo.usuario;
-  $('et-secreto').textContent = modo === 'nip' ? 'NIP nuevo *' : 'NIP *';
-  $('et-secreto2').textContent = modo === 'nip' ? 'Repite el NIP nuevo *' : 'Repite el NIP *';
+  $('et-secreto').textContent = modo === 'nip' ? t('NIP nuevo *') : t('NIP *');
+  $('et-secreto2').textContent = modo === 'nip' ? t('Repite el NIP nuevo *') : t('Repite el NIP *');
   const numero = $('e-numero');
   numero.hidden = !(actual && tipoDe(actual) === 'codigo');
-  numero.textContent = numero.hidden ? '' : `Nº de colaborador ${actual.id} (interno: nadie lo tiene que teclear).`;
+  numero.textContent = numero.hidden ? '' : t('Nº de colaborador {codigo} (interno: nadie lo tiene que teclear).', { codigo: actual.id });
   $('nip-generado').hidden = true;
-  btnGuardar.firstChild.textContent = modo === 'crear' ? 'Registrar ' : modo === 'nip' ? 'Cambiar NIP ' : 'Guardar ';
+  btnGuardar.firstChild.textContent = `${modo === 'crear' ? tc('empleado', 'Registrar') : modo === 'nip' ? t('Cambiar NIP') : t('Guardar')} `;
   $('pie-nota').textContent = modo === 'crear'
-    ? 'Se crea la cuenta; la persona ya podrá entrar.'
-    : modo === 'nip' ? 'El NIP anterior deja de servir de inmediato.' : '';
+    ? t('Se crea la cuenta; la persona ya podrá entrar.')
+    : modo === 'nip' ? t('El NIP anterior deja de servir de inmediato.') : '';
 }
 
 function abrir(modo, actual, titulo) {
@@ -317,9 +322,9 @@ function abrir(modo, actual, titulo) {
   setTimeout(() => primero.focus(), 0);
 }
 
-const abrirNuevo = () => abrir('crear', null, 'Nuevo empleado');
-const abrirEditar = (ficha) => abrir('editar', ficha, `Editar · ${ficha.nombre ?? ficha.id}`);
-const abrirNip = (ficha) => abrir('nip', ficha, `Cambiar NIP · ${ficha.nombre ?? ficha.id}`);
+const abrirNuevo = () => abrir('crear', null, tc('titulo', 'Nuevo empleado'));
+const abrirEditar = (ficha) => abrir('editar', ficha, t('Editar · {nombre}', { nombre: ficha.nombre ?? ficha.id }));
+const abrirNip = (ficha) => abrir('nip', ficha, t('Cambiar NIP · {nombre}', { nombre: ficha.nombre ?? ficha.id }));
 
 $('btn-nuevo').addEventListener('click', abrirNuevo);
 $('btn-cerrar').addEventListener('click', () => editor.close());
@@ -343,7 +348,7 @@ $('btn-generar').addEventListener('click', () => {
   $('e-secreto2').value = nip;
   const salida = $('nip-generado');
   salida.hidden = false;
-  salida.textContent = `NIP: ${nip} · anótalo para entregarlo`;
+  salida.textContent = t('NIP: {nip} · anótalo para entregarlo', { nip });
 });
 
 /** Lee y valida el NIP por duplicado. */
@@ -352,13 +357,13 @@ function leerNip() {
   const b = $('e-secreto2').value.trim();
   const error = validarNIP(a);
   if (error) throw fallo(error, $('e-secreto'));
-  if (a !== b) throw fallo('Los dos NIP no coinciden.', $('e-secreto2'));
+  if (a !== b) throw fallo(t('Los dos NIP no coinciden.'), $('e-secreto2'));
   return a;
 }
 
 async function registrar() {
   const nombre = $('e-nombre').value.trim();
-  if (nombre === '') throw fallo('Escribe el nombre.', $('e-nombre'));
+  if (nombre === '') throw fallo(t('Escribe el nombre.'), $('e-nombre'));
   const correo = leerCorreo();
   const nip = leerNip();
   await correoLibre(correo);
@@ -374,20 +379,20 @@ async function registrar() {
   if (errores.length > 0) throw new Error(errores.join(' '));
   const referencia = doc(db, 'staff', codigo);
   await runTransaction(db, async (transaccion) => {
-    if ((await transaccion.get(referencia)).exists()) throw Object.assign(new Error(`El número ${codigo} ya está registrado. Vuelve a intentarlo.`), { code: 'catalogo/duplicado' });
+    if ((await transaccion.get(referencia)).exists()) throw Object.assign(new Error(t('El número {codigo} ya está registrado. Vuelve a intentarlo.', { codigo })), { code: 'catalogo/duplicado' });
     const marca = ahora();
     transaccion.set(referencia, { ...ficha, creadoEn: marca, actualizadoEn: marca });
     transaccion.set(doc(db, 'accesos', codigo), { version: ficha.cuentaVersion });
     transaccion.set(doc(db, 'correos', correo), { codigo });
     transaccion.set(doc(db, 'nips', huella), { codigo, version: ficha.cuentaVersion });
   });
-  return `${nombre} registrado. Entra en la caja con su NIP y en la consulta y el Catálogo con ${correo} y su NIP.`;
+  return t('{nombre} registrado. Entra en la caja con su NIP y en la consulta y el Catálogo con {correo} y su NIP.', { nombre, correo });
 }
 
 async function guardarEdicion() {
   const actual = estado.actual;
   const nombre = $('e-nombre').value.trim();
-  if (nombre === '') throw fallo('Escribe el nombre.', $('e-nombre'));
+  if (nombre === '') throw fallo(t('Escribe el nombre.'), $('e-nombre'));
   const porCodigo = tipoDe(actual) === 'codigo';
   const correo = porCodigo ? leerCorreo() : correoDe(actual);
   const correoAnterior = porCodigo ? (actual.correo ?? null) : null;
@@ -410,7 +415,7 @@ async function guardarEdicion() {
     lote.set(doc(db, 'correos', correo), { codigo: actual.id });
   }
   await lote.commit();
-  return `${ficha.nombre} guardado.`;
+  return t('{nombre} guardado.', { nombre: ficha.nombre });
 }
 
 async function cambiarNip() {
@@ -424,7 +429,10 @@ async function cambiarNip() {
   anteriores.forEach((d) => lote.delete(d.ref));
   lote.set(doc(db, 'nips', huella), { codigo: actual.id, version: ficha.cuentaVersion });
   await lote.commit();
-  return `NIP de ${actual.nombre ?? actual.id} cambiado. El anterior ya no sirve.${actual.correo ? '' : ' Falta su correo: edítalo para que pueda entrar a la consulta y al Catálogo.'}`;
+  const quien = actual.nombre ?? actual.id;
+  return actual.correo
+    ? t('NIP de {nombre} cambiado. El anterior ya no sirve.', { nombre: quien })
+    : t('NIP de {nombre} cambiado. El anterior ya no sirve. Falta su correo: edítalo para que pueda entrar a la consulta y al Catálogo.', { nombre: quien });
 }
 
 form.addEventListener('submit', async (evento) => {

@@ -13,6 +13,8 @@
  *
  * Módulo puro (WebCrypto, sin Firebase ni DOM): funciona en el navegador y en Node.
  */
+import { t } from './idioma.js';
+
 export const BYTES_CLAVE = 32;
 const REGEX_HUELLA = /^[0-9a-f]{64}$/;
 
@@ -35,7 +37,7 @@ export function claveCajaValida(clave) {
 }
 
 async function hmacHex(clave, texto) {
-  if (!claveCajaValida(clave)) throw new Error('Clave de caja inválida.');
+  if (!claveCajaValida(clave)) throw new Error(t('Clave de caja inválida.'));
   const llave = await crypto.subtle.importKey('raw', deBase64(clave), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return aHex(await crypto.subtle.sign('HMAC', llave, new TextEncoder().encode(texto)));
 }

@@ -7,6 +7,7 @@ import { requerirPersonal, mensajeError } from './auth.js';
 import { pintarNavegacion } from './nav.js';
 import { db, doc, setDoc, collection, query, orderBy, onSnapshot } from './firebase.js';
 import { normalizarTexto } from './esquema.js';
+import { t } from './idioma.js';
 
 const { personal } = await requerirPersonal({ soloAdmin: true });
 pintarNavegacion({ personal, activa: 'gestion/tiendas.html' });
@@ -63,7 +64,7 @@ function modoTienda(idEnEdicion) {
   editandoTienda = idEnEdicion;
   const editando = idEnEdicion !== null;
   tId.readOnly = editando;
-  tGuardar.textContent = editando ? 'Guardar cambios' : 'Agregar';
+  tGuardar.textContent = editando ? t('Guardar cambios') : t('Agregar');
   tCancelar.hidden = !editando;
   if (!editando) {
     formTienda.reset();
@@ -90,7 +91,7 @@ formTienda.addEventListener('submit', async (evento) => {
   mostrar(tMensaje, '', '');
   try {
     await setDoc(doc(db, 'stores', id), tienda);
-    mostrar(tMensaje, 'ok', `Tienda ${tienda.nombre} guardada.`);
+    mostrar(tMensaje, 'ok', t('Tienda {nombre} guardada.', { nombre: tienda.nombre }));
     modoTienda(null);
     tNombre.focus();
   } catch (error) {
@@ -108,11 +109,11 @@ onSnapshot(query(collection(db, 'stores'), orderBy('nombre')), (resultado) => {
     const fila = document.createElement('tr');
     if (!tienda.activo) fila.className = 'inactivo';
     const contacto = [tienda.telefono, tienda.correo, tienda.numeroImpuesto ? `HST ${tienda.numeroImpuesto}` : ''].filter(Boolean).join(' · ');
-    fila.append(celda(documento.id), celda(tienda.nombre), celda(tienda.direccion), celda(contacto || '—'), celda(tienda.activo ? 'Activa' : 'Inactiva'));
+    fila.append(celda(documento.id), celda(tienda.nombre), celda(tienda.direccion), celda(contacto || '—'), celda(tienda.activo ? t('Activa') : t('Inactiva')));
     const acciones = document.createElement('td');
     acciones.className = 'acciones-fila';
     acciones.append(
-      boton('Editar', () => {
+      boton(t('Editar'), () => {
         modoTienda(documento.id);
         tId.value = documento.id;
         tNombre.value = tienda.nombre;
@@ -123,7 +124,7 @@ onSnapshot(query(collection(db, 'stores'), orderBy('nombre')), (resultado) => {
         tActivo.checked = tienda.activo;
         tNombre.focus();
       }),
-      boton(tienda.activo ? 'Desactivar' : 'Activar', async () => {
+      boton(tienda.activo ? t('Desactivar') : t('Activar'), async () => {
         try {
           await setDoc(doc(db, 'stores', documento.id), { ...tienda, activo: !tienda.activo });
         } catch (error) {
