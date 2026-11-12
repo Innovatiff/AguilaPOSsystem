@@ -341,13 +341,16 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   await page.fill('#k-limite', '150');
   await page.click('#btn-agregar-depto');
   const nuevo = page.locator('#tabla-deptos tbody tr').last().locator('input');
-  await nuevo.fill('Tortillería');
+  await nuevo.first().fill('Tortillería');
+  await nuevo.nth(1).fill('Tortilla Shop');
+  v.ok('cada tecla tiene su nombre en inglés (las de fábrica ya lo traen)', (await page.inputValue('#tabla-deptos tbody tr:first-child input[lang="en"]')) === 'Grocery');
   v.ok('la vista previa refleja los cambios antes de guardar', /Vuelva pronto/.test(await page.textContent('#vista-recibo')) && /Tortillería/.test(await page.textContent('#vista-deptos')));
   await page.screenshot({ path: `${c.SALIDA}/bo-configuracion.png`, fullPage: true });
   await page.click('#k-guardar');
   await page.waitForFunction(() => /guardada/.test(document.getElementById('k-mensaje').textContent), null, { timeout: 15000 });
   const config = await c.leerDoc('config/pos');
   v.ok('guarda config/pos (las reglas lo aceptan)', config?.limiteVentaLibreCentavos === 15000 && config.departamentos.length === 10 && config.departamentos.at(-1).nombre === 'Tortillería' && config.actualizadoPor === c.ADMIN.correo);
+  v.ok('con su nombre en inglés', config?.departamentos.at(-1).nombreEn === 'Tortilla Shop' && config.departamentos.find((d) => d.id === 'carniceria')?.nombreEn === 'Meat', JSON.stringify(config?.departamentos.slice(-2)));
 
   // ---- 8) tiendas
   await page.goto(`${c.BASE}/gestion/tiendas.html`);
@@ -420,6 +423,88 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   await page.waitForFunction(() => /Anulada/.test(document.querySelector('#tabla-entregas tbody tr')?.textContent ?? ''), null, { timeout: 15000 });
   v.ok('el admin anula la entrada: queda a la vista, tachada, y deja de contar', anulada.anulada === true && anulada.anuladaPor === c.ADMIN.correo
     && /Entregas=0/.test((await page.$$eval('#kpis .kpi', (k) => k.map((x) => `${x.querySelector('.kpi__etiqueta').textContent}=${x.querySelector('.kpi__valor').textContent}`))).join()) && await page.isVisible('#vacio-productos'));
+
+  // ---- 8c) existencias: ajuste rápido de la tienda y la bodega
+  await page.click('#btn-ajuste');
+  await page.waitForSelector('#dlg-ajuste[open]');
+  v.ok('«Ajuste rápido» pide el producto (y la tienda: hay dos)', await page.isVisible('#ajuste-codigo') && await page.isVisible('#ajuste-tienda')
+    && (await page.evaluate(() => document.activeElement.id)) === 'ajuste-codigo');
+  await page.selectOption('#ajuste-tienda', 'talbot');
+  await page.fill('#ajuste-codigo', '633148100013');
+  await page.press('#ajuste-codigo', 'Enter');
+  await page.waitForSelector('#ajuste-datos:not([hidden])');
+  v.ok('al escanear, muestra el producto y pide cuántas hay (sin contar todavía)', /TAJIN CLASICO 142g/.test(await page.textContent('#ajuste-nombre'))
+    && /Sin contar todavía/.test(await page.textContent('#ajuste-t-ahora')) && (await page.evaluate(() => document.activeElement.id)) === 'ajuste-t-cajas');
+  await page.keyboard.type('3');
+  await page.fill('#ajuste-t-porcaja', '12');
+  await page.fill('#ajuste-t-sueltas', '4');
+  await page.fill('#ajuste-b-cajas', '10');
+  await page.fill('#ajuste-b-porcaja', '12');
+  v.ok('el total de cada lugar se calcula mientras se escribe', (await page.textContent('#ajuste-t-total')) === '= 40 piezas' && (await page.textContent('#ajuste-b-total')) === '= 120 piezas',
+    `${await page.textContent('#ajuste-t-total')} | ${await page.textContent('#ajuste-b-total')}`);
+  await page.fill('#ajuste-caducidad', '2027-01-15');
+  await page.fill('#ajuste-origen', 'México');
+  await page.screenshot({ path: `${c.SALIDA}/bo-ajuste.png` });
+  await page.click('#ajuste-guardar');
+  await page.waitForFunction(() => /Guardado: TAJIN/.test(document.getElementById('ajuste-mensaje').textContent), null, { timeout: 15000 });
+  v.ok('guarda y queda listo para el siguiente producto', await page.isVisible('#ajuste-codigo') && (await page.evaluate(() => document.activeElement.id)) === 'ajuste-codigo'
+    && /En la tienda: 40 piezas · En la bodega: 120 piezas/.test(await page.textContent('#ajuste-mensaje')), await page.textContent('#ajuste-mensaje'));
+  const existencia = await c.leerDoc('existencias/talbot__p-tajin');
+  v.ok('la existencia queda en Firestore (las reglas la aceptan): tienda, bodega, caducidad y país',
+    existencia?.enTienda?.total === 40 && existencia.enTienda.cajas === 3 && existencia.enTienda.porCaja === 12 && existencia.enTienda.sueltas === 4
+    && existencia.enBodega?.total === 120 && existencia.caducidad === '2027-01-15' && existencia.origen === 'México' && existencia.enTienda.contadoPor === c.ADMIN.correo,
+    JSON.stringify(existencia ?? {}).slice(0, 300));
+  await page.fill('#ajuste-codigo', 'tajin');
+  await page.waitForSelector('#ajuste-sugerencias:not([hidden]) li');
+  await page.press('#ajuste-codigo', 'Enter');
+  await page.waitForSelector('#ajuste-datos:not([hidden])');
+  v.ok('buscado por nombre: dice cuánto hay ahora y propone lo que trae cada caja y la caducidad',
+    /Ahora: 40 piezas \(3 cajas × 12 \+ 4\)/.test(await page.textContent('#ajuste-t-ahora')) && (await page.inputValue('#ajuste-b-porcaja')) === '12'
+    && (await page.inputValue('#ajuste-caducidad')) === '2027-01-15' && (await page.inputValue('#ajuste-origen')) === 'México', await page.textContent('#ajuste-t-ahora'));
+  // mientras tanto otra persona guarda una caducidad nueva de ese producto
+  await c.rest('PATCH', 'existencias/talbot__p-tajin?updateMask.fieldPaths=caducidad', c.campos({ caducidad: '2027-02-01' }));
+  const vioLaNueva = await page.waitForFunction(() => document.getElementById('ajuste-caducidad').value === '2027-02-01', null, { timeout: 10000 }).then(() => true, () => false);
+  v.ok('lo que otra persona guarda mientras el diálogo está abierto aparece en lo propuesto', vioLaNueva, await page.inputValue('#ajuste-caducidad'));
+  await page.fill('#ajuste-b-cajas', '049000006346');
+  await page.press('#ajuste-b-cajas', 'Enter');
+  await page.waitForFunction(() => /código de barras/.test(document.getElementById('ajuste-mensaje').textContent), null, { timeout: 5000 });
+  v.ok('un código escaneado en un campo de cantidad no se guarda como cantidad', (await page.inputValue('#ajuste-b-cajas')) === '');
+  await page.fill('#ajuste-b-cajas', '8');
+  await page.press('#ajuste-b-cajas', 'Enter');
+  await page.waitForFunction(() => /Guardado/.test(document.getElementById('ajuste-mensaje').textContent), null, { timeout: 15000 });
+  const despues = await c.leerDoc('existencias/talbot__p-tajin');
+  v.ok('contar solo la bodega no toca lo de la tienda', despues?.enBodega?.total === 96 && despues.enTienda?.total === 40, JSON.stringify({ t: despues?.enTienda?.total, b: despues?.enBodega?.total }));
+  v.ok('ni pisa la caducidad ni el país que no se tocaron', despues?.caducidad === '2027-02-01' && despues.origen === 'México', JSON.stringify({ c: despues?.caducidad, o: despues?.origen }));
+  await page.fill('#ajuste-codigo', 'guaji');
+  await page.waitForSelector('#ajuste-sugerencias:not([hidden]) li');
+  await page.press('#ajuste-codigo', 'Enter');
+  await page.waitForSelector('#ajuste-datos:not([hidden])');
+  v.ok('un producto por peso se cuenta en kilos', (await page.textContent('label[for="ajuste-t-porcaja"]')) === 'Kilos por caja' && (await page.textContent('label[for="ajuste-t-sueltas"]')) === 'Kilos sueltos');
+  const ayer = await page.evaluate(() => {
+    const d = new Date(Date.now() - 86400000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  await page.fill('#ajuste-t-sueltas', '2.5');
+  await page.fill('#ajuste-caducidad', ayer);
+  await page.fill('#ajuste-origen', 'Guatemala');
+  await page.click('#ajuste-guardar');
+  await page.waitForFunction(() => /Guardado: CHILE/.test(document.getElementById('ajuste-mensaje').textContent), null, { timeout: 15000 });
+  await page.click('#ajuste-cerrar');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-existencias tbody tr').length === 2, null, { timeout: 15000 });
+  const filasExistencias = await page.$$eval('#tabla-existencias tbody tr', (trs) => trs.map((tr) => tr.innerText.replace(/\s+/g, ' ').trim()));
+  v.ok('la tabla de existencias: tienda, bodega, total, caducidad (marcada si ya pasó) y procedencia',
+    /CHILE GUAJILLO.*2\.500 kg.*2\.500 kg.*Caducado.*Guatemala/.test(filasExistencias[0]) && /TAJIN CLASICO 142g.*40 piezas.*3 cajas × 12 \+ 4.*96 piezas.*8 cajas × 12.*136 piezas.*México/.test(filasExistencias[1]),
+    filasExistencias.join(' | '));
+  await page.check('#e-caducar');
+  v.ok('«Solo lo que caduca pronto o ya caducó» deja solo el chile', (await page.$$('#tabla-existencias tbody tr')).length === 1 && /CHILE/.test(await page.textContent('#tabla-existencias tbody')));
+  await page.uncheck('#e-caducar');
+  const [csvExistencias] = await Promise.all([page.waitForEvent('download'), page.click('#btn-exportar-existencias')]);
+  v.ok('exporta las existencias a CSV', /^existencias-talbot-\d{4}-\d{2}-\d{2}\.csv$/.test(csvExistencias.suggestedFilename()), csvExistencias.suggestedFilename());
+  await page.click('#tabla-existencias tbody tr:has-text("TAJIN")');
+  await page.waitForSelector('#dlg-ajuste[open] #ajuste-datos:not([hidden])');
+  v.ok('tocar una fila abre el ajuste de ese producto', /TAJIN/.test(await page.textContent('#ajuste-nombre')));
+  await page.click('#ajuste-cerrar');
+  await page.screenshot({ path: `${c.SALIDA}/bo-existencias.png`, fullPage: true });
 
   // ---- 9) pantalla ancha: el contenido llena todo el ancho junto a la barra lateral
   await page.setViewportSize({ width: 2048, height: 1100 });

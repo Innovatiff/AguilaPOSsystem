@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  doc, setDoc, getDoc, getDocs, collection, updateDoc, deleteDoc, Timestamp, serverTimestamp, setLogLevel,
+  doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, deleteDoc, Timestamp, serverTimestamp, setLogLevel,
 } from 'firebase/firestore';
 import { armarFichaPersonal, correoDeAcceso, usuarioDe } from '../../js/identidad.js';
 
@@ -29,6 +29,16 @@ const recepcion = (quien, extra = {}) => ({
   lineas: [{ producto: 'p1', nombre: 'TAJIN CLASICO', upc: '633148100013', plu: null, cantidad: 24, pesoGramos: null }],
   productos: 1, piezas: 24, gramos: 0,
   recibidoPor: usuarioDe(quien), recibidoPorNombre: 'María', fecha: serverTimestamp(), anulada: false, anuladaPor: null, anuladaEn: null, ...extra,
+});
+
+/** Lo que manda el Ajuste rápido (con merge): identidad del producto, lugares contados ahora, caducidad y país. */
+const conteo = (quien, extra = {}) => ({
+  cajas: 3, porCaja: 12, sueltas: 4, total: 40, contadoEn: serverTimestamp(), contadoPor: usuarioDe(quien), contadoPorNombre: 'María', ...extra,
+});
+const existencia = (quien, extra = {}) => ({
+  tienda: 'talbot', producto: 'p1', nombre: 'TAJIN CLASICO 142g', upc: '633148100013', plu: null, porPeso: false,
+  caducidad: '2027-01-15', origen: 'México',
+  actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), actualizadoPorNombre: 'María', ...extra,
 });
 
 async function sembrar(datos) {
@@ -109,6 +119,62 @@ describe('reglas · movimientos en vivo e inventario', () => {
       await assertSucceeds(updateDoc(doc(contexto(ADMIN), 'recepciones/r1'), { anulada: true, anuladaPor: ADMIN, anuladaEn: serverTimestamp() }));
       await assertFails(updateDoc(doc(contexto(ADMIN), 'recepciones/r1'), { anulada: true, anuladaPor: ADMIN, anuladaEn: serverTimestamp() }), 'ya estaba anulada');
       await assertFails(deleteDoc(doc(contexto(ADMIN), 'recepciones/r1')));
+    });
+  });
+
+  describe('existencias/: cuánto hay en la tienda y en la bodega', () => {
+    beforeEach(async () => {
+      await sembrar({ 'products/p1': { nombre: 'CLASICO', marca: 'TAJIN' }, 'products/p2': { nombre: 'COCA COLA' } });
+    });
+    it('la cuentan el admin y el personal del Catálogo, a su nombre y con la hora del servidor', async () => {
+      await assertSucceeds(setDoc(doc(contexto(MARIA), 'existencias/talbot__p1'), { ...existencia(MARIA), enTienda: conteo(MARIA) }, { merge: true }));
+      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'existencias/talbot__p2'), {
+        ...existencia(ADMIN, { producto: 'p2', nombre: 'COCA COLA', upc: null, caducidad: null, origen: null, actualizadoPorNombre: 'Admin' }),
+        enBodega: conteo(ADMIN, { cajas: null, porCaja: null, sueltas: 0, total: 0, contadoPorNombre: 'Admin' }),
+      }, { merge: true }));
+      await assertSucceeds(setDoc(doc(contexto(MARIA), 'existencias/talbot__p1'), existencia(MARIA, { caducidad: null }), { merge: true }), 'solo la caducidad y el país');
+    });
+    it('contar la bodega no toca la tienda (merge); lo contado antes se queda igual', async () => {
+      await sembrar({ 'existencias/talbot__p1': { ...existencia(MARIA), actualizadoEn: AHORA, enTienda: { ...conteo(MARIA), contadoEn: AHORA } } });
+      await assertSucceeds(setDoc(doc(contexto(ADMIN), 'existencias/talbot__p1'), {
+        ...existencia(ADMIN, { actualizadoPorNombre: 'Admin' }), enBodega: conteo(ADMIN, { cajas: 10, porCaja: 12, sueltas: null, total: 120, contadoPorNombre: 'Admin' }),
+      }, { merge: true }));
+      const leida = (await getDoc(doc(contexto(ADMIN), 'existencias/talbot__p1'))).data();
+      if (leida.enTienda.total !== 40 || leida.enTienda.contadoPor !== '100123' || leida.enBodega.total !== 120) throw new Error(JSON.stringify(leida));
+      // Lo de la tienda solo cambia con un conteo nuevo (hora del servidor), no con datos viejos.
+      await assertFails(setDoc(doc(contexto(ADMIN), 'existencias/talbot__p1'), {
+        ...existencia(ADMIN, { actualizadoPorNombre: 'Admin' }), enTienda: { ...conteo(MARIA), total: 41, sueltas: 5, contadoEn: AHORA },
+      }, { merge: true }));
+    });
+    it('sin permiso del Catálogo, a nombre de otro, con cuentas que no cuadran o datos de más, no', async () => {
+      const db = contexto(MARIA);
+      const ruta = 'existencias/talbot__p1';
+      const con = (extra) => setDoc(doc(db, ruta), { ...existencia(MARIA), enTienda: conteo(MARIA, extra) }, { merge: true });
+      await assertFails(setDoc(doc(contexto(LUIS), ruta), { ...existencia(LUIS), enTienda: conteo(LUIS) }, { merge: true }), 'sin permiso del Catálogo');
+      await assertFails(setDoc(doc(contexto(correoDeAcceso('100199')), ruta), existencia(correoDeAcceso('100199')), { merge: true }), 'personal inactivo');
+      await assertFails(con({ contadoPor: '100124' }), 'contado a nombre de otro');
+      await assertFails(setDoc(doc(db, ruta), existencia(LUIS), { merge: true }), 'actualizado a nombre de otro');
+      await assertFails(con({ total: 41 }), 'cajas × por caja + sueltas no da el total');
+      await assertFails(con({ porCaja: null, total: 4 }), 'cajas sin lo que trae cada una');
+      await assertFails(con({ cajas: 2.5, total: 34 }), 'cajas no enteras');
+      await assertFails(con({ contadoEn: AHORA }), 'con otra hora');
+      await assertFails(con({ extra: 1 }), 'un conteo con campos de más');
+      await assertFails(setDoc(doc(db, ruta), { ...existencia(MARIA), extra: 1 }, { merge: true }), 'campos de más');
+      await assertFails(setDoc(doc(db, ruta), existencia(MARIA, { actualizadoEn: AHORA }), { merge: true }), 'actualizado con otra hora');
+      await assertFails(setDoc(doc(db, ruta), existencia(MARIA, { caducidad: 'mañana' }), { merge: true }), 'caducidad que no es fecha');
+      await assertFails(setDoc(doc(db, ruta), existencia(MARIA, { origen: 'x'.repeat(61) }), { merge: true }), 'país demasiado largo');
+      await assertFails(setDoc(doc(db, 'existencias/talbot__p2'), existencia(MARIA), { merge: true }), 'el id no es tienda__producto');
+      await assertFails(setDoc(doc(db, 'existencias/talbot__p9'), existencia(MARIA, { producto: 'p9' }), { merge: true }), 'el producto no existe');
+      await assertFails(setDoc(doc(db, 'existencias/Talbot__p1'), existencia(MARIA, { tienda: 'Talbot' }), { merge: true }), 'tienda no válida');
+      await assertFails(setDoc(doc(anonimo(), ruta), existencia(MARIA), { merge: true }));
+    });
+    it('las leen el admin y el personal del Catálogo; nadie las borra', async () => {
+      await sembrar({ 'existencias/talbot__p1': { ...existencia(MARIA), actualizadoEn: AHORA, enTienda: { ...conteo(MARIA), contadoEn: AHORA } } });
+      await assertSucceeds(getDocs(query(collection(contexto(MARIA), 'existencias'), where('tienda', '==', 'talbot'))));
+      await assertSucceeds(getDoc(doc(contexto(ADMIN), 'existencias/talbot__p1')));
+      await assertFails(getDocs(query(collection(contexto(LUIS), 'existencias'), where('tienda', '==', 'talbot'))));
+      await assertFails(getDoc(doc(anonimo(), 'existencias/talbot__p1')));
+      await assertFails(deleteDoc(doc(contexto(ADMIN), 'existencias/talbot__p1')));
     });
   });
 });

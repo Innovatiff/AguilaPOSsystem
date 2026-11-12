@@ -6,6 +6,7 @@
 import { h } from './dom.js';
 import { t, tc, locale, diaYHora } from './idioma.js';
 import { formatearMonto, formatearPeso, nombreMetodo, claveDia } from './ticket.js';
+import { nombreDeLinea } from './config-pos.js';
 import { milisDe, formatearDuracion } from './turnos.js';
 import { reciboVenta, imprimir, fechaHora } from './recibo.js';
 import { aCSV } from './csv.js';
@@ -209,7 +210,7 @@ export function abrirTicket(venta, { tienda = null, config = {}, alVerTurno = nu
       h('th', { text: t('Artículo') }), h('th', { class: 'num', text: t('Cantidad') }), h('th', { class: 'num', text: t('Precio') }),
       h('th', { class: 'num', text: t('Descuento') }), h('th', { class: 'num', text: t('Importe') }))),
     h('tbody', null, venta.lineas.map((l) => h('tr', null,
-      h('td', null, l.nombre, l.presentacion ? h('span', { class: 'secundario', text: l.presentacion }) : null,
+      h('td', null, nombreDeLinea(l, config.departamentos), l.presentacion ? h('span', { class: 'secundario', text: l.presentacion }) : null,
         l.precioOriginalCentavos !== null && l.precioOriginalCentavos !== undefined ? h('span', { class: 'secundario', text: t('Precio cambiado (era {precio})', { precio: dinero(l.precioOriginalCentavos) }) }) : null,
         l.departamento ? h('span', { class: 'secundario', text: tc('linea', 'Venta libre por departamento') }) : null),
       h('td', { class: 'num', text: l.unidad === 'peso' ? formatearPeso(l.pesoGramos) : String(l.cantidad) }),

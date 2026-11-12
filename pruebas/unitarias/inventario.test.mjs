@@ -3,7 +3,10 @@ import {
   LIMITES_RECEPCION, nombreCompleto, piezasDesdeTexto, kilosDesdeTexto, textoKilos, separarMultiplicador, lineaDeRecepcion,
   lineaSinRegistrar, claveDeLinea, erroresDeLinea, armarRecepcion, textoCantidades, textoLinea, cumpleFiltrosRecepcion,
   lineasVisibles, resumirPorProducto, totalesRecepciones, filasCSVRecepciones,
+  conteoDesdeTexto, textoTotal, textoDesglose, caducidadDesdeTexto, origenDesdeTexto, paisEnPantalla, paisesSugeridos, estadoCaducidad, armarAjuste,
+  totalExistencia, filasExistencias, filasCSVExistencias,
 } from '../../js/inventario.js';
+import { cargarIngles, fijarIdioma } from '../../js/idioma.js';
 
 const TORTILLAS = { id: 'p-tortillas', upc: '012345678905', plu: null, marca: 'Mission', nombre: 'Tortillas de maíz', presentacion: '30 pzas', unidadVenta: 'pieza' };
 const CHILES = { id: 'p-poblano', upc: null, plu: '4705', marca: '', nombre: 'Chiles poblanos', presentacion: '', unidadVenta: 'peso' };
@@ -144,3 +147,111 @@ describe('inventario: lo que llegó', () => {
     assert.deepEqual(filas[4].slice(5, 10), ['Chiles poblanos', '', '4705', '', '1.53']);
   });
 });
+
+describe('existencias: ajuste rápido de la tienda y la bodega', () => {
+  it('cajas × lo que trae cada una + sueltas = total; todo vacío = ese lugar no se contó', () => {
+    assert.deepEqual(conteoDesdeTexto({ cajas: '3', porCaja: '12', sueltas: '4' }), { cajas: 3, porCaja: 12, sueltas: 4, total: 40 });
+    assert.deepEqual(conteoDesdeTexto({ cajas: '10', porCaja: '24' }), { cajas: 10, porCaja: 24, sueltas: null, total: 240 });
+    assert.deepEqual(conteoDesdeTexto({ sueltas: '7' }), { cajas: null, porCaja: null, sueltas: 7, total: 7 });
+    assert.deepEqual(conteoDesdeTexto({ sueltas: '0' }), { cajas: null, porCaja: null, sueltas: 0, total: 0 }, 'no hay ninguna también es un conteo');
+    assert.deepEqual(conteoDesdeTexto({ cajas: '0', sueltas: '5' }), { cajas: null, porCaja: null, sueltas: 5, total: 5 }, '«0 cajas» sin más no cuenta');
+    assert.equal(conteoDesdeTexto({ cajas: ' ', porCaja: '', sueltas: '' }), null);
+    assert.equal(conteoDesdeTexto(), null);
+  });
+  it('por peso: kilos por caja y kilos sueltos, en gramos', () => {
+    assert.deepEqual(conteoDesdeTexto({ cajas: '2', porCaja: '10', sueltas: '1.5' }, { porPeso: true }), { cajas: 2, porCaja: 10000, sueltas: 1500, total: 21500 });
+    assert.deepEqual(conteoDesdeTexto({ sueltas: '0' }, { porPeso: true }), { cajas: null, porCaja: null, sueltas: 0, total: 0 });
+  });
+  it('lo que no se puede contar se explica', () => {
+    assert.throws(() => conteoDesdeTexto({ cajas: '3' }), /piezas trae cada caja/);
+    assert.throws(() => conteoDesdeTexto({ cajas: '3' }, { porPeso: true }), /kilos trae cada caja/);
+    assert.equal(conteoDesdeTexto({ porCaja: '12' }), null, 'solo lo que trae cada caja (del conteo anterior): ese lugar no se contó');
+    assert.throws(() => conteoDesdeTexto({ cajas: '2.5', porCaja: '12' }), /Cajas/);
+    assert.throws(() => conteoDesdeTexto({ cajas: '1', porCaja: '0' }), /Piezas por caja/);
+    assert.throws(() => conteoDesdeTexto({ sueltas: '-3' }), /Sueltas/);
+    assert.throws(() => conteoDesdeTexto({ cajas: '99999', porCaja: '99999999' }), /demasiado grande/);
+  });
+  it('cómo se lee: total y desglose', () => {
+    assert.equal(textoTotal(40, false), '40 piezas');
+    assert.equal(textoTotal(1, false), '1 pieza');
+    assert.equal(textoTotal(21500, true), '21.500 kg');
+    assert.equal(textoTotal(null, false), '—');
+    assert.equal(textoDesglose({ cajas: 3, porCaja: 12, sueltas: 4 }, false), '3 cajas × 12 + 4');
+    assert.equal(textoDesglose({ cajas: 1, porCaja: 10000, sueltas: null }, true), '1 caja × 10.000 kg');
+    assert.equal(textoDesglose({ cajas: null, porCaja: null, sueltas: 7 }, false), '');
+  });
+  it('caducidad (fecha que existe) y país de procedencia', () => {
+    assert.equal(caducidadDesdeTexto('2027-01-15'), '2027-01-15');
+    assert.equal(caducidadDesdeTexto(''), null);
+    assert.throws(() => caducidadDesdeTexto('2027-02-30'), /caducidad/);
+    assert.throws(() => caducidadDesdeTexto('mañana'), /caducidad/);
+    assert.equal(origenDesdeTexto('  México  '), 'México');
+    assert.equal(origenDesdeTexto('mexico'), 'México', 'un país de la lista se guarda con su nombre');
+    assert.equal(origenDesdeTexto(' Oaxaca '), 'Oaxaca', 'lo demás, como se escribió');
+    assert.equal(origenDesdeTexto(' '), null);
+    assert.equal(paisEnPantalla('Estados Unidos'), 'Estados Unidos');
+    assert.equal(paisEnPantalla(null), null);
+    assert.equal(estadoCaducidad('2026-11-11', '2026-11-12'), 'vencido');
+    assert.equal(estadoCaducidad('2026-11-12', '2026-11-12'), 'pronto');
+    assert.equal(estadoCaducidad('2026-11-19', '2026-11-12'), 'pronto');
+    assert.equal(estadoCaducidad('2026-11-20', '2026-11-12'), null);
+    assert.equal(estadoCaducidad(null, '2026-11-12'), null);
+  });
+  it('el ajuste se guarda con la identidad del producto y solo los lugares contados', () => {
+    const tienda = conteoDesdeTexto({ cajas: '3', porCaja: '12', sueltas: '4' });
+    const { id, datos } = armarAjuste({ producto: TORTILLAS, tienda: 'talbot', enTienda: tienda, caducidad: '2027-01-15', origen: 'México' }, PERSONAL);
+    assert.equal(id, 'talbot__p-tortillas');
+    assert.deepEqual(datos, {
+      tienda: 'talbot', producto: 'p-tortillas', nombre: 'Mission Tortillas de maíz 30 pzas', upc: '012345678905', plu: null, porPeso: false,
+      caducidad: '2027-01-15', origen: 'México', actualizadoPor: '100123', actualizadoPorNombre: 'Ana Ramírez',
+      enTienda: { cajas: 3, porCaja: 12, sueltas: 4, total: 40, contadoPor: '100123', contadoPorNombre: 'Ana Ramírez' },
+    });
+    assert.ok(!('enBodega' in datos), 'la bodega no se contó: no se escribe (queda como estaba)');
+    const soloPeso = armarAjuste({ producto: CHILES, tienda: 'talbot' }, PERSONAL).datos;
+    assert.equal(soloPeso.porPeso, true);
+    assert.ok(!('caducidad' in soloPeso) && !('origen' in soloPeso), 'caducidad y país sin tocar: no se escriben (no pisan lo de otra persona)');
+    const borrados = armarAjuste({ producto: CHILES, tienda: 'talbot', caducidad: null, origen: null }, PERSONAL).datos;
+    assert.ok(borrados.caducidad === null && borrados.origen === null, 'borrarlos sí se escribe');
+    assert.throws(() => armarAjuste({ producto: TORTILLAS, tienda: '' }, PERSONAL), /tienda/);
+    assert.throws(() => armarAjuste({ producto: { nombre: 'sin id' }, tienda: 'talbot' }, PERSONAL), /producto/);
+  });
+  it('la tabla: total de tienda y bodega, búsqueda, lo que caduca pronto y el CSV', () => {
+    const lista = [
+      { tienda: 'talbot', nombre: 'Tortillas', upc: '012345678905', porPeso: false, caducidad: '2026-11-14', origen: 'México', enTienda: { total: 40, contadoEn: marca(1) }, enBodega: { total: 120, contadoEn: marca(2) } },
+      { tienda: 'talbot', nombre: 'Chiles poblanos', plu: '4705', porPeso: true, caducidad: null, origen: 'Guatemala', enBodega: { total: 21500, contadoEn: marca(3) } },
+      { tienda: 'talbot', nombre: 'Aguacate', porPeso: true, caducidad: '2027-01-01', origen: null },
+    ];
+    assert.equal(totalExistencia(lista[0]), 160);
+    assert.equal(totalExistencia(lista[1]), 21500);
+    assert.equal(totalExistencia(lista[2]), null);
+    assert.deepEqual(filasExistencias(lista).map((e) => e.nombre), ['Aguacate', 'Chiles poblanos', 'Tortillas']);
+    assert.deepEqual(filasExistencias(lista, { buscar: 'guatemala' }).map((e) => e.nombre), ['Chiles poblanos']);
+    assert.deepEqual(filasExistencias(lista, { porCaducar: true, hoy: '2026-11-12' }).map((e) => e.nombre), ['Tortillas']);
+    const csv = filasCSVExistencias(filasExistencias(lista), { fechaTexto: (m) => `t${m.toMillis()}`, nombreTienda: () => 'Talbot' });
+    assert.deepEqual(csv[0], ['tienda', 'producto', 'upc', 'plu', 'unidad', 'en_tienda', 'en_bodega', 'total', 'caducidad', 'origen', 'contado_tienda', 'contado_bodega']);
+    assert.deepEqual(csv[2], ['Talbot', 'Chiles poblanos', '', '4705', 'kg', '', '21.5', '21.5', '', 'Guatemala', '', 't3']);
+    assert.deepEqual(csv[3], ['Talbot', 'Tortillas', '012345678905', '', 'piezas', 40, 120, 160, '2026-11-14', 'México', 't1', 't2']);
+  });
+  it('en inglés: los textos y el CSV', async () => {
+    await cargarIngles();
+    fijarIdioma('en');
+    try {
+      assert.equal(textoTotal(40, false), '40 pieces');
+      assert.equal(textoDesglose({ cajas: 3, porCaja: 12, sueltas: 4 }, false), '3 boxes × 12 + 4');
+      assert.throws(() => conteoDesdeTexto({ cajas: '3' }), /how many pieces come in each box/);
+      assert.equal(filasCSVExistencias([], { fechaTexto: String, nombreTienda: String })[0][5], 'in_store');
+      // los países: en inglés se ven en inglés, pero se guardan igual que en español
+      assert.ok(paisesSugeridos().includes('United States') && paisesSugeridos().includes('Mexico'));
+      assert.equal(origenDesdeTexto('United States'), 'Estados Unidos');
+      assert.equal(origenDesdeTexto('Mexico'), 'México');
+      assert.equal(paisEnPantalla('Estados Unidos'), 'United States');
+      assert.equal(paisEnPantalla('Oaxaca'), 'Oaxaca');
+      const enIngles = [{ tienda: 't', nombre: 'Frijol', porPeso: false, origen: 'Estados Unidos' }];
+      assert.equal(filasExistencias(enIngles, { buscar: 'united' }).length, 1, 'se busca por el nombre que se ve');
+      assert.equal(filasCSVExistencias(enIngles, { fechaTexto: String, nombreTienda: String })[1][9], 'United States');
+    } finally {
+      fijarIdioma(null);
+    }
+  });
+});
+

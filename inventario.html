@@ -24,7 +24,10 @@
     <div class="cabecera-pagina">
       <div>
         <h1 id="titulo-pagina">Inventario</h1>
-        <p class="nota">Lo que llega a la tienda: registra cada entrega y consulta qué llegó y cuánto.</p>
+        <p class="nota">Registra lo que llega, cuenta lo que hay en la tienda y en la bodega, y consulta qué llegó y cuánto.</p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <button type="button" class="boton" id="btn-ajuste">Ajuste rápido</button>
       </div>
     </div>
 
@@ -97,6 +100,36 @@
       </footer>
     </section>
 
+    <section class="panel panel--12 existencias" aria-labelledby="titulo-existencias">
+      <header class="panel__cabecera">
+        <h2 id="titulo-existencias">Existencias: tienda y bodega</h2>
+        <span class="panel__nota" id="contador-existencias"></span>
+      </header>
+      <form class="filtros filtros--existencias" id="filtros-existencias" novalidate>
+        <div class="campo">
+          <label for="e-tienda">Tienda</label>
+          <select id="e-tienda"></select>
+        </div>
+        <div class="campo campo--buscar">
+          <label for="e-buscar">Buscar</label>
+          <input id="e-buscar" type="search" autocomplete="off" placeholder="Producto, código o país">
+        </div>
+        <div class="campo campo--casilla">
+          <label><input id="e-caducar" type="checkbox"> Solo lo que caduca pronto o ya caducó</label>
+        </div>
+        <button type="button" class="boton boton--claro" id="btn-exportar-existencias">Exportar CSV</button>
+      </form>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic tabla--inventario" id="tabla-existencias" hidden>
+          <thead>
+            <tr><th>Producto</th><th>Código</th><th class="num">En la tienda</th><th class="num">En la bodega</th><th class="num">Total</th><th>Caducidad</th><th>Procedencia</th><th>Último conteo</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio-existencias">Todavía no se ha contado nada en esta tienda. Toca «Ajuste rápido» para empezar.</p>
+    </section>
+
     <h2 class="subtitulo-bo" id="titulo-llego">Lo que llegó</h2>
     <form class="filtros filtros--inventario" id="filtros" novalidate>
       <div class="segmentado" role="group" aria-label="Periodo rápido">
@@ -161,6 +194,95 @@
       <p class="nota" id="vacio-entregas" hidden>No hay entregas con esos filtros.</p>
     </section>
   </main>
+
+  <dialog id="dlg-ajuste" class="editor editor--ajuste" aria-labelledby="ajuste-titulo">
+    <div class="editor__form">
+      <header class="editor__cabecera">
+        <h2 id="ajuste-titulo">Ajuste rápido</h2>
+        <button type="button" class="boton boton--secundario" id="ajuste-cerrar">Cerrar</button>
+      </header>
+      <div class="editor__cuerpo editor__cuerpo--simple">
+        <p id="ajuste-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+
+        <form id="ajuste-buscar" class="ajuste__buscar" novalidate>
+          <div class="campo" id="ajuste-campo-tienda">
+            <label for="ajuste-tienda">Tienda</label>
+            <select id="ajuste-tienda"></select>
+          </div>
+          <div class="campo campo--grande ajuste__codigo">
+            <label for="ajuste-codigo">Producto</label>
+            <input id="ajuste-codigo" type="search" autocomplete="off" enterkeyhint="enter" spellcheck="false"
+                   placeholder="Escanea el código o escribe el PLU o el nombre" aria-controls="ajuste-sugerencias" aria-autocomplete="list">
+          </div>
+          <button id="ajuste-camara" type="button" class="boton boton--secundario" hidden>Escanear con la cámara</button>
+          <p class="nota ajuste__ayuda">Escanea o escribe el código del producto. Después escribe cuántas hay en la tienda y en la bodega (cajas y lo que trae cada caja), la fecha de caducidad y el país de procedencia. Todo es opcional: lo que dejes vacío no cambia.</p>
+        </form>
+        <ul id="ajuste-sugerencias" class="recepcion__sugerencias" role="listbox" aria-label="Productos encontrados" hidden></ul>
+
+        <form id="ajuste-datos" class="ajuste__datos" novalidate hidden>
+          <div class="ajuste__producto">
+            <strong id="ajuste-nombre"></strong>
+            <span class="secundario" id="ajuste-detalle"></span>
+          </div>
+          <div class="ajuste__lugares">
+            <fieldset class="ajuste__lugar" data-lugar="enTienda">
+              <legend>En la tienda</legend>
+              <p class="ajuste__ahora" id="ajuste-t-ahora"></p>
+              <div class="ajuste__cuenta">
+                <div class="campo">
+                  <label for="ajuste-t-cajas" data-sin-traducir>Cajas</label>
+                  <input id="ajuste-t-cajas" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+                <div class="campo">
+                  <label for="ajuste-t-porcaja" data-medida="porCaja">Piezas por caja</label>
+                  <input id="ajuste-t-porcaja" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+                <div class="campo">
+                  <label for="ajuste-t-sueltas" data-medida="sueltas">Sueltas</label>
+                  <input id="ajuste-t-sueltas" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+              </div>
+              <output class="ajuste__total" id="ajuste-t-total" for="ajuste-t-cajas ajuste-t-porcaja ajuste-t-sueltas" aria-live="polite"></output>
+            </fieldset>
+            <fieldset class="ajuste__lugar" data-lugar="enBodega">
+              <legend>En la bodega</legend>
+              <p class="ajuste__ahora" id="ajuste-b-ahora"></p>
+              <div class="ajuste__cuenta">
+                <div class="campo">
+                  <label for="ajuste-b-cajas" data-sin-traducir>Cajas</label>
+                  <input id="ajuste-b-cajas" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+                <div class="campo">
+                  <label for="ajuste-b-porcaja" data-medida="porCaja">Piezas por caja</label>
+                  <input id="ajuste-b-porcaja" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+                <div class="campo">
+                  <label for="ajuste-b-sueltas" data-medida="sueltas">Sueltas</label>
+                  <input id="ajuste-b-sueltas" inputmode="numeric" autocomplete="off" enterkeyhint="next">
+                </div>
+              </div>
+              <output class="ajuste__total" id="ajuste-b-total" for="ajuste-b-cajas ajuste-b-porcaja ajuste-b-sueltas" aria-live="polite"></output>
+            </fieldset>
+          </div>
+          <div class="ajuste__extra">
+            <div class="campo">
+              <label for="ajuste-caducidad">Fecha de caducidad</label>
+              <input id="ajuste-caducidad" type="date">
+            </div>
+            <div class="campo">
+              <label for="ajuste-origen">País de procedencia</label>
+              <input id="ajuste-origen" list="lista-paises" maxlength="60" autocomplete="off" enterkeyhint="done">
+              <datalist id="lista-paises"></datalist>
+            </div>
+          </div>
+          <div class="acciones">
+            <button type="submit" class="boton" id="ajuste-guardar">Guardar</button>
+            <button type="button" class="boton boton--secundario" id="ajuste-otro">Otro producto</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="escaner" class="escaner" aria-labelledby="escaner-titulo">
     <header class="escaner__cabecera">

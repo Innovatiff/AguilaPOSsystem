@@ -33,6 +33,9 @@ rules_version = '2';
 //    a su nombre; son inmutables y solo los leen los administradores.
 //  - recepciones/{id}: la mercancía que llegó (inventario). La registran los
 //    administradores y el personal del Catálogo; solo un admin la anula.
+//  - existencias/{tienda}__{producto}: cuánto hay de cada producto en la tienda
+//    y en la bodega (último conteo de cada lugar), su caducidad y su país de
+//    procedencia. Lo cuentan los administradores y el personal del Catálogo.
 //  - pantallas/{huella}: la pantalla del cliente de una caja, para la tableta
 //    que la muestra. El id es un HMAC del id de la caja con la clave de caja:
 //    solo una caja configurada o un administrador lo pueden calcular. La
@@ -927,6 +930,67 @@ service cloud.firestore {
       allow read: if puedeCatalogo(fichaDe(usuarioActual()), emailActual());
       allow create: if crearRecepcion(request.resource.data);
       allow update: if anularRecepcion();
+      allow delete: if false;
+    }
+
+    // ----- existencias: cuánto hay en la tienda y en la bodega ----------------
+    // existencias/{tienda}__{producto}: el último conteo de cada lugar
+    // (Inventario → Ajuste rápido): cajas × por caja + sueltas = total (piezas,
+    // o gramos en los productos por peso), quién contó y cuándo (hora del
+    // servidor); y la caducidad y el país de procedencia. Se escribe con merge:
+    // el lugar que no se contó queda como estaba. Lo registran el admin y el
+    // personal del Catálogo; nadie lo borra. No toca `existencias` de products.
+    function camposExistencia() {
+      return ['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'enTienda', 'enBodega', 'caducidad', 'origen',
+              'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'];
+    }
+    function cantidadONula(n, maximo) {
+      return n == null || (n is int && n >= 0 && n <= maximo);
+    }
+    // Un lugar contado ahora, a nombre de quien escribe: cajas × por caja + sueltas = total.
+    function conteoNuevo(c, yo, nombre) {
+      return c is map
+        && c.keys().hasOnly(['cajas', 'porCaja', 'sueltas', 'total', 'contadoEn', 'contadoPor', 'contadoPorNombre'])
+        && cantidadONula(c.cajas, 99999)
+        && cantidadONula(c.porCaja, 99999999)
+        && cantidadONula(c.sueltas, 99999999)
+        && (c.cajas == null || c.porCaja != null)
+        && c.total == (c.cajas == null ? 0 : c.cajas * c.porCaja) + (c.sueltas == null ? 0 : c.sueltas)
+        && c.contadoEn == request.time
+        && c.contadoPor == yo
+        && c.contadoPorNombre == nombre;
+    }
+    // Cada lugar: sin contar, igual que estaba, o contado ahora.
+    function lugarValido(d, antes, lugar, yo) {
+      return !(lugar in d) || d[lugar] == antes.get(lugar, null) || conteoNuevo(d[lugar], yo, d.actualizadoPorNombre);
+    }
+    function escribirExistencia(existenciaId) {
+      let d = request.resource.data;
+      let antes = resource == null ? {} : resource.data;
+      let yo = usuarioActual();
+      return puedeCatalogo(fichaDe(yo), emailActual())
+        && d.keys().hasOnly(camposExistencia())
+        && d.keys().hasAll(['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'])
+        && existenciaId == d.tienda + '__' + d.producto
+        && d.tienda.matches('^[a-z0-9-]{2,40}$')
+        && esTextoNoVacio(d.producto, 100)
+        && exists(/databases/$(database)/documents/products/$(d.producto))
+        && esTextoNoVacio(d.nombre, 120)
+        && esTextoONulo(d.upc, 20)
+        && esTextoONulo(d.plu, 10)
+        && d.porPeso is bool
+        && lugarValido(d, antes, 'enTienda', yo)
+        && lugarValido(d, antes, 'enBodega', yo)
+        && (!('caducidad' in d) || d.caducidad == null || esFechaISO(d.caducidad))
+        && (!('origen' in d) || esTextoONulo(d.origen, 60))
+        && d.actualizadoEn == request.time
+        && d.actualizadoPor == yo
+        && esTextoNoVacio(d.actualizadoPorNombre, 80);
+    }
+
+    match /existencias/{existenciaId} {
+      allow read: if puedeCatalogo(fichaDe(usuarioActual()), emailActual());
+      allow create, update: if escribirExistencia(existenciaId);
       allow delete: if false;
     }
 

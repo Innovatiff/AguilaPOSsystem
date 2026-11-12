@@ -11,6 +11,10 @@
  *   última, de qué proveedores) y entrega por entrega, en vivo, con filtros y
  *   CSV. Un administrador puede anular una entrada.
  *
+ * - Existencias: cuánto hay de cada producto en la tienda y en la bodega (el
+ *   último conteo de cada lugar), su caducidad y su país de procedencia; se
+ *   anotan con «Ajuste rápido» (escanear y escribir; todo opcional).
+ *
  * Es la misma pantalla en el back office (Inventario) y en la app Catálogo
  * (Recibir mercancía, para el personal con permiso; sin anular).
  */
@@ -19,10 +23,13 @@ import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
 import { observarCatalogo, observarTiendas, esperarConfirmacion } from './productos.js';
 import { registrarRecepcion, observarRecepciones, anularRecepcion } from './recepciones.js';
+import { guardarAjuste, observarExistencias } from './existencias.js';
 import {
   LIMITES_RECEPCION, piezasDesdeTexto, kilosDesdeTexto, textoKilos, separarMultiplicador, esDePeso, lineaDeRecepcion,
   lineaSinRegistrar, claveDeLinea, erroresDeLinea, armarRecepcion, textoCantidades, textoLinea, cumpleFiltrosRecepcion,
-  lineasVisibles, resumirPorProducto, totalesRecepciones, filasCSVRecepciones,
+  lineasVisibles, resumirPorProducto, totalesRecepciones, filasCSVRecepciones, nombreCompleto,
+  LUGARES, conteoDesdeTexto, textoTotal, textoDesglose, caducidadDesdeTexto, origenDesdeTexto, paisEnPantalla, paisesSugeridos, estadoCaducidad, armarAjuste,
+  totalExistencia, filasExistencias, filasCSVExistencias,
 } from './inventario.js';
 import { coincideBusqueda } from './esquema.js';
 import { formatearPeso } from './ticket.js';
@@ -31,7 +38,7 @@ import { camaraDisponible, abrirEscaner, mensajeCamara, confirmarLectura } from 
 import {
   claveDia, sumarDias, inicioDia, diasEntre, chip, mostrarMensaje, descargarCSV, fechaHora, cuando, filaDato,
 } from './bo.js';
-import { t, numero } from './idioma.js';
+import { t, tc, numero, locale } from './idioma.js';
 
 const { personal } = await requerirPersonal();
 pintarNavegacion({ personal, activa: 'inventario.html' });
@@ -438,17 +445,18 @@ $('btn-registrar').addEventListener('click', async () => {
 // ------------------------------------------------------------- cámara
 
 const escaner = $('escaner');
-const camara = { controles: null, abriendo: false, linterna: false };
+const camara = { controles: null, abriendo: false, linterna: false, alLeer: null };
 
 function estadoCamara(texto, tipo = '') {
   $('escaner-estado').textContent = texto;
   $('escaner-estado').className = `escaner__estado${tipo ? ` escaner__estado--${tipo}` : ''}`;
 }
 
-$('btn-camara').hidden = !camaraDisponible();
-$('btn-camara').addEventListener('click', async () => {
+/** Abre la cámara; `alLeer(texto)` recibe cada código leído (recibir mercancía o el ajuste rápido). */
+async function abrirCamara(alLeer) {
   if (camara.abriendo) return;
   camara.abriendo = true;
+  camara.alLeer = alLeer;
   $('escaner-linterna').hidden = true;
   estadoCamara(t('Iniciando cámara…'));
   if (!escaner.open) escaner.showModal();
@@ -456,9 +464,7 @@ $('btn-camara').addEventListener('click', async () => {
     camara.controles = await abrirEscaner($('escaner-video'), {
       alDetectar: ({ texto }) => {
         confirmarLectura();
-        procesar(texto);
-        estadoCamara(t('Leído {codigo}. Apunta al siguiente o cierra.', { codigo: texto }), 'ok');
-        if (pendienteNuevo || lineas[0]?.cantidad === null) escaner.close();
+        camara.alLeer?.(texto);
       },
       alError: (error) => estadoCamara(mensajeCamara(error), 'error'),
     });
@@ -469,11 +475,19 @@ $('btn-camara').addEventListener('click', async () => {
   } finally {
     camara.abriendo = false;
   }
-});
+}
+
+$('btn-camara').hidden = !camaraDisponible();
+$('btn-camara').addEventListener('click', () => abrirCamara((texto) => {
+  procesar(texto);
+  estadoCamara(t('Leído {codigo}. Apunta al siguiente o cierra.', { codigo: texto }), 'ok');
+  if (pendienteNuevo || lineas[0]?.cantidad === null) escaner.close();
+}));
 $('escaner-cerrar').addEventListener('click', () => escaner.close());
 escaner.addEventListener('close', () => {
   camara.controles?.detener();
   camara.controles = null;
+  camara.alLeer = null;
   camara.linterna = false;
   $('escaner-linterna').setAttribute('aria-pressed', 'false');
 });
@@ -676,6 +690,438 @@ $('tabla-entregas').addEventListener('keydown', (e) => {
   if (r) abrirEntrega(r);
 });
 
+// ===================================================================== existencias: tienda y bodega (Ajuste rápido)
+//
+// «Ajuste rápido»: se escanea (o se escribe) el código del producto y se anota
+// cuánto hay en la tienda y en la bodega (cajas × lo que trae cada caja +
+// sueltas), la fecha de caducidad y el país de procedencia. Todo es opcional:
+// lo que se deja vacío no cambia. La tabla de existencias muestra el último
+// conteo de cada lugar de la tienda elegida, en vivo.
+
+let existencias = []; // las de la tienda elegida
+let tiendaExistencias = '';
+let dejarExistencias = null;
+let ajuste = null; // { producto, propuesto } mientras se capturan sus datos
+let sugeridosAjuste = [];
+let activoAjuste = -1;
+
+const dlgAjuste = $('dlg-ajuste');
+const LUGARES_AJUSTE = Object.freeze([['t', 'enTienda'], ['b', 'enBodega']]);
+// Sugerencias del campo «País de procedencia» (en el idioma elegido; se guarda lo que se escriba).
+
+const milisDe = (marca) => (typeof marca?.toMillis === 'function' ? marca.toMillis() : 0);
+/** '2027-01-15' → «15 ene 2027» / «Jan 15, 2027». */
+const fechaCaducidad = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
+const mensajeAjuste = (tipo, texto) => mostrarMensaje($('ajuste-mensaje'), tipo, texto);
+const existenciaDe = (productoId) => existencias.find((e) => e.producto === productoId) ?? null;
+
+function celdaLugar(e, conteo) {
+  if (!conteo) return h('td', { class: 'num secundario', text: '—' });
+  const desglose = textoDesglose(conteo, e.porPeso);
+  return h('td', { class: 'num' },
+    h('span', { class: 'existencias__cantidad', text: textoTotal(conteo.total, e.porPeso) }),
+    desglose ? h('span', { class: 'existencias__desglose', text: desglose }) : null);
+}
+
+function celdaCaducidad(caducidad, hoy) {
+  if (!caducidad) return h('td', { text: '—' });
+  const estado = estadoCaducidad(caducidad, hoy);
+  const aviso = estado === 'vencido' ? chip(t('Caducado'), 'alerta') : estado === 'pronto' ? chip(t('Caduca pronto'), 'aviso') : null;
+  return h('td', null, fechaCaducidad(caducidad), aviso ? [' ', aviso] : null);
+}
+
+function celdaUltimoConteo(e) {
+  const ultimo = LUGARES.map((lugar) => e[lugar]).filter((c) => c?.contadoEn).sort((a, b) => milisDe(b.contadoEn) - milisDe(a.contadoEn))[0];
+  if (!ultimo) return h('td', { text: '—' });
+  return h('td', null, h('span', { text: cuando(ultimo.contadoEn) }), h('span', { class: 'existencias__quien', text: ultimo.contadoPorNombre }));
+}
+
+function pintarExistencias() {
+  const hoy = claveDia();
+  const filas = filasExistencias(existencias, { buscar: $('e-buscar').value, porCaducar: $('e-caducar').checked, hoy });
+  $('contador-existencias').textContent = existencias.length ? textoProductos(filas.length) : '';
+  $('tabla-existencias').hidden = filas.length === 0;
+  $('vacio-existencias').hidden = filas.length > 0;
+  if (!$('e-tienda').value) $('vacio-existencias').textContent = t('Primero da de alta una tienda (Administración → Tiendas).');
+  else if (existencias.length) $('vacio-existencias').textContent = t('Nada con esos filtros.');
+  else $('vacio-existencias').textContent = t('Todavía no se ha contado nada en esta tienda. Toca «Ajuste rápido» para empezar.');
+  $('tabla-existencias').tBodies[0].replaceChildren(...filas.map((e) => h('tr', { tabindex: 0, dataset: { producto: e.producto } },
+    h('td', null, e.nombre, e.pendiente ? [' ', chip(t('Por enviar'), 'aviso')] : null),
+    h('td', { class: 'monoespaciada', text: e.upc ?? (e.plu ? `PLU ${e.plu}` : '—') }),
+    celdaLugar(e, e.enTienda),
+    celdaLugar(e, e.enBodega),
+    h('td', { class: 'num' }, h('strong', { text: textoTotal(totalExistencia(e), e.porPeso) })),
+    celdaCaducidad(e.caducidad, hoy),
+    h('td', { text: paisEnPantalla(e.origen) ?? '—' }),
+    celdaUltimoConteo(e))));
+  const paises = new Set(paisesSugeridos());
+  for (const e of existencias) if (e.origen) paises.add(paisEnPantalla(e.origen));
+  $('lista-paises').replaceChildren(...[...paises].sort((a, b) => a.localeCompare(b, locale())).map((p) => h('option', { value: p })));
+  if (ajuste && dlgAjuste.open) pintarAhora();
+}
+
+function escucharExistencias() {
+  const tienda = $('e-tienda').value;
+  if (tienda === tiendaExistencias && (dejarExistencias || !tienda)) return;
+  dejarExistencias?.();
+  dejarExistencias = null;
+  tiendaExistencias = tienda;
+  existencias = [];
+  pintarExistencias();
+  if (!tienda) return;
+  dejarExistencias = observarExistencias(tienda, (lista) => {
+    existencias = lista;
+    pintarExistencias();
+    refrescarAjuste();
+  }, (error) => avisar('error', t('No se pudieron cargar las existencias: {error}', { error: mensajeError(error) })));
+}
+
+/** Las tiendas activas en el filtro de la tabla y en el ajuste (sin elegir si solo hay una). */
+function llenarTiendasExistencias() {
+  const activas = tiendas.filter((tienda) => tienda.activo !== false);
+  const actual = $('e-tienda').value || $('r-tienda').value || leer(TIENDA) || personal.tienda || '';
+  const opciones = () => activas.map((tienda) => h('option', { value: tienda.id, text: tienda.nombre }));
+  $('e-tienda').replaceChildren(...opciones());
+  $('ajuste-tienda').replaceChildren(...opciones());
+  $('e-tienda').value = activas.some((tienda) => tienda.id === actual) ? actual : (activas[0]?.id ?? '');
+  $('ajuste-tienda').value = $('e-tienda').value;
+  $('ajuste-campo-tienda').hidden = activas.length <= 1;
+  escucharExistencias();
+}
+
+$('e-tienda').addEventListener('change', () => {
+  $('ajuste-tienda').value = $('e-tienda').value;
+  escucharExistencias();
+});
+$('e-buscar').addEventListener('input', pintarExistencias);
+$('e-caducar').addEventListener('change', pintarExistencias);
+$('filtros-existencias').addEventListener('submit', (e) => e.preventDefault());
+$('btn-exportar-existencias').addEventListener('click', () => {
+  const filas = filasExistencias(existencias, { buscar: $('e-buscar').value, porCaducar: $('e-caducar').checked, hoy: claveDia() });
+  descargarCSV(`${t('existencias')}-${$('e-tienda').value || 'tienda'}-${claveDia()}.csv`, filasCSVExistencias(filas, { fechaTexto: fechaHora, nombreTienda }));
+});
+
+function abrirDesdeTabla(e) {
+  const fila = e.target.closest('tr[data-producto]');
+  if (!fila) return;
+  const producto = catalogo.get(fila.dataset.producto);
+  if (!producto) {
+    avisar('error', t('Ese producto ya no está en el catálogo.'));
+    return;
+  }
+  abrirAjuste(producto);
+}
+$('tabla-existencias').addEventListener('click', abrirDesdeTabla);
+$('tabla-existencias').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') abrirDesdeTabla(e);
+});
+
+// ------------------------------------------------------------- el diálogo
+
+function abrirAjuste(producto = null) {
+  $('ajuste-tienda').value = $('e-tienda').value;
+  mensajeAjuste('', '');
+  if (!dlgAjuste.open) dlgAjuste.showModal();
+  if (producto) elegirParaAjuste(producto);
+  else pasoBuscar();
+}
+
+function ocultarSugerenciasAjuste() {
+  sugeridosAjuste = [];
+  activoAjuste = -1;
+  $('ajuste-sugerencias').hidden = true;
+  $('ajuste-sugerencias').replaceChildren();
+  $('ajuste-codigo').removeAttribute('aria-activedescendant');
+}
+
+function pasoBuscar() {
+  ajuste = null;
+  $('ajuste-datos').hidden = true;
+  $('ajuste-buscar').hidden = false;
+  $('ajuste-codigo').value = '';
+  ocultarSugerenciasAjuste();
+  $('ajuste-codigo').focus();
+}
+
+function textoAhora(e, lugar) {
+  const conteo = e?.[lugar];
+  if (!conteo) return t('Sin contar todavía.');
+  const desglose = textoDesglose(conteo, e.porPeso);
+  const cantidad = desglose ? `${textoTotal(conteo.total, e.porPeso)} (${desglose})` : textoTotal(conteo.total, e.porPeso);
+  return t('Ahora: {cantidad} · contado {cuando} por {quien}', { cantidad, cuando: cuando(conteo.contadoEn), quien: conteo.contadoPorNombre });
+}
+
+function pintarAhora() {
+  const e = existenciaDe(ajuste.producto.id);
+  for (const [x, lugar] of LUGARES_AJUSTE) $(`ajuste-${x}-ahora`).textContent = textoAhora(e, lugar);
+}
+
+const leerLugar = (x, porPeso) => conteoDesdeTexto(
+  { cajas: $(`ajuste-${x}-cajas`).value, porCaja: $(`ajuste-${x}-porcaja`).value, sueltas: $(`ajuste-${x}-sueltas`).value },
+  { porPeso },
+);
+
+function pintarTotalesAjuste() {
+  if (!ajuste) return;
+  const porPeso = esDePeso(ajuste.producto);
+  for (const [x] of LUGARES_AJUSTE) {
+    const salida = $(`ajuste-${x}-total`);
+    try {
+      const conteo = leerLugar(x, porPeso);
+      delete salida.dataset.error;
+      salida.textContent = conteo ? `= ${textoTotal(conteo.total, porPeso)}` : '';
+    } catch (error) {
+      salida.dataset.error = '';
+      salida.textContent = error.message;
+    }
+  }
+}
+
+/**
+ * Lo que el diálogo propone a partir del último conteo (id del campo → texto):
+ * lo que trae cada caja (casi no cambia), la caducidad y el país. Lo propuesto
+ * que nadie toca no se escribe: no pisa lo que otra persona guarde mientras tanto.
+ */
+function propuestosDe(producto) {
+  const e = existenciaDe(producto.id);
+  const porPeso = esDePeso(producto);
+  const valores = { 'ajuste-caducidad': e?.caducidad ?? '', 'ajuste-origen': paisEnPantalla(e?.origen) ?? '' };
+  for (const [x, lugar] of LUGARES_AJUSTE) {
+    const porCaja = e?.[lugar]?.porCaja ?? e?.enTienda?.porCaja ?? e?.enBodega?.porCaja ?? null;
+    valores[`ajuste-${x}-porcaja`] = Number.isInteger(porCaja) ? (porPeso ? textoKilos(porCaja) : String(porCaja)) : '';
+  }
+  return valores;
+}
+
+const cambiadoEnAjuste = (id) => $(id).value.trim() !== ajuste.propuesto[id];
+
+/**
+ * Llegó un conteo nuevo con el diálogo abierto (otra persona, otra tienda
+ * elegida, o el propio guardado): se actualiza «Ahora» y lo propuesto que no
+ * se ha tocado; lo que la persona ya escribió se respeta.
+ */
+function refrescarAjuste() {
+  if (!ajuste || !dlgAjuste.open || $('ajuste-datos').hidden) return;
+  for (const [id, valor] of Object.entries(propuestosDe(ajuste.producto))) {
+    if (cambiadoEnAjuste(id)) continue;
+    const x = /^ajuste-([tb])-porcaja$/.exec(id)?.[1];
+    if (x && ($(`ajuste-${x}-cajas`).value.trim() || $(`ajuste-${x}-sueltas`).value.trim())) continue;
+    $(id).value = valor;
+    ajuste.propuesto[id] = valor;
+  }
+  pintarAhora();
+  pintarTotalesAjuste();
+}
+
+function elegirParaAjuste(producto) {
+  if (!$('ajuste-tienda').value) {
+    mensajeAjuste('error', t('Elige la tienda.'));
+    return;
+  }
+  ajuste = { producto, propuesto: propuestosDe(producto) };
+  ocultarSugerenciasAjuste();
+  const porPeso = esDePeso(producto);
+  $('ajuste-buscar').hidden = true;
+  $('ajuste-datos').hidden = false;
+  $('ajuste-nombre').textContent = nombreCompleto(producto);
+  $('ajuste-detalle').textContent = [
+    producto.upc ?? (producto.plu ? `PLU ${producto.plu}` : ''), porPeso ? t('por kilo') : '', producto.activo === false ? t('inactivo') : '',
+    tiendas.length > 1 ? nombreTienda($('ajuste-tienda').value) : '',
+  ].filter(Boolean).join(' · ');
+  for (const [x] of LUGARES_AJUSTE) {
+    document.querySelector(`label[for="ajuste-${x}-cajas"]`).textContent = tc('bultos', 'Cajas');
+    document.querySelector(`label[for="ajuste-${x}-porcaja"]`).textContent = porPeso ? t('Kilos por caja') : t('Piezas por caja');
+    document.querySelector(`label[for="ajuste-${x}-sueltas"]`).textContent = porPeso ? t('Kilos sueltos') : t('Sueltas');
+    $(`ajuste-${x}-porcaja`).inputMode = porPeso ? 'decimal' : 'numeric';
+    $(`ajuste-${x}-sueltas`).inputMode = porPeso ? 'decimal' : 'numeric';
+    $(`ajuste-${x}-cajas`).value = '';
+    $(`ajuste-${x}-sueltas`).value = '';
+  }
+  for (const [id, valor] of Object.entries(ajuste.propuesto)) $(id).value = valor;
+  pintarAhora();
+  pintarTotalesAjuste();
+  $('ajuste-t-cajas').focus();
+}
+
+function procesarAjuste(texto) {
+  const codigo = String(texto ?? '').trim();
+  if (codigo === '') return;
+  mensajeAjuste('', '');
+  if (/^\d{4,5}$/.test(codigo)) {
+    const producto = elegir(porPLU.get(codigo));
+    if (producto) elegirParaAjuste(producto);
+    else mensajeAjuste('error', t('No hay ningún producto con el PLU {plu}.', { plu: codigo }));
+    return;
+  }
+  if (/^\d+$/.test(codigo)) {
+    let upc;
+    try {
+      upc = normalizarUPC(codigo);
+    } catch (error) {
+      mensajeAjuste('error', error.message);
+      $('ajuste-codigo').select();
+      return;
+    }
+    const producto = elegir(porUPC.get(upc));
+    if (producto) {
+      elegirParaAjuste(producto);
+    } else {
+      mensajeAjuste('error', t('El código {upc} no está en el catálogo: dalo de alta (Productos o Captura rápida) para poder contarlo.', { upc }));
+      $('ajuste-codigo').select();
+    }
+    return;
+  }
+  const lista = activoAjuste >= 0 && sugeridosAjuste.length ? [sugeridosAjuste[activoAjuste]] : buscar(codigo);
+  if (lista.length === 0) {
+    mensajeAjuste('error', t('No se encontró «{codigo}» en el catálogo.', { codigo }));
+    return;
+  }
+  elegirParaAjuste(lista[0]);
+}
+
+function pintarSugerenciasAjuste() {
+  const lista = $('ajuste-sugerencias');
+  lista.replaceChildren(...sugeridosAjuste.map((p, i) => h('li', {
+    id: `ajuste-sugerencia-${i}`,
+    role: 'option',
+    class: 'recepcion__sugerencia',
+    'aria-selected': String(i === activoAjuste),
+    dataset: { indice: i },
+  },
+  h('strong', { text: [p.marca, p.nombre].filter(Boolean).join(' ') }),
+  h('span', { class: 'secundario', text: [p.presentacion, p.upc ?? (p.plu ? `PLU ${p.plu}` : ''), esDePeso(p) ? t('por kilo') : '', p.activo === false ? t('inactivo') : ''].filter(Boolean).join(' · ') }))));
+  lista.hidden = sugeridosAjuste.length === 0;
+  if (activoAjuste >= 0) $('ajuste-codigo').setAttribute('aria-activedescendant', `ajuste-sugerencia-${activoAjuste}`);
+  else $('ajuste-codigo').removeAttribute('aria-activedescendant');
+}
+
+$('ajuste-codigo').addEventListener('input', () => {
+  const codigo = $('ajuste-codigo').value.trim();
+  if (codigo.length < 2 || /^\d+$/.test(codigo)) {
+    ocultarSugerenciasAjuste();
+    return;
+  }
+  sugeridosAjuste = buscar(codigo);
+  activoAjuste = sugeridosAjuste.length ? 0 : -1;
+  pintarSugerenciasAjuste();
+});
+$('ajuste-codigo').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!sugeridosAjuste.length) return;
+    e.preventDefault();
+    activoAjuste = (activoAjuste + (e.key === 'ArrowDown' ? 1 : -1) + sugeridosAjuste.length) % sugeridosAjuste.length;
+    pintarSugerenciasAjuste();
+  }
+});
+$('ajuste-buscar').addEventListener('submit', (e) => {
+  e.preventDefault();
+  procesarAjuste($('ajuste-codigo').value);
+});
+$('ajuste-sugerencias').addEventListener('mousedown', (e) => e.preventDefault()); // no robar el foco
+$('ajuste-sugerencias').addEventListener('click', (e) => {
+  const opcion = e.target.closest('[data-indice]');
+  const producto = opcion ? sugeridosAjuste[Number(opcion.dataset.indice)] : null;
+  if (producto) elegirParaAjuste(producto);
+});
+$('ajuste-tienda').addEventListener('change', () => {
+  $('e-tienda').value = $('ajuste-tienda').value;
+  escucharExistencias();
+  if (ajuste) elegirParaAjuste(ajuste.producto);
+});
+for (const [x] of LUGARES_AJUSTE) {
+  for (const campo of ['cajas', 'porcaja', 'sueltas']) $(`ajuste-${x}-${campo}`).addEventListener('input', pintarTotalesAjuste);
+}
+
+/** «En la tienda: 40 piezas · En la bodega: 120 piezas» de lo que se guardó. */
+function resumenAjuste(datos) {
+  const partes = [];
+  if (datos.enTienda) partes.push(t('En la tienda: {cantidad}', { cantidad: textoTotal(datos.enTienda.total, datos.porPeso) }));
+  if (datos.enBodega) partes.push(t('En la bodega: {cantidad}', { cantidad: textoTotal(datos.enBodega.total, datos.porPeso) }));
+  return partes.join(' · ');
+}
+
+$('ajuste-datos').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!ajuste) return;
+  // Con el escáner USB, un código escaneado en un campo de cantidad llega con Enter: no se guarda como cantidad.
+  const enfocado = document.activeElement;
+  if (enfocado?.matches?.('.ajuste__cuenta input') && /^\d{8,14}$/.test(enfocado.value.trim())) {
+    enfocado.value = '';
+    pintarTotalesAjuste();
+    mensajeAjuste('error', t('Eso parece un código de barras: guarda este producto (o toca «Otro producto») antes de escanear el siguiente.'));
+    return;
+  }
+  const porPeso = esDePeso(ajuste.producto);
+  const contados = {};
+  for (const [x, lugar] of LUGARES_AJUSTE) {
+    try {
+      contados[lugar] = leerLugar(x, porPeso);
+    } catch (error) {
+      mensajeAjuste('error', lugar === 'enTienda'
+        ? t('En la tienda: {error}', { error: error.message })
+        : t('En la bodega: {error}', { error: error.message }));
+      $(`ajuste-${x}-cajas`).focus();
+      return;
+    }
+  }
+  let caducidad;
+  try {
+    caducidad = caducidadDesdeTexto($('ajuste-caducidad').value);
+  } catch (error) {
+    mensajeAjuste('error', error.message);
+    $('ajuste-caducidad').focus();
+    return;
+  }
+  const origen = origenDesdeTexto($('ajuste-origen').value);
+  const cambioCaducidad = cambiadoEnAjuste('ajuste-caducidad');
+  const cambioOrigen = cambiadoEnAjuste('ajuste-origen');
+  if (!contados.enTienda && !contados.enBodega && !cambioCaducidad && !cambioOrigen) {
+    mensajeAjuste('aviso', t('No hay nada que guardar: escribe cuántas hay, la fecha de caducidad o el país.'));
+    $('ajuste-t-cajas').focus();
+    return;
+  }
+  let armado;
+  try {
+    armado = armarAjuste({
+      producto: ajuste.producto, tienda: $('ajuste-tienda').value, ...contados,
+      caducidad: cambioCaducidad ? caducidad : undefined, origen: cambioOrigen ? origen : undefined,
+    }, personal);
+  } catch (error) {
+    mensajeAjuste('error', error.message);
+    return;
+  }
+  $('ajuste-guardar').disabled = true;
+  const { promesa } = guardarAjuste(armado);
+  promesa.catch((error) => avisar('error', t('El ajuste de {producto} no se guardó: {error}', { producto: armado.datos.nombre, error: mensajeError(error) })));
+  try {
+    const estado = await esperarConfirmacion(promesa);
+    const resumen = resumenAjuste(armado.datos);
+    const guardado = [t('Guardado: {producto}.', { producto: armado.datos.nombre }), resumen].filter(Boolean).join(' ');
+    pasoBuscar();
+    mensajeAjuste('ok', estado === 'pendiente' ? `${guardado} ${t('Sin señal: se enviará en cuanto vuelva.')}` : guardado);
+  } catch (error) {
+    mensajeAjuste('error', t('No se pudo guardar el ajuste: {error}', { error: mensajeError(error) }));
+  } finally {
+    $('ajuste-guardar').disabled = false;
+  }
+});
+
+$('ajuste-otro').addEventListener('click', () => {
+  mensajeAjuste('', '');
+  pasoBuscar();
+});
+$('ajuste-cerrar').addEventListener('click', () => dlgAjuste.close());
+dlgAjuste.addEventListener('close', () => {
+  ajuste = null;
+  ocultarSugerenciasAjuste();
+});
+$('btn-ajuste').addEventListener('click', () => abrirAjuste());
+$('ajuste-camara').hidden = !camaraDisponible();
+$('ajuste-camara').addEventListener('click', () => abrirCamara((texto) => {
+  escaner.close();
+  procesarAjuste(texto);
+}));
+
 // ===================================================================== arranque
 
 $('contenido').hidden = false;
@@ -688,6 +1134,7 @@ observarTiendas((lista) => {
   const activas = lista.filter((tienda) => tienda.activo !== false);
   $('r-tienda').replaceChildren(h('option', { value: '', text: t('Sin especificar') }), ...activas.map((tienda) => h('option', { value: tienda.id, text: tienda.nombre })));
   $('r-tienda').value = activas.some((tienda) => tienda.id === actual) ? actual : (activas.length === 1 ? activas[0].id : '');
+  llenarTiendasExistencias();
   pintarHistorial();
 }, () => {});
 

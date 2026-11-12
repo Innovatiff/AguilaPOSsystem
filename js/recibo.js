@@ -13,6 +13,7 @@ import { formatearMonto, formatearPeso, formatearPorcentaje, nombreMetodo, METOD
 import { svgCode128C } from './code128.js';
 import { formatearDuracion, milisDe, nombreMovimiento, ventasNetas } from './turnos.js';
 import { t, tc, traducirTexto } from './idioma.js';
+import { nombreDeLinea, nombreDepartamentoPorId } from './config-pos.js';
 
 const formatoFecha = new Intl.DateTimeFormat('es-CA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -81,7 +82,7 @@ export function reciboVenta(venta, { tienda = null, config = {}, copia = false }
   const lineas = el('div', 'recibo__lineas');
   for (const l of venta.lineas) {
     const bloque = el('div', 'recibo__linea');
-    const nombre = [l.nombre, l.presentacion].filter(Boolean).join(' ');
+    const nombre = [nombreDeLinea(l, config.departamentos), l.presentacion].filter(Boolean).join(' ');
     bloque.append(el('div', 'recibo__desc', nombre));
     const detalle = l.unidad === 'peso'
       ? `${formatearPeso(l.pesoGramos)} × ${importe(l.precioUnitarioCentavos)}/kg`
@@ -191,11 +192,13 @@ export function reciboTurno(turno, resumen, { tienda = null, config = {}, tipo =
     r.append(fila(t('Primer ticket'), resumen.primerFolio, 'recibo__fila--suave'));
     r.append(fila(t('Último ticket'), resumen.ultimoFolio, 'recibo__fila--suave'));
   }
-  const deptos = Object.values(resumen.porDepartamento ?? {});
+  const deptos = Object.entries(resumen.porDepartamento ?? {});
   if (deptos.length) {
     r.append(separador());
     r.append(el('div', 'recibo__subtitulo', t('VENTA LIBRE POR DEPARTAMENTO')));
-    for (const d of deptos.sort((a, b) => b.netoCentavos - a.netoCentavos)) r.append(fila(d.nombre, importe(d.netoCentavos)));
+    for (const [id, d] of deptos.sort(([, a], [, b]) => b.netoCentavos - a.netoCentavos)) {
+      r.append(fila(nombreDepartamentoPorId(config.departamentos, id, d.nombre), importe(d.netoCentavos)));
+    }
   }
   r.append(separador(true));
   r.append(el('div', 'recibo__firma', t('Firma de quien entrega')));

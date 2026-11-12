@@ -10,7 +10,7 @@ Four apps share the site, the data and the service worker:
 
 | app | where | who | what |
 |---|---|---|---|
-| **Back office** | site root (`index.html`, `movimientos.html`, `transacciones.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `inventario.html`, `gestion/`) | **admins only** | today's sales live, **live register activity**, **transactions with receipts and audit history**, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, **inventory: what came in and how much**, employees, registers, stores, POS settings |
+| **Back office** | site root (`index.html`, `movimientos.html`, `transacciones.html`, `turnos.html`, `reportes.html`, catalog pages, `solicitudes.html`, `inventario.html`, `gestion/`) | **admins only** | today's sales live, **live register activity**, **transactions with receipts and audit history**, shifts with hours and cash over/short, reports, products and tags, **requests from the Catálogo app**, **inventory: what came in and how much, and how many there are in the store and in the warehouse (bodega)**, employees, registers, stores, POS settings |
 | **Caja** (register) | `caja/` | every active staff member | sell: scan, weigh, department keys, discounts and returns with admin approval, cash/debit/credit, receipts; each cashier opens and closes **their own shift with only their 6-digit PIN**, and the close prints their Z report with what they sold and their hours. **Customer display** on a second screen or a tablet: `caja/cliente.html` |
 | **Catálogo** | `catalogo/` | staff an admin allowed (**Empleados → Puede usar la app Catálogo**) | search and scan products, edit their data (**never the price, unit or tax class**), print shelf tags, **receive deliveries** (what came in, how many), and **request** new products (without price) and removals, which an admin resolves in the back office. No way into the back office |
 | **Consulta de precios** | `caja/consulta.html` | every active staff member | price check on a phone (camera) or a PC (USB scanner) |
@@ -22,7 +22,7 @@ Four apps share the site, the data and the service worker:
 | `index.html`, `js/inicio.js` | back office home: sold today, tickets, average ticket, HST, sales by hour, payment methods, registers with an open shift, latest tickets |
 | `movimientos.html`, `js/bo-movimientos.js`, `js/eventos.js` | live register activity (`eventos/`): every sale started, item added, price change, discount, void, approval, payment, completed sale, cancellation, return, cash movement and shift open/close, newest first, as it happens |
 | `transacciones.html`, `js/bo-transacciones.js` | every completed, voided (cancelled ticket) or returned transaction of a date range: filters (associate, register, status, audit flags, payment method), search by receipt number or item name (or scan the receipt), receipt with reprint and its audit history, CSV. `ventas.html` redirects here |
-| `inventario.html`, `js/pantalla-inventario.js`, `js/inventario.js`, `js/recepciones.js` | receive deliveries (scan or search products, pieces or kg, supplier, invoice) and see what came in: per product (how much, in how many deliveries, last one, suppliers) and per delivery; admins can void a delivery; CSV. Also in the Catálogo app as **Recibir mercancía** |
+| `inventario.html`, `js/pantalla-inventario.js`, `js/inventario.js`, `js/recepciones.js`, `js/existencias.js` | **Ajuste rápido**: scan or type a product and count how many there are in the store and in the warehouse (boxes × pieces per box + loose), expiry date and country of origin; the stock table per store (store, warehouse, total, expiry, origin, last count) with CSV. Receive deliveries (scan or search products, pieces or kg, supplier, invoice) and see what came in: per product (how much, in how many deliveries, last one, suppliers) and per delivery; admins can void a delivery; CSV. Also in the Catálogo app as **Recibir mercancía** |
 | `turnos.html`, `js/bo-turnos.js` | open shifts now and shifts of a period: hours, sales, expected/counted cash, over/short; shift detail with its Z (or X) report, verification against the sales, admin close |
 | `reportes.html`, `js/bo-reportes.js` | reports of a period from the shift summaries: totals, tax, by day, payment methods, by person (hours), by register, top products, department sales, control counters; print and CSV |
 | `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees (email, PIN, Catálogo permission), CSV import/export |
@@ -159,7 +159,8 @@ Once per Firebase project:
    - **Cajas**: one per register (number 1–99; it appears in receipt numbers).
    - **Configuración**: tax name and rate (HST 13 %), suggested opening float,
      open-price limit, blind count, receipt width (80/58 mm) and footer, and the
-     department keys of the register.
+     department keys of the register (each with its name in Spanish and,
+     optionally, in English; the factory ones come with both).
 6. On each register computer, open `https://<site>/caja/` in Chrome: an admin
    signs in with their email and PIN (or password) and picks which register
    that computer is. Done once per computer: it stores the register and the
@@ -211,6 +212,21 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
   open are listed and join the report when they close.
 - **Catálogo**: Productos, Solicitudes, Captura rápida, Etiquetas, Prueba de
   etiquetas, Importar / exportar (see below), and **Inventario**:
+  - *Ajuste rápido* (button at the top): scan the product with the USB scanner
+    (or the phone camera) or type its code, PLU or name; then, all optional,
+    how many there are **in the store** and **in the warehouse (bodega)** as
+    boxes, pieces per box (kilos per box for weighed products) and loose
+    pieces, the **expiry date** and the **country of origin**. The total is
+    worked out as you type. Whatever is left empty stays as it was, so the
+    store and the warehouse can be counted separately, by different people, at
+    the same time. A barcode scanned into a quantity field is refused instead
+    of being saved as a quantity. After saving it is ready for the next scan.
+  - *Existencias: tienda y bodega*: per store, each counted product with how
+    many in the store, in the warehouse and in total (with the boxes
+    breakdown), expiry date (marked when it expires within 7 days or already
+    expired), country and the last count (when and who). Search, "only what
+    expires soon", CSV, and tapping a row opens its adjustment. The numbers are
+    the **last count**: sales and deliveries do not change them.
   - *Recibir mercancía*: store, supplier, invoice or delivery note, note; scan
     each product with the USB scanner (or the phone camera) or find it by PLU
     or name. Scanning the same product again adds one piece; `24*` before the
@@ -223,8 +239,9 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
     last one and from which suppliers; and each **entrega** with its lines.
     An admin can **Anular entrada** (it stays visible, struck through, and
     stops counting). CSV export, one row per line.
-  Deliveries do not change the products' `existencias`: the catalog schema is
-  untouched.
+  Neither deliveries nor counts change the products' `existencias` field:
+  counts live in their own collection (`existencias/`, see
+  [docs/esquema.md](docs/esquema.md)) and the catalog schema is untouched.
 - **Empleados**, **Cajas**, **Tiendas**, **Configuración** (see setup).
 
 ## The register (`/caja/`)
@@ -386,7 +403,8 @@ back office catalog, in staff mode:
   the product enters the catalog when an admin sets its price.
 - **Captura rápida**: scan, name, brand, size, Enter: the request is sent.
 - **Recibir mercancía**: the back office Inventario screen: register what
-  came in and see what came in. Voiding a delivery is for admins only.
+  came in, see what came in, and **Ajuste rápido** to count the store and the
+  warehouse from the phone. Voiding a delivery is for admins only.
 - **Etiquetas**: print pending shelf tags (the printed price is recorded).
 - **Mis solicitudes**: each request with its status and the admin's note.
 
@@ -416,8 +434,12 @@ showing a register yet.
   tickets and does not lock the register (a normal reload still asks for the
   PIN). The customer display follows the register's language by itself: right
   away on the same computer, with the next update on a tablet.
-- **Data is never translated**: product, store, person, department and register
-  names, notes and a receipt message typed by the store stay as written. Only
+- **Data is never translated**: product, store, person and register names,
+  notes and a receipt message typed by the store stay as written. Department
+  keys show their English name when they have one (Configuración), on screen,
+  on receipts and in the reports; sales still store the Spanish name. In a
+  stock count, a country from the suggested list is stored in Spanish and
+  shown in each reader's language. Only
   the default receipt message, «¡Gracias por su compra!», prints as "Thank you
   for your purchase!". Shelf labels carry product data only.
 - **Live activity** (`eventos/`) is stored in Spanish whatever language the

@@ -102,6 +102,7 @@ const ANCLA = {
   correo: 'getAfter(/databases/$(database)/documents/staff/$(request.resource.data.codigo)).data.correo == correo;',
   evento: 'allow create: if crearEvento(request.resource.data);',
   recepcion: 'allow create: if crearRecepcion(request.resource.data);',
+  existencia: 'allow create, update: if escribirExistencia(existenciaId);',
   emparejarPantalla: "allow create: if pantallaId.matches('^[0-9a-f]{64}$') && escribirPantalla(request.resource.data, true);",
   pantalla: 'allow update: if escribirPantalla(request.resource.data, false);',
   historial: 'allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);',
@@ -209,6 +210,26 @@ const ESCENARIOS = [
       productos: 1, piezas: 24, gramos: 0, recibidoPor: '100123', recibidoPorNombre: 'María', fecha: serverTimestamp(),
       anulada: false, anuladaPor: null, anuladaEn: null,
     }),
+  },
+  {
+    nombre: 'ajuste rápido de existencias (tienda y bodega, el caso más largo)',
+    ancla: ANCLA.existencia,
+    datos: {
+      'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true },
+      'products/p1': { nombre: 'Clasico', marca: 'Tajin' },
+      'existencias/talbot__p1': {
+        tienda: 'talbot', producto: 'p1', nombre: 'TAJIN', upc: '633148100013', plu: null, porPeso: false, caducidad: null, origen: null,
+        actualizadoEn: AHORA, actualizadoPor: '100123', actualizadoPorNombre: 'María',
+        enTienda: { cajas: 1, porCaja: 12, sueltas: 0, total: 12, contadoEn: AHORA, contadoPor: '100123', contadoPorNombre: 'María' },
+      },
+    },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'existencias/talbot__p1'), {
+      tienda: 'talbot', producto: 'p1', nombre: 'TAJIN CLASICO 142g', upc: '633148100013', plu: null, porPeso: false,
+      caducidad: '2027-01-15', origen: 'México', actualizadoEn: serverTimestamp(), actualizadoPor: '100123', actualizadoPorNombre: 'María',
+      enTienda: { cajas: 3, porCaja: 12, sueltas: 4, total: 40, contadoEn: serverTimestamp(), contadoPor: '100123', contadoPorNombre: 'María' },
+      enBodega: { cajas: 10, porCaja: 12, sueltas: 6, total: 126, contadoEn: serverTimestamp(), contadoPor: '100123', contadoPorNombre: 'María' },
+    }, { merge: true }),
   },
   {
     nombre: 'registrar el NIP de un colaborador (huella y correo)',

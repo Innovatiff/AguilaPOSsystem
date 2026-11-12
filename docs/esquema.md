@@ -200,7 +200,7 @@ fall back to the defaults in `js/config-pos.js`.
 | conteoCiego | boolean | the cashier counts without seeing the expected cash |
 | papelRecibo | `58` \| `80` | receipt roll width in mm |
 | reciboPie | string ≤300 | receipt footer |
-| departamentos | array ≤24 of `{ id, nombre, claseFiscal, color }` | department keys; `id` slug, never changes (sales store it) |
+| departamentos | array ≤24 of `{ id, nombre, nombreEn, claseFiscal, color }` | department keys; `id` slug, never changes (sales store it). `nombre` (Spanish, ≤30) is what sales store; `nombreEn` (≤30 or null) is only for display when the screen is in English: register keys, receipts, Z/X reports, customer display and back office reports look it up by `id` (falls back to `nombre`). The factory departments come with their English names |
 | actualizadoEn / actualizadoPor | timestamp / usuario | |
 
 ### `cajas/{cajaId}`
@@ -350,6 +350,27 @@ read by both; only an admin can void it (once); nobody deletes it. It does
 | recibidoPor, recibidoPorNombre | string | must be the signed-in user |
 | fecha | timestamp | server time (`== request.time`) |
 | anulada, anuladaPor, anuladaEn | bool, string \| null, timestamp \| null | `false, null, null` on create; an admin sets `true`, themself and server time |
+
+### `existencias/{tienda}__{producto}`
+How many of a product there are **in the store** and **in the warehouse
+(bodega)** of one store, from the last count (**Inventario → Ajuste rápido**,
+also in the Catálogo app). One document per store and product; the warehouse
+belongs to the store. Written by an admin or staff with the Catálogo
+permission with `setDoc(…, { merge: true })`, so counting the store and
+counting the warehouse are separate and do not overwrite each other; nobody
+deletes it. It does **not** change `products` (the product schema is
+unchanged) and sales and deliveries do not move it: it is the last count.
+
+| field | type | notes |
+|---|---|---|
+| tienda | string | store id; the document id is `{tienda}__{producto}` |
+| producto | string | product id (the product must exist) |
+| nombre, upc, plu | string ≤120, string \| null ≤20, string \| null ≤10 | copied from the product when counted, for the table and the CSV |
+| porPeso | bool | sold by weight: quantities are grams instead of pieces |
+| enTienda, enBodega | map, optional | `{ cajas, porCaja, sueltas, total, contadoEn, contadoPor, contadoPorNombre }`: boxes (integer ≤ 99 999 or null), pieces or grams per box (null when no boxes), loose pieces or grams, `total == cajas × porCaja + sueltas`; `contadoEn` server time, `contadoPor`/`contadoPorNombre` the signed-in user. A count only writes the place that was counted; the rules accept each place unchanged, absent or as a new count by the writer at `request.time` |
+| caducidad | `"YYYY-MM-DD"` \| null, optional | expiry date; written only when someone changed it |
+| origen | string \| null ≤ 60, optional | country of origin; written only when someone changed it. A country from the suggested list is stored with its Spanish name (`México`, `Estados Unidos`) whatever the screen language and shown in the reader's language; anything else as typed |
+| actualizadoEn, actualizadoPor, actualizadoPorNombre | timestamp, string, string ≤ 80 | server time and the signed-in user |
 
 ### What stays on the register computer (localStorage)
 Which register the computer is, the ticket in progress and held tickets (they

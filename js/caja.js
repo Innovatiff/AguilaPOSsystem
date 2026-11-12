@@ -23,7 +23,7 @@ import {
   observarVentasDeTurno, observarMovimientosDeTurno, guardarVenta, registrarMovimiento, registrarEvento,
   comprobarSecretoEnServidor, autorizarComoAdmin,
 } from './pos-datos.js';
-import { configConDefectos } from './config-pos.js';
+import { configConDefectos, nombreDepartamento, nombreDeLinea } from './config-pos.js';
 import {
   LIMITES_TICKET, NOMBRE_METODO, calcularTicket, lineaDeProducto, lineaDeDepartamento, lineaAcumulable,
   importeBruto, dividirRedondeado, redondearEfectivo, gramosDesdeTexto, formatearPeso, cantidadDesdeTexto,
@@ -143,6 +143,8 @@ const describirDescuento = (d) => (d.tipo === 'porcentaje' ? formatearPorcentaje
 const descuentoGuardado = (d) => describirDescuento(d).replace(/(\d)%$/, '$1 %');
 const deLaTienda = (p, tienda) => !Array.isArray(p.tiendas) || p.tiendas.length === 0 || p.tiendas.includes(tienda);
 const nombreConPresentacion = (p) => [nombreDeProducto(p), p.presentacion].filter(Boolean).join(' · ');
+/** Nombre de una línea del ticket para mostrar (venta libre: su departamento en el idioma de la caja). Lo que se guarda lleva l.nombre. */
+const nombreLinea = (l) => nombreDeLinea(l, estado.config.departamentos);
 const precioProducto = (p) => (p.unidadVenta === 'peso' ? `${dinero(p.precioPorKgCentavos ?? 0)}/kg` : dinero(p.precioCentavos ?? 0));
 const detalleProducto = (p) => [p.upc, p.plu ? `PLU ${p.plu}` : null, p.claseFiscal === 'gravado' ? '+Tx' : null, p.activo === false ? tx('INACTIVO') : null]
   .filter(Boolean).join(' · ');
@@ -1145,7 +1147,7 @@ async function venderDepartamento(depto, { precioCentavos = null, upc = null } =
   }
   if (precio === null) {
     precio = await pedirPrecio({
-      titulo: depto.nombre,
+      titulo: nombreDepartamento(depto),
       nota: depto.claseFiscal === 'gravado' ? tx('Lleva {impuesto}.', { impuesto: estado.config.impuestoNombre }) : tx('Sin impuesto (tasa cero).'),
       aceptar: tx('Agregar'),
     });
@@ -1165,7 +1167,7 @@ async function venderDepartamento(depto, { precioCentavos = null, upc = null } =
 async function venderSinCatalogo(upc, precioCentavos = null) {
   sonar('error');
   const opciones = estado.config.departamentos.map((d) => ({
-    texto: d.nombre,
+    texto: nombreDepartamento(d),
     valor: d.id,
     detalle: d.claseFiscal === 'gravado' ? `+${estado.config.impuestoNombre}` : tx('Sin impuesto'),
   }));
@@ -1226,7 +1228,7 @@ async function accionLinea(accion) {
 async function cambiarCantidad(linea) {
   const signo = estado.ticket.modo === 'devolucion' ? -1 : 1;
   const cantidad = await pedirValor({
-    titulo: linea.nombre,
+    titulo: nombreLinea(linea),
     etiqueta: tx('Cantidad de piezas'),
     inicial: String(Math.abs(linea.cantidad)),
     interpretar: cantidadDesdeTexto,
@@ -1256,7 +1258,7 @@ async function cambiarPrecio(linea) {
   const porKg = linea.unidad === 'peso' ? '/kg' : '';
   if (linea.departamento && !linea.productoId) {
     // Venta libre: el precio lo tecleó la cajera; corregirlo no es un cambio de precio del catálogo.
-    const nuevo = await pedirPrecio({ titulo: `${tx('Corregir precio')} · ${linea.nombre}`, inicial: (linea.precioUnitarioCentavos / 100).toFixed(2) });
+    const nuevo = await pedirPrecio({ titulo: `${tx('Corregir precio')} · ${nombreLinea(linea)}`, inicial: (linea.precioUnitarioCentavos / 100).toFixed(2) });
     if (nuevo === null) return;
     const limite = estado.config.limiteVentaLibreCentavos;
     if (!devolucion && limite > 0 && nuevo > limite) {
@@ -1272,7 +1274,7 @@ async function cambiarPrecio(linea) {
   }
   const original = linea.precioOriginalCentavos ?? linea.precioUnitarioCentavos;
   const nuevo = await pedirPrecio({
-    titulo: `${tx('Cambiar precio')} · ${linea.nombre}`,
+    titulo: `${tx('Cambiar precio')} · ${nombreLinea(linea)}`,
     etiqueta: linea.unidad === 'peso' ? tx('Precio nuevo por kg') : tx('Precio nuevo'),
     nota: `${tx('Precio del catálogo: {precio}.', { precio: `${dinero(original)}${porKg}` })} ${estado.personal.rol === 'admin' ? '' : tx('Necesita la autorización de un administrador.')}`,
   });
@@ -1362,7 +1364,7 @@ async function descuentoLinea(linea) {
   if (linea.descuento) {
     const opcion = await elegir({
       titulo: tx('Descuento de la línea'),
-      texto: tx('{nombre} tiene {descuento} de descuento.', { nombre: linea.nombre, descuento: describirDescuento(linea.descuento) }),
+      texto: tx('{nombre} tiene {descuento} de descuento.', { nombre: nombreLinea(linea), descuento: describirDescuento(linea.descuento) }),
       opciones: [{ texto: tx('Cambiar el descuento'), valor: 'cambiar' }, { texto: tx('Quitar el descuento'), valor: 'quitar' }],
     });
     if (!opcion) return;
@@ -1374,7 +1376,7 @@ async function descuentoLinea(linea) {
       return;
     }
   }
-  const descuento = await pedirDescuento({ titulo: `${tx('Descuento')} · ${linea.nombre}`, baseCentavos: importeBruto(linea) });
+  const descuento = await pedirDescuento({ titulo: `${tx('Descuento')} · ${nombreLinea(linea)}`, baseCentavos: importeBruto(linea) });
   if (!descuento) return;
   const autorizado = await asegurarAutorizacion('modificacion', tEs('Descuento de {descuento} a {nombre}', { descuento: descuentoGuardado(descuento), nombre: linea.nombre }));
   if (!autorizado) return;
@@ -1421,7 +1423,7 @@ function anularLinea(linea) {
   if (t.lineas.length === 0) t.descuentoTicket = null;
   estado.seleccion = null;
   cambio();
-  avisar(tx('Línea anulada: {nombre}', { nombre: linea.nombre }), 'info', 2200);
+  avisar(tx('Línea anulada: {nombre}', { nombre: nombreLinea(linea) }), 'info', 2200);
   const importe = Math.abs(detalle?.importeCentavos ?? importeDe(linea));
   evento('articulo_anulado', `${cantidadYNombre(linea)} — ${dinero(importe)}`, { importeCentavos: importe });
 }
@@ -2290,7 +2292,7 @@ function nodoLinea(l) {
   if (l.descuentoCentavos > 0) importe.append(h('s', { text: dinero(l.importeBrutoCentavos) }));
   importe.append(dinero(l.importeCentavos));
   return h('li', { class: clases.join(' '), dataset: { id: l.id } },
-    h('div', { class: 'linea__nombre' }, l.nombre, l.presentacion ? h('span', { class: 'linea__pres', text: l.presentacion }) : null),
+    h('div', { class: 'linea__nombre' }, nombreLinea(l), l.presentacion ? h('span', { class: 'linea__pres', text: l.presentacion }) : null),
     importe,
     h('div', { class: 'linea__detalle' }, h('span', { text: detalle }), marcas));
 }
@@ -2356,7 +2358,7 @@ function pintarDepartamentos() {
     type: 'button',
     class: `depto depto--${d.color}`,
     dataset: { depto: d.id },
-  }, h('span', { text: d.nombre }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : tx('Sin impuesto') }))));
+  }, h('span', { text: nombreDepartamento(d) }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : tx('Sin impuesto') }))));
 }
 
 function construirTecladoVenta() {

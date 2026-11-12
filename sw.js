@@ -99,6 +99,7 @@ const CASCARA = [
   'js/esquema.js',
   'js/etiquetas.js',
   'js/eventos.js',
+  'js/existencias.js',
   'js/firebase.js',
   'js/gestion-cajas.js',
   'js/gestion-configuracion.js',

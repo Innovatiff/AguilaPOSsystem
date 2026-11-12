@@ -214,7 +214,24 @@ const CAPTURA = '078949000115';
     }
   }, recibida?.[0]);
   v.ok('con el SDK de la página, anular la entrega se rechaza (reglas)', anularPersonal === 'permission-denied', anularPersonal);
+  // ajuste rápido: el personal cuenta lo que hay en la bodega, desde el teléfono
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.click('#btn-ajuste');
+  await page.waitForSelector('#dlg-ajuste[open]');
+  await page.fill('#ajuste-codigo', '049000006346');
+  await page.press('#ajuste-codigo', 'Enter');
+  await page.waitForSelector('#ajuste-datos:not([hidden])');
+  await page.fill('#ajuste-b-cajas', '2');
+  await page.fill('#ajuste-b-porcaja', '24');
+  await page.fill('#ajuste-b-sueltas', '6');
+  const desbordeAjuste = await page.evaluate(() => document.getElementById('dlg-ajuste').scrollWidth - document.getElementById('dlg-ajuste').clientWidth);
+  await page.screenshot({ path: `${c.SALIDA}/catalogo-ajuste-movil.png` });
+  await page.press('#ajuste-b-sueltas', 'Enter');
+  await page.waitForFunction(() => /Guardado/.test(document.getElementById('ajuste-mensaje').textContent), null, { timeout: 15000 });
+  const contada = await c.leerDoc('existencias/talbot__p-coca');
+  v.ok('el personal del Catálogo cuenta la bodega desde el teléfono (las reglas lo aceptan, a su nombre)',
+    contada?.enBodega?.total === 54 && contada.enBodega.contadoPor === c.EMPLEADA.codigo && !('enTienda' in contada) && desbordeAjuste <= 0, JSON.stringify(contada ?? {}).slice(0, 200));
+  await page.click('#ajuste-cerrar');
   await page.fill('#r-codigo', '049000006346');
   await page.press('#r-codigo', 'Enter');
   await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 1, null, { timeout: 10000 });

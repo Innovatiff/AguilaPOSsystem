@@ -20,6 +20,7 @@
  */
 import { formatearMonto, formatearPeso, formatearPorcentaje, redondearEfectivo, nombreMetodo } from './ticket.js';
 import { t, idioma, traducirTexto } from './idioma.js';
+import { nombreDeLinea } from './config-pos.js';
 
 export const CANAL_CLIENTE = 'aguila-pantalla-cliente';
 export const LATIDO_MS = 4000;
@@ -53,12 +54,12 @@ function describirDescuento(d) {
   return d.tipo === 'porcentaje' ? formatearPorcentaje(d.puntosBase) : dinero(d.centavos);
 }
 
-/** Una línea del ticket (ya calculada por calcularTicket) como la ve el cliente. */
-export function lineaCliente(l) {
+/** Una línea del ticket (ya calculada por calcularTicket) como la ve el cliente (venta libre: su departamento en el idioma de la caja). */
+export function lineaCliente(l, departamentos = []) {
   const peso = l.unidad === 'peso';
   return {
     id: l.id,
-    nombre: [l.nombre, l.presentacion].filter((x) => typeof x === 'string' && x.trim() !== '').join(' '),
+    nombre: [nombreDeLinea(l, departamentos), l.presentacion].filter((x) => typeof x === 'string' && x.trim() !== '').join(' '),
     detalle: peso
       ? `${formatearPeso(l.pesoGramos)} × ${dinero(l.precioUnitarioCentavos)}/kg`
       : `${l.cantidad} × ${dinero(l.precioUnitarioCentavos)}`,
@@ -139,14 +140,14 @@ export function estadoCliente({ fase, tienda = '', caja = '', atiende = null, co
 
   if (!ticket || !calculo) throw new Error('Falta el ticket');
   const devolucion = ticket.modo === 'devolucion';
-  const lineas = calculo.lineas.slice(-MAXIMO_LINEAS).map(lineaCliente);
+  const lineas = calculo.lineas.slice(-MAXIMO_LINEAS).map((l) => lineaCliente(l, config?.departamentos));
   const destacada = calculo.lineas.find((l) => l.id === ultima) ?? calculo.lineas.at(-1) ?? null;
   const estado = {
     ...base,
     devolucion,
     lineas,
     ocultas: Math.max(0, calculo.lineas.length - MAXIMO_LINEAS),
-    ultima: destacada ? lineaCliente(destacada) : null,
+    ultima: destacada ? lineaCliente(destacada, config?.departamentos) : null,
     ...totales(calculo, config, ticket),
   };
   if (fase === 'cobro' && cobro) {

@@ -13,7 +13,7 @@ import { leerTurnosEntre, observarConfigPos } from './pos-datos.js';
 import { observarTiendas } from './productos.js';
 import { METODOS_PAGO, nombreMetodo, formatearPeso } from './ticket.js';
 import { sumarResumenes, ventasNetas, milisDe } from './turnos.js';
-import { configConDefectos } from './config-pos.js';
+import { configConDefectos, nombreDepartamentoPorId } from './config-pos.js';
 import { dinero, claveDia, sumarDias, inicioDia, diasEntre, fechaLarga, fechaCorta, formatearDuracion, descargarCSV, csvMonto, mostrarMensaje } from './bo.js';
 import { graficaColumnas, barraSegmentada } from './grafica.js';
 
@@ -181,13 +181,15 @@ function pintar() {
   const productos = Object.entries(r.productos).map(([clave, p]) => ({ clave, ...p })).sort((a, b) => b.netoCentavos - a.netoCentavos).slice(0, TOP_PRODUCTOS);
   $('tabla-productos').tBodies[0].replaceChildren(...productos.map((p, i) => fila(
     // «Otros artículos» lo escribe el resumen del turno (js/turnos.js) cuando hay demasiados productos.
-    td(String(i + 1)), td(p.clave === 'otros' ? t('Otros artículos') : p.nombre), h('td', { class: 'monoespaciada', text: p.upc ?? '' }),
+    td(String(i + 1)), td(p.clave === 'otros' ? t('Otros artículos') : p.clave.startsWith('d_') ? nombreDepartamentoPorId(config.departamentos, p.clave.slice(2), p.nombre) : p.nombre), h('td', { class: 'monoespaciada', text: p.upc ?? '' }),
     td(p.pesoGramos ? formatearPeso(p.pesoGramos) + (p.cantidad ? ` + ${p.cantidad}` : '') : String(p.cantidad), true), td(dinero(p.netoCentavos), true))));
 
   // Cajas y departamentos
   $('tabla-cajas').tBodies[0].replaceChildren(...porCaja.map((g) => fila(td(g.nombre), td(String(g.turnos.length), true), td(String(ticketsDe(g.resumen)), true), td(dinero(g.resumen.totalCentavos), true))));
-  const deptos = Object.values(r.porDepartamento).sort((a, b) => b.netoCentavos - a.netoCentavos);
-  $('tabla-deptos').tBodies[0].replaceChildren(...(deptos.length ? deptos.map((d) => fila(td(d.nombre), td(String(d.articulos), true), td(dinero(d.netoCentavos), true))) : [fila(h('td', { colspan: 3, class: 'nota', text: t('Sin ventas por departamento.') }))]));
+  const deptos = Object.entries(r.porDepartamento).sort(([, a], [, b]) => b.netoCentavos - a.netoCentavos);
+  $('tabla-deptos').tBodies[0].replaceChildren(...(deptos.length
+    ? deptos.map(([id, d]) => fila(td(nombreDepartamentoPorId(config.departamentos, id, d.nombre)), td(String(d.articulos), true), td(dinero(d.netoCentavos), true)))
+    : [fila(h('td', { colspan: 3, class: 'nota', text: t('Sin ventas por departamento.') }))]));
 
   // Control
   const dato = (etiqueta, valor, detalle = '') => h('div', { class: 'dato-bo' }, h('span', { text: etiqueta }), h('strong', { text: valor }), detalle ? h('small', { text: detalle }) : null);

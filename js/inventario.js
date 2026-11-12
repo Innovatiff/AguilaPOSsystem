@@ -307,3 +307,198 @@ export function filasCSVRecepciones(recepciones, { fechaTexto, nombreTienda, bus
   }
   return filas;
 }
+
+// ===================================================================== existencias: tienda y bodega (Ajuste rápido)
+//
+// existencias/{tienda}__{producto}: el último conteo de cada producto en la
+// tienda (enTienda) y en la bodega (enBodega), cada uno con quién y cuándo, y
+// la caducidad y el país de procedencia. Un conteo es «cuántas hay ahora»:
+// cajas × lo que trae cada caja + sueltas = total (piezas, o gramos en los
+// productos por peso). Todo es opcional: lo que se deja vacío no cambia.
+
+export const LUGARES = Object.freeze(['enTienda', 'enBodega']);
+export const LIMITES_CONTEO = Object.freeze({ cajas: 99999, piezas: 99999999, gramos: 99999999, total: 999999999, origen: 60 });
+/** Una caducidad a estos días o menos sale marcada. */
+export const DIAS_CADUCA_PRONTO = 7;
+
+const estaVacio = (texto) => String(texto ?? '').trim() === '';
+
+/** Entero tecleado (cajas o piezas), sin separadores: vacío → null. */
+function enteroDesdeTexto(texto, { minimo, maximo, mensaje }) {
+  if (estaVacio(texto)) return null;
+  const limpio = String(texto).trim().replace(/[\s,]/g, '');
+  if (!/^\d{1,9}$/.test(limpio)) throw new Error(mensaje);
+  const n = Number.parseInt(limpio, 10);
+  if (n < minimo || n > maximo) throw new Error(mensaje);
+  return n;
+}
+
+/** Kilos tecleados → gramos: vacío → null; con `cero`, «0» vale 0. */
+function gramosDeConteo(texto, { cero = false } = {}) {
+  if (estaVacio(texto)) return null;
+  if (cero && /^0*(?:[.,]0*)?(?:\s*kg)?$/i.test(String(texto).trim())) return 0;
+  return kilosDesdeTexto(texto);
+}
+
+/**
+ * Lo tecleado para un lugar → { cajas, porCaja, sueltas, total } (piezas, o
+ * gramos si `porPeso`), o null si todo quedó vacío (ese lugar no se contó).
+ * Lanza un Error que se le puede mostrar a quien cuenta.
+ */
+export function conteoDesdeTexto({ cajas = '', porCaja = '', sueltas = '' } = {}, { porPeso = false } = {}) {
+  const nCajas = enteroDesdeTexto(cajas, { minimo: 0, maximo: LIMITES_CONTEO.cajas, mensaje: t('Cajas: escribe un número entero (0 a 99 999).') });
+  const nPorCaja = porPeso
+    ? gramosDeConteo(porCaja)
+    : enteroDesdeTexto(porCaja, { minimo: 1, maximo: LIMITES_CONTEO.piezas, mensaje: t('Piezas por caja: escribe un número entero mayor que cero.') });
+  const nSueltas = porPeso
+    ? gramosDeConteo(sueltas, { cero: true })
+    : enteroDesdeTexto(sueltas, { minimo: 0, maximo: LIMITES_CONTEO.piezas, mensaje: t('Sueltas: escribe un número entero de piezas.') });
+  // Sin cajas ni sueltas, ese lugar no se contó (lo que trae cada caja puede venir ya escrito del conteo anterior).
+  if (nCajas === null && nSueltas === null) return null;
+  const cuantasCajas = nCajas === 0 && nPorCaja === null ? null : nCajas; // «0 cajas» sin más es lo mismo que nada
+  if (cuantasCajas !== null && nPorCaja === null) {
+    throw new Error(porPeso ? t('Escribe cuántos kilos trae cada caja.') : t('Escribe cuántas piezas trae cada caja.'));
+  }
+  const total = (cuantasCajas === null ? 0 : cuantasCajas * nPorCaja) + (nSueltas ?? 0);
+  if (total > LIMITES_CONTEO.total) throw new Error(t('La cantidad es demasiado grande.'));
+  return { cajas: cuantasCajas, porCaja: nPorCaja, sueltas: nSueltas, total };
+}
+
+/** Total de un lugar: "40 piezas" · "1 pieza" · "20.500 kg" · "—" si no se ha contado. */
+export function textoTotal(total, porPeso) {
+  if (!Number.isInteger(total)) return '—';
+  if (porPeso) return formatearPeso(total);
+  return total === 1 ? t('{n} pieza', { n: numero(total) }) : t('{n} piezas', { n: numero(total) });
+}
+
+/** Cómo se contó: "3 cajas × 12 + 4" · "1 caja × 10.000 kg" · "" si fueron solo sueltas. */
+export function textoDesglose(conteo, porPeso) {
+  if (!conteo || conteo.cajas === null || conteo.cajas === undefined || !conteo.porCaja) return '';
+  const porCaja = porPeso ? formatearPeso(conteo.porCaja) : numero(conteo.porCaja);
+  const cajas = conteo.cajas === 1
+    ? t('1 caja × {porCaja}', { porCaja })
+    : t('{n} cajas × {porCaja}', { n: numero(conteo.cajas), porCaja });
+  if (!conteo.sueltas) return cajas;
+  return t('{cajas} + {sueltas}', { cajas, sueltas: porPeso ? formatearPeso(conteo.sueltas) : numero(conteo.sueltas) });
+}
+
+/** Fecha de caducidad tecleada ('AAAA-MM-DD', la de un campo de fecha) → la misma o null. Lanza si no existe esa fecha. */
+export function caducidadDesdeTexto(texto) {
+  if (estaVacio(texto)) return null;
+  const limpio = String(texto).trim();
+  const fecha = new Date(`${limpio}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(limpio) || Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== limpio) {
+    throw new Error(t('La fecha de caducidad no es válida.'));
+  }
+  return limpio;
+}
+
+/**
+ * Países que se proponen al contar: [como se guarda (español), como se ve].
+ * Como los departamentos, un país de la lista se guarda en español (así no
+ * quedan «México» y «Mexico» revueltos) y se muestra en el idioma de la
+ * pantalla; cualquier otro, como se escribió.
+ */
+const paises = () => [
+  ['México', t('México')], ['Canadá', t('Canadá')], ['Estados Unidos', t('Estados Unidos')], ['Guatemala', t('Guatemala')],
+  ['El Salvador', t('El Salvador')], ['Honduras', t('Honduras')], ['Nicaragua', t('Nicaragua')], ['Costa Rica', t('Costa Rica')],
+  ['Panamá', t('Panamá')], ['Colombia', t('Colombia')], ['Perú', t('Perú')], ['Ecuador', t('Ecuador')], ['Chile', t('Chile')],
+  ['Argentina', t('Argentina')], ['Brasil', t('Brasil')], ['República Dominicana', t('República Dominicana')], ['España', t('España')],
+  ['Italia', t('Italia')], ['China', t('China')], ['Tailandia', t('Tailandia')], ['India', t('India')],
+];
+
+/** Los países de la lista, en el idioma de la pantalla. */
+export const paisesSugeridos = () => paises().map(([, visible]) => visible);
+
+/** País guardado → como se ve en el idioma de la pantalla (null si no hay). */
+export function paisEnPantalla(origen) {
+  if (typeof origen !== 'string' || origen.trim() === '') return null;
+  return paises().find(([guardado]) => guardado === origen)?.[1] ?? origen;
+}
+
+/** País de procedencia tecleado → como se guarda (máximo 60; los de la lista, en español) o null. */
+export function origenDesdeTexto(texto) {
+  const limpio = textoONulo(texto, LIMITES_CONTEO.origen);
+  if (limpio === null) return null;
+  const clave = normalizarTexto(limpio);
+  return paises().find(([guardado, visible]) => normalizarTexto(guardado) === clave || normalizarTexto(visible) === clave)?.[0] ?? limpio;
+}
+
+/** 'vencido' (ya pasó), 'pronto' (en DIAS_CADUCA_PRONTO días o menos) o null. `hoy`: 'AAAA-MM-DD'. */
+export function estadoCaducidad(caducidad, hoy) {
+  if (typeof caducidad !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(caducidad)) return null;
+  const dias = Math.round((Date.parse(`${caducidad}T00:00:00Z`) - Date.parse(`${hoy}T00:00:00Z`)) / 86400000);
+  if (Number.isNaN(dias)) return null;
+  if (dias < 0) return 'vencido';
+  return dias <= DIAS_CADUCA_PRONTO ? 'pronto' : null;
+}
+
+/**
+ * Ajuste rápido listo para guardar con merge (js/existencias.js pone la hora
+ * del servidor): la identidad del producto, los lugares contados, la
+ * caducidad, el país y quién lo hizo. Los lugares en null no se escriben (se
+ * quedan como estaban); la caducidad y el país, solo si vienen (undefined =
+ * no se tocaron; null = se borran). Así dos personas que cuentan a la vez la
+ * tienda y la bodega no se pisan. Lanza si falta la tienda o el producto.
+ */
+export function armarAjuste({ producto, tienda, enTienda = null, enBodega = null, caducidad, origen }, personal) {
+  if (typeof tienda !== 'string' || !/^[a-z0-9-]{2,40}$/.test(tienda)) throw new Error(t('Elige la tienda.'));
+  if (!producto || typeof producto.id !== 'string' || producto.id === '') throw new Error(t('Elige un producto del catálogo.'));
+  const nombrePersona = String(personal.nombre || personal.usuario).trim().slice(0, 80);
+  const quien = { contadoPor: personal.usuario, contadoPorNombre: nombrePersona };
+  const datos = {
+    tienda,
+    producto: producto.id,
+    nombre: nombreCompleto(producto),
+    upc: producto.upc || null,
+    plu: producto.plu || null,
+    porPeso: esDePeso(producto),
+    actualizadoPor: personal.usuario,
+    actualizadoPorNombre: nombrePersona,
+  };
+  if (caducidad !== undefined) datos.caducidad = caducidad;
+  if (origen !== undefined) datos.origen = origen;
+  if (enTienda) datos.enTienda = { cajas: enTienda.cajas, porCaja: enTienda.porCaja, sueltas: enTienda.sueltas, total: enTienda.total, ...quien };
+  if (enBodega) datos.enBodega = { cajas: enBodega.cajas, porCaja: enBodega.porCaja, sueltas: enBodega.sueltas, total: enBodega.total, ...quien };
+  return { id: `${tienda}__${producto.id}`, datos };
+}
+
+/** Total de un producto: tienda + bodega (null si no se ha contado en ningún lado). */
+export function totalExistencia(e) {
+  const contados = LUGARES.map((lugar) => e?.[lugar]?.total).filter(Number.isInteger);
+  return contados.length ? contados.reduce((suma, n) => suma + n, 0) : null;
+}
+
+/** Filas de la tabla de existencias: búsqueda (nombre, código, país) y, si se pide, solo lo que caduca pronto o ya caducó. */
+export function filasExistencias(lista, { buscar = '', porCaducar = false, hoy } = {}) {
+  const terminos = normalizarTexto(buscar).split(' ').filter(Boolean);
+  return lista
+    .filter((e) => {
+      if (porCaducar && !estadoCaducidad(e.caducidad, hoy)) return false;
+      if (!terminos.length) return true;
+      const texto = normalizarTexto([e.nombre, e.upc, e.plu, e.origen, paisEnPantalla(e.origen)].filter(Boolean).join(' '));
+      return terminos.every((termino) => texto.includes(termino));
+    })
+    .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+}
+
+/**
+ * Filas del CSV de existencias (reporte para personas: encabezados en el
+ * idioma elegido; cantidades en piezas o en kilos con tres decimales).
+ */
+export function filasCSVExistencias(lista, { fechaTexto, nombreTienda }) {
+  const cantidad = (e, total) => (Number.isInteger(total) ? (e.porPeso ? textoKilos(total) || '0' : total) : '');
+  const filas = [[
+    tc('csv', 'tienda'), tc('csv', 'producto'), 'upc', 'plu', tc('csv', 'unidad'), tc('csv', 'en_tienda'), tc('csv', 'en_bodega'), tc('csv', 'total'),
+    tc('csv', 'caducidad'), tc('csv', 'origen'), tc('csv', 'contado_tienda'), tc('csv', 'contado_bodega'),
+  ]];
+  for (const e of lista) {
+    filas.push([
+      nombreTienda(e.tienda), e.nombre, e.upc ?? '', e.plu ?? '', e.porPeso ? 'kg' : tc('csv', 'piezas'),
+      cantidad(e, e.enTienda?.total), cantidad(e, e.enBodega?.total), cantidad(e, totalExistencia(e)),
+      e.caducidad ?? '', paisEnPantalla(e.origen) ?? '',
+      e.enTienda?.contadoEn ? fechaTexto(e.enTienda.contadoEn) : '', e.enBodega?.contadoEn ? fechaTexto(e.enBodega.contadoEn) : '',
+    ]);
+  }
+  return filas;
+}

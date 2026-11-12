@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { lineaDeProducto, calcularTicket, registrarPago, armarVenta, estadoCobro } from '../../js/ticket.js';
+import { lineaDeProducto, lineaDeDepartamento, calcularTicket, registrarPago, armarVenta, estadoCobro } from '../../js/ticket.js';
 import { configConDefectos } from '../../js/config-pos.js';
 import { estadoCliente, lineaCliente, primerNombre, esEstadoValido, MAXIMO_LINEAS } from '../../js/pantalla-cliente.js';
 import { cargarIngles, fijarIdioma } from '../../js/idioma.js';
@@ -112,13 +112,16 @@ describe('pantalla del cliente (js/pantalla-cliente.js)', () => {
     fijarIdioma('en');
     try {
       const tajin = { ...lineaDeProducto(TAJIN), descuento: { tipo: 'porcentaje', puntosBase: 1000 } };
-      const { ticket: t, calculo } = ticket([tajin, lineaDeProducto(COCA)]);
+      const carne = config.departamentos.find((d) => d.id === 'carniceria');
+      const { ticket: t, calculo } = ticket([tajin, lineaDeProducto(COCA), lineaDeDepartamento(carne, 350)]);
       const total = calculo.totalCentavos;
       const { pago } = registrarPago(total, [], { metodo: 'debito', montoCentavos: 500 });
       const cobro = { totalCentavos: total, pagos: [pago], metodo: 'efectivo', ...estadoCobro(total, [pago]) };
       const e = estadoCliente({ ...base, fase: 'cobro', ticket: t, calculo, cobro });
       assert.equal(e.idioma, 'en');
       assert.equal(e.lineas[0].descuento, 'Discount 10%');
+      assert.equal(e.lineas[2].nombre, 'Meat', 'venta libre: el departamento con su nombre en inglés');
+      assert.equal(estadoCliente({ ...base, fase: 'venta', ticket: t, calculo }).ultima.nombre, 'Meat');
       assert.equal(e.cobro.metodo, 'Cash');
       assert.deepEqual(e.cobro.pagos, [{ metodo: 'Debit', importe: '$5.00' }]);
       assert.equal(e.impuestoNombre, 'HST 13%');

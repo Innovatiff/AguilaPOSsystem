@@ -3787,3 +3787,161 @@ dialog.editor--entrega {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------- existencias y ajuste rápido (inventario) */
+.existencias .filtros {
+  margin-bottom: 12px;
+}
+
+.existencias__cantidad {
+  display: block;
+  font-weight: 600;
+}
+
+.existencias__desglose,
+.existencias__quien {
+  display: block;
+  color: var(--bo-suave);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+dialog.editor--ajuste {
+  width: min(860px, 96vw);
+}
+
+.ajuste__buscar {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px 14px;
+}
+
+.ajuste__buscar .ajuste__ayuda {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.ajuste__buscar .campo[hidden] + .ajuste__codigo {
+  grid-column: 1 / 3;
+}
+
+.ajuste__producto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff6ec;
+}
+
+.ajuste__producto strong {
+  font-size: 18px;
+}
+
+.ajuste__lugares {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ajuste__lugar {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--bo-linea);
+  border-radius: 10px;
+}
+
+.ajuste__lugar legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.ajuste__ahora {
+  min-height: 2.6em;
+  margin: 0 0 8px;
+  color: var(--bo-suave);
+  font-size: 13px;
+}
+
+.ajuste__cuenta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ajuste__cuenta .campo {
+  min-width: 0;
+}
+
+.ajuste__cuenta input,
+.ajuste__extra input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.ajuste__cuenta input {
+  font-size: 18px;
+  text-align: right;
+}
+
+.ajuste__extra .campo {
+  min-width: 0;
+}
+
+.ajuste__total {
+  display: block;
+  min-height: 1.5em;
+  margin-top: 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ajuste__total[data-error] {
+  color: var(--color-error, #b42318);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ajuste__extra {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+
+.ajuste__datos .acciones {
+  margin-top: 16px;
+}
+
+@media screen and (max-width: 640px) {
+  .ajuste__buscar,
+  .ajuste__lugares,
+  .ajuste__extra {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ajuste__buscar .campo[hidden] + .ajuste__codigo {
+    grid-column: auto;
+  }
+
+  .ajuste__buscar > .boton,
+  .ajuste__datos .acciones .boton {
+    width: 100%;
+  }
+}
+
+/* En pantallas angostas todos los diálogos de edición ocupan la pantalla completa
+   (ver «Diálogos a pantalla completa»); las variantes de arriba solo fijan su ancho
+   en pantallas grandes y no deben dejar una franja vacía a la derecha. */
+@media screen and (max-width: 720px) {
+  dialog.editor--ticket,
+  dialog.editor--turno,
+  dialog.editor--entrega,
+  dialog.editor--ajuste {
+    width: 100vw;
+  }
+}

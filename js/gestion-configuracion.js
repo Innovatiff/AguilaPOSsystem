@@ -8,7 +8,7 @@ import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
 import { observarConfigPos, guardarConfigPos } from './pos-datos.js';
 import { observarTiendas } from './productos.js';
-import { COLORES_DEPARTAMENTO, MAXIMO_DEPARTAMENTOS, configConDefectos, validarDepartamento } from './config-pos.js';
+import { COLORES_DEPARTAMENTO, MAXIMO_DEPARTAMENTOS, MAXIMO_NOMBRE_DEPARTAMENTO, configConDefectos, validarDepartamento, nombreDepartamento } from './config-pos.js';
 import { calcularTicket, lineaDeProducto, lineaDeDepartamento, registrarPago, armarVenta, puntosBaseDesdeTexto, formatearPorcentaje, folioVenta, claveDia } from './ticket.js';
 import { centavosDesdeTexto, textoDesdeCentavos } from './precios.js';
 import { normalizarTexto } from './esquema.js';
@@ -88,7 +88,7 @@ function leerFormulario() {
     conteoCiego: $('k-ciego').checked,
     papelRecibo: Number(document.querySelector('input[name="papel"]:checked')?.value ?? 80),
     reciboPie: $('k-pie').value.trim(),
-    departamentos: departamentos.map((d) => ({ id: d.id, nombre: d.nombre.trim(), claseFiscal: d.claseFiscal, color: d.color })),
+    departamentos: departamentos.map((d) => ({ id: d.id, nombre: d.nombre.trim(), nombreEn: (d.nombreEn ?? '').trim() || null, claseFiscal: d.claseFiscal, color: d.color })),
   };
   if (datos.departamentos.length === 0) throw new Error(t('Deja al menos una tecla de departamento.'));
   for (const [i, d] of datos.departamentos.entries()) {
@@ -104,9 +104,17 @@ function pintarDepartamentos() {
   $('deptos-contador').textContent = t('{n} de {maximo}', { n: departamentos.length, maximo: MAXIMO_DEPARTAMENTOS });
   $('btn-agregar-depto').disabled = departamentos.length >= MAXIMO_DEPARTAMENTOS;
   $('tabla-deptos').tBodies[0].replaceChildren(...departamentos.map((d, i) => {
-    const nombre = h('input', { type: 'text', value: d.nombre, maxlength: 30, required: true, 'aria-label': t('Nombre del departamento {n}', { n: i + 1 }) });
+    const nombre = h('input', { type: 'text', value: d.nombre, maxlength: MAXIMO_NOMBRE_DEPARTAMENTO, required: true, 'aria-label': t('Nombre del departamento {n}', { n: i + 1 }) });
     nombre.addEventListener('input', () => {
       d.nombre = nombre.value;
+      cambio();
+    });
+    const nombreEn = h('input', {
+      type: 'text', lang: 'en', value: d.nombreEn ?? '', maxlength: MAXIMO_NOMBRE_DEPARTAMENTO, placeholder: t('Opcional'),
+      'aria-label': t('Nombre en inglés del departamento {n}', { n: i + 1 }),
+    });
+    nombreEn.addEventListener('input', () => {
+      d.nombreEn = nombreEn.value;
       cambio();
     });
     const impuesto = h('select', { 'aria-label': t('Impuesto del departamento {n}', { n: i + 1 }) },
@@ -135,6 +143,7 @@ function pintarDepartamentos() {
         h('button', { type: 'button', class: 'boton boton--pequeno', text: '↑', 'aria-label': t('Subir'), disabled: i === 0, onclick: () => mover(-1) }),
         h('button', { type: 'button', class: 'boton boton--pequeno', text: '↓', 'aria-label': t('Bajar'), disabled: i === departamentos.length - 1, onclick: () => mover(1) })),
       h('td', null, nombre, h('span', { class: 'secundario monoespaciada', text: d.id })),
+      h('td', null, nombreEn),
       h('td', null, impuesto),
       h('td', { class: 'celda-color' }, muestra, color),
       h('td', null, h('button', {
@@ -154,7 +163,7 @@ $('btn-agregar-depto').addEventListener('click', () => {
   if (departamentos.length >= MAXIMO_DEPARTAMENTOS) return;
   const usados = new Set(departamentos.map((d) => d.id));
   const nombre = t('Nuevo departamento');
-  departamentos.push({ id: identificadorDe(`${nombre}-${Date.now().toString(36).slice(-3)}`, usados), nombre, claseFiscal: 'gravado', color: 'gris' });
+  departamentos.push({ id: identificadorDe(`${nombre}-${Date.now().toString(36).slice(-3)}`, usados), nombre, nombreEn: '', claseFiscal: 'gravado', color: 'gris' });
   pintarDepartamentos();
   cambio();
   const filas = $('tabla-deptos').tBodies[0].rows;
@@ -188,7 +197,7 @@ function pintarVista() {
   $('vista-deptos').replaceChildren(...config.departamentos.map((d) => h('span', {
     class: 'tecla-demo',
     style: `background:${COLOR_TECLA[d.color]}`,
-  }, h('strong', { text: d.nombre }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : t('Sin impuesto') }))));
+  }, h('strong', { text: nombreDepartamento(d) }), h('small', { text: d.claseFiscal === 'gravado' ? `+${config.impuestoNombre}` : t('Sin impuesto') }))));
 }
 
 // ------------------------------------------------------------- guardar
