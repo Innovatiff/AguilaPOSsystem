@@ -22,7 +22,7 @@ Four apps share the site, the data and the service worker:
 | `index.html`, `js/inicio.js` | back office home: sold today, tickets, average ticket, HST, sales by hour, payment methods, registers with an open shift, latest tickets |
 | `movimientos.html`, `js/bo-movimientos.js`, `js/eventos.js` | live register activity (`eventos/`): every sale started, item added, price change, discount, void, approval, payment, completed sale, cancellation, return, cash movement and shift open/close, newest first, as it happens |
 | `transacciones.html`, `js/bo-transacciones.js` | every completed, voided (cancelled ticket) or returned transaction of a date range: filters (associate, register, status, audit flags, payment method), search by receipt number or item name (or scan the receipt), receipt with reprint and its audit history, CSV. `ventas.html` redirects here |
-| `inventario.html`, `js/pantalla-inventario.js`, `js/inventario.js`, `js/recepciones.js`, `js/existencias.js` | **Ajuste rápido**: scan or type a product and count how many there are in the store and in the warehouse (boxes × pieces per box + loose), expiry date and country of origin; the stock table per store (store, warehouse, total, expiry, origin, last count) with CSV. Receive deliveries (scan or search products, pieces or kg, supplier, invoice) and see what came in: per product (how much, in how many deliveries, last one, suppliers) and per delivery; admins can void a delivery; CSV. Also in the Catálogo app as **Recibir mercancía** |
+| `inventario.html`, `js/pantalla-inventario.js`, `js/inventario.js`, `js/recepciones.js`, `js/existencias.js` | **Ajuste rápido**: scan or type a product and count how many there are in the store and in the warehouse (boxes × pieces per box + loose), expiry date and country of origin; the stock table per store (now in the store and in the warehouse: last count minus register sales, plus deliveries; total, expiry, origin, last count) with CSV. Receive deliveries (scan or search products, pieces or kg, supplier, invoice) and see what came in: per product (how much, in how many deliveries, last one, suppliers) and per delivery; admins can void a delivery; CSV. Also in the Catálogo app as **Recibir mercancía** |
 | `turnos.html`, `js/bo-turnos.js` | open shifts now and shifts of a period: hours, sales, expected/counted cash, over/short; shift detail with its Z (or X) report, verification against the sales, admin close |
 | `reportes.html`, `js/bo-reportes.js` | reports of a period from the shift summaries: totals, tax, by day, payment methods, by person (hours), by register, top products, department sales, control counters; print and CSV |
 | `gestion/cajas.html`, `gestion/configuracion.html`, `gestion/tiendas.html`, `gestion/empleados.html`, `gestion/datos.html` | registers, POS settings, stores (receipt header), employees (email, PIN, Catálogo permission), CSV import/export |
@@ -221,26 +221,37 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
     store and the warehouse can be counted separately, by different people, at
     the same time. A barcode scanned into a quantity field is refused instead
     of being saved as a quantity. After saving it is ready for the next scan.
-  - *Existencias: tienda y bodega*: per store, each counted product with how
-    many in the store, in the warehouse and in total (with the boxes
-    breakdown), expiry date (marked when it expires within 7 days or already
-    expired), country and the last count (when and who). Search, "only what
-    expires soon", CSV, and tapping a row opens its adjustment. The numbers are
-    the **last count**: sales and deliveries do not change them.
+  - *Existencias: tienda y bodega*: per store, each product with how many
+    there are now in the store, in the warehouse and in total, expiry date
+    (marked when it expires within 7 days or already expired), country and the
+    last count (when and who). Search, "only what expires soon", CSV, and
+    tapping a row opens its adjustment. **Now = the last count, minus what the
+    registers sold since (store), plus what came in since (warehouse)**: each
+    sale at the register takes its pieces (or kilos) out of the store and a
+    return puts them back; each delivery with a store adds to that store's
+    warehouse and voiding it takes it out again. Under each number: how it was
+    counted and what was sold or received since. Counting a place again starts
+    it over. A place that was never counted shows only what moved; a store
+    number below zero (shelves restocked from the warehouse without counting)
+    is marked "Contar de nuevo". Department (open-price) sales and products
+    without stock in that store do not move anything, and nothing here ever
+    blocks or delays a sale.
   - *Recibir mercancía*: store, supplier, invoice or delivery note, note; scan
     each product with the USB scanner (or the phone camera) or find it by PLU
     or name. Scanning the same product again adds one piece; `24*` before the
     code adds 24. Weighed products ask for the kilos. A barcode that is not in
     the catalog can still be received with a typed name ("sin registrar").
-    What has been scanned survives a page reload until it is registered.
+    What has been scanned survives a page reload until it is registered. The
+    store defaults to the person's own; without a store, a note says the
+    delivery will not be added to any warehouse.
   - *Lo que llegó*: for Hoy, 7 or 30 days or any dates (up to 92), filtered by
     store, supplier or a search: deliveries, pieces, kilos and distinct
     products; **por producto** how much came in, in how many deliveries, the
     last one and from which suppliers; and each **entrega** with its lines.
     An admin can **Anular entrada** (it stays visible, struck through, and
     stops counting). CSV export, one row per line.
-  Neither deliveries nor counts change the products' `existencias` field:
-  counts live in their own collection (`existencias/`, see
+  Neither sales, deliveries nor counts change the products' `existencias`
+  field: stock lives in its own collection (`existencias/`, see
   [docs/esquema.md](docs/esquema.md)) and the catalog schema is untouched.
 - **Empleados**, **Cajas**, **Tiendas**, **Configuración** (see setup).
 
@@ -277,7 +288,8 @@ Designed for a 1024 × 768 touch screen and up, with keyboard and USB scanner.
    quantity, weight, price, discount, void. **Cobrar** (F10): cash with quick
    bills and the change in big digits (cash totals round to 5 ¢, Canada has no
    pennies), debit, credit or other, split payments. The receipt prints by
-   itself.
+   itself. Once the server has the ticket, what was sold comes out of the
+   store's stock (Inventario), for products that have stock there.
 3. **Needs an admin**: discounts (line or ticket), price changes, returns, and
    open-price sales above the limit. An admin types their own PIN on
    the register (a separate session; the cashier stays signed in). One approval
@@ -403,8 +415,9 @@ back office catalog, in staff mode:
   the product enters the catalog when an admin sets its price.
 - **Captura rápida**: scan, name, brand, size, Enter: the request is sent.
 - **Recibir mercancía**: the back office Inventario screen: register what
-  came in, see what came in, and **Ajuste rápido** to count the store and the
-  warehouse from the phone. Voiding a delivery is for admins only.
+  came in (it adds to the warehouse of their store), see what came in, and
+  **Ajuste rápido** to count the store and the warehouse from the phone.
+  Voiding a delivery is for admins only.
 - **Etiquetas**: print pending shelf tags (the printed price is recorded).
 - **Mis solicitudes**: each request with its status and the admin's note.
 

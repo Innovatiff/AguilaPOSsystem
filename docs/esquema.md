@@ -336,7 +336,9 @@ Fields, exactly:
 A delivery that came in (**Inventario → Recibir mercancía**, also in the
 Catálogo app). Created by an admin or staff with the Catálogo permission;
 read by both; only an admin can void it (once); nobody deletes it. It does
-**not** change the products' `existencias`. Fields, exactly:
+not change the `existencias` field of `products`: once the server confirms it,
+each catalog line with a store adds to that store's warehouse in
+`existencias/` (and voiding it subtracts it again; see below). Fields, exactly:
 
 | field | type | notes |
 |---|---|---|
@@ -353,13 +355,34 @@ read by both; only an admin can void it (once); nobody deletes it. It does
 
 ### `existencias/{tienda}__{producto}`
 How many of a product there are **in the store** and **in the warehouse
-(bodega)** of one store, from the last count (**Inventario → Ajuste rápido**,
-also in the Catálogo app). One document per store and product; the warehouse
-belongs to the store. Written by an admin or staff with the Catálogo
-permission with `setDoc(…, { merge: true })`, so counting the store and
-counting the warehouse are separate and do not overwrite each other; nobody
-deletes it. It does **not** change `products` (the product schema is
-unchanged) and sales and deliveries do not move it: it is the last count.
+(bodega)** of one store: the last count of each place (**Inventario → Ajuste
+rápido**, also in the Catálogo app) and what moved since. One document per
+store and product; the warehouse belongs to the store. Nobody deletes it. It
+does **not** change `products` (the product schema is unchanged).
+
+- **Now in the store** = `enTienda.total − vendidoTienda`; **now in the
+  warehouse** = `enBodega.total + recibidoBodega`. A place that was never
+  counted has no number (the table shows what moved: "Sold: 12 pieces").
+- **Counts** (admin or staff with the Catálogo permission) are written with
+  `setDoc(…, { merge: true })`: counting the store and counting the warehouse
+  do not overwrite each other, and counting a place resets its counter to 0.
+- **Sales**: when the server confirms a ticket, the register adds what it sold
+  (pieces, or grams for weighed products; a scale label is converted with the
+  price per kg) to `vendidoTienda`, and a return subtracts it
+  (`increment`). It only does so for products that already have a document in
+  that store and if the ticket is later than the store's last count (anything
+  earlier is already in the count). Department (open-price) sales do not move
+  stock.
+- **Deliveries**: when the server confirms one with a store, each catalog line
+  adds to `recibidoBodega` (and creates the document if the product had none);
+  an admin voiding it subtracts it again, unless the warehouse was counted
+  after the delivery.
+- Each movement is sent only when the server will accept it: a rejected write
+  makes the SDK resend the writes queued behind it, and a resent `increment`
+  would count twice. A sale made offline that syncs after a recount of that
+  product is subtracted again; the next count corrects it.
+- Read by all active staff (the register needs to know which products have
+  stock in its store and when they were counted).
 
 | field | type | notes |
 |---|---|---|
@@ -370,7 +393,10 @@ unchanged) and sales and deliveries do not move it: it is the last count.
 | enTienda, enBodega | map, optional | `{ cajas, porCaja, sueltas, total, contadoEn, contadoPor, contadoPorNombre }`: boxes (integer ≤ 99 999 or null), pieces or grams per box (null when no boxes), loose pieces or grams, `total == cajas × porCaja + sueltas`; `contadoEn` server time, `contadoPor`/`contadoPorNombre` the signed-in user. A count only writes the place that was counted; the rules accept each place unchanged, absent or as a new count by the writer at `request.time` |
 | caducidad | `"YYYY-MM-DD"` \| null, optional | expiry date; written only when someone changed it |
 | origen | string \| null ≤ 60, optional | country of origin; written only when someone changed it. A country from the suggested list is stored with its Spanish name (`México`, `Estados Unidos`) whatever the screen language and shown in the reader's language; anything else as typed |
-| actualizadoEn, actualizadoPor, actualizadoPorNombre | timestamp, string, string ≤ 80 | server time and the signed-in user |
+| vendidoTienda | integer, optional | sold from the store since its last count (sales minus returns; pieces or grams). Written by the cashier with `increment`; only that field and `ultimoMovimiento` change, and the rules check the ticket is the cashier's, in that store, of that type (`venta` adds, `devolucion` subtracts) and that its line `linea` is this product. A count of the store sets it to 0 |
+| recibidoBodega | integer, optional | received in the warehouse since its last count (deliveries minus the voided ones). Written by whoever registered the delivery, or by the admin who voided it, with `increment`: the quantity must be exactly that of the delivery line, for this store and product, and the delivery must be later than the warehouse's last count. A count of the warehouse sets it to 0 |
+| ultimoMovimiento | map, optional | the last sale, return, delivery or void applied: `{ tipo: 'venta' \| 'devolucion' \| 'entrega' \| 'anulacion', ref (ticket or delivery id), linea, cantidad, por, registradoEn }` with server time. A count leaves it unchanged |
+| actualizadoEn, actualizadoPor, actualizadoPorNombre | timestamp, string, string ≤ 80 | server time and the signed-in user (of the last count or delivery) |
 
 ### What stays on the register computer (localStorage)
 Which register the computer is, the ticket in progress and held tickets (they

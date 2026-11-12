@@ -24,6 +24,8 @@ import {
   comprobarSecretoEnServidor, autorizarComoAdmin,
 } from './pos-datos.js';
 import { configConDefectos, nombreDepartamento, nombreDeLinea } from './config-pos.js';
+import { movimientosDeVenta, cuentaDesdeConteo } from './inventario.js';
+import { registrarSalidaDeVenta, observarExistencias } from './existencias.js';
 import {
   LIMITES_TICKET, NOMBRE_METODO, calcularTicket, lineaDeProducto, lineaDeDepartamento, lineaAcumulable,
   importeBruto, dividirRedondeado, redondearEfectivo, gramosDesdeTexto, formatearPeso, cantidadDesdeTexto,
@@ -62,6 +64,7 @@ const estado = {
   pantalla: 'cargando',
   asignacion: null, // { id, nombre, numero, tienda, tiendaNombre } guardado en el equipo
   personal: null, // ficha efectiva de quien tiene la sesión
+  existencias: null, // Map producto → existencias de la tienda (null: no se pudieron leer; no se descuenta)
   turno: null,
   caja: null,
   tienda: null,
@@ -504,6 +507,13 @@ async function iniciarVenta(turno, { bloqueada = false } = {}) {
     if (!desdeCache || catalogo.size > 0) estado.catalogoListo = true;
     reindexar();
   }, fallaListener(tx('el catálogo'))));
+  // Existencias de la tienda: para saber a qué productos les toca descontar lo vendido. Si no se pueden leer, no se descuenta (sin avisar: la venta no depende de esto).
+  estado.existencias = null;
+  s.push(observarExistencias(turno.tienda, (lista) => {
+    estado.existencias = new Map(lista.map((e) => [e.producto, e]));
+  }, () => {
+    estado.existencias = null;
+  }));
 
   mostrar('venta');
   pintarDepartamentos();
@@ -523,6 +533,7 @@ function detenerVenta() {
   }
   estado.catalogo = new Map();
   estado.catalogoListo = false;
+  estado.existencias = null;
   estado.porUPC = new Map();
   estado.porPLU = new Map();
   estado.ventas = [];
@@ -1710,6 +1721,7 @@ function finalizarVenta(calculo, pagos) {
     console.error(error);
     avisar(tx('El servidor rechazó el ticket {folio}: {error}. Avisa a un administrador.', { folio: venta.folio, error: mensajeDe(error) }), 'error', 0);
   });
+  moverExistencias(id, venta, promesa);
   eventosDeCobro(venta, t);
   estado.ultimaVenta = { id, ...venta };
   estado.ticket = nuevoTicket();
@@ -1720,6 +1732,26 @@ function finalizarVenta(calculo, pagos) {
   pintarTicket();
   pintarEntrada();
   sonar('venta');
+}
+
+/**
+ * Lo vendido sale de las existencias de la tienda (la devolución lo regresa):
+ * se decide ahora (productos con existencias en la tienda, contados antes de
+ * la venta) y se manda cuando el servidor confirma la venta, que las reglas
+ * cotejan. Nada de esto detiene ni retrasa la venta.
+ */
+function moverExistencias(ventaId, venta, guardada) {
+  if (!estado.existencias) return;
+  try {
+    const cuando = venta.fecha.toMillis();
+    const movimientos = movimientosDeVenta(venta, (productoId) => estado.catalogo.get(productoId) ?? null)
+      .filter((m) => cuentaDesdeConteo(estado.existencias.get(m.producto), 'enTienda', cuando));
+    if (!movimientos.length) return;
+    const usuario = estado.personal.usuario;
+    guardada.then(() => registrarSalidaDeVenta({ ventaId, venta, movimientos, usuario })).catch(() => {});
+  } catch (error) {
+    console.warn('No se movieron las existencias de la venta', error);
+  }
 }
 
 /** Movimientos en vivo del cobro: cada pago con lo que queda por cobrar, y la venta (o devolución) completada. */

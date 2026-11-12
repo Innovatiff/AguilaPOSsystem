@@ -3798,6 +3798,11 @@ dialog.editor--entrega {
   font-weight: 600;
 }
 
+.recepcion__sin-tienda {
+  margin: -6px 0 12px;
+  color: var(--bo-aviso);
+}
+
 .existencias__desglose,
 .existencias__quien {
   display: block;

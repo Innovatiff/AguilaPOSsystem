@@ -34,8 +34,10 @@ rules_version = '2';
 //  - recepciones/{id}: la mercancía que llegó (inventario). La registran los
 //    administradores y el personal del Catálogo; solo un admin la anula.
 //  - existencias/{tienda}__{producto}: cuánto hay de cada producto en la tienda
-//    y en la bodega (último conteo de cada lugar), su caducidad y su país de
-//    procedencia. Lo cuentan los administradores y el personal del Catálogo.
+//    y en la bodega (último conteo de cada lugar, y lo vendido y recibido desde
+//    entonces), su caducidad y su país de procedencia. Lo cuentan los
+//    administradores y el personal del Catálogo; las ventas de la caja y las
+//    entregas lo mueven.
 //  - pantallas/{huella}: la pantalla del cliente de una caja, para la tableta
 //    que la muestra. El id es un HMAC del id de la caja con la clave de caja:
 //    solo una caja configurada o un administrador lo pueden calcular. La
@@ -883,8 +885,9 @@ service cloud.firestore {
     // ----- recepciones: la mercancía que llegó --------------------------------
     // Una entrega por documento: tienda, proveedor, factura o remisión, nota y
     // las líneas { producto, nombre, upc, plu, cantidad, pesoGramos } (la app
-    // las valida una por una; las reglas no recorren listas). No toca las
-    // existencias de los productos. Un admin la puede anular (queda a la vista,
+    // las valida una por una; las reglas no recorren listas). No toca el campo
+    // `existencias` de products: lo que suma a la bodega de su tienda va en
+    // existencias/ (ver abajo). Un admin la puede anular (queda a la vista,
     // tachada, y no cuenta); nadie la borra.
     function camposRecepcion() {
       return ['tienda', 'proveedor', 'referencia', 'nota', 'lineas', 'productos', 'piezas', 'gramos',
@@ -937,12 +940,24 @@ service cloud.firestore {
     // existencias/{tienda}__{producto}: el último conteo de cada lugar
     // (Inventario → Ajuste rápido): cajas × por caja + sueltas = total (piezas,
     // o gramos en los productos por peso), quién contó y cuándo (hora del
-    // servidor); y la caducidad y el país de procedencia. Se escribe con merge:
-    // el lugar que no se contó queda como estaba. Lo registran el admin y el
-    // personal del Catálogo; nadie lo borra. No toca `existencias` de products.
+    // servidor); la caducidad y el país de procedencia; y lo movido desde el
+    // conteo: vendidoTienda (ventas menos devoluciones de la caja) y
+    // recibidoBodega (entregas menos las anuladas), con el último movimiento.
+    // Se escribe con merge: el lugar que no se contó queda como estaba, y
+    // contarlo pone su contador en cero. Cuentan el admin y el personal del
+    // Catálogo; una venta la mueve quien cobra y una entrega quien la registra
+    // (o el admin que la anula). Nadie lo borra. No toca `existencias` de products.
     function camposExistencia() {
-      return ['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'enTienda', 'enBodega', 'caducidad', 'origen',
-              'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'];
+      return ['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'enTienda', 'enBodega', 'vendidoTienda', 'recibidoBodega',
+              'ultimoMovimiento', 'caducidad', 'origen', 'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'];
+    }
+    // Al crearlo: el id es tienda__producto, de una tienda válida y un producto que existe.
+    function existenciaNueva(existenciaId, d) {
+      return existenciaId == d.tienda + '__' + d.producto
+        && d.tienda.matches('^[a-z0-9-]{2,40}$')
+        && esTextoNoVacio(d.producto, 100)
+        && exists(/databases/$(database)/documents/products/$(d.producto))
+        && d.porPeso is bool;
     }
     function cantidadONula(n, maximo) {
       return n == null || (n is int && n >= 0 && n <= maximo);
@@ -960,36 +975,109 @@ service cloud.firestore {
         && c.contadoPor == yo
         && c.contadoPorNombre == nombre;
     }
-    // Cada lugar: sin contar, igual que estaba, o contado ahora.
-    function lugarValido(d, antes, lugar, yo) {
-      return !(lugar in d) || d[lugar] == antes.get(lugar, null) || conteoNuevo(d[lugar], yo, d.actualizadoPorNombre);
+    // Cada lugar: igual que estaba (con su contador), o contado ahora (y su contador en cero).
+    function lugarContado(d, antes, lugar, contador, yo) {
+      let nuevo = d.get(lugar, null);
+      return (nuevo == antes.get(lugar, null) && d.get(contador, 0) == antes.get(contador, 0))
+        || (conteoNuevo(nuevo, yo, d.actualizadoPorNombre) && d.get(contador, 0) == 0);
     }
-    function escribirExistencia(existenciaId) {
-      let d = request.resource.data;
-      let antes = resource == null ? {} : resource.data;
-      let yo = usuarioActual();
+    // Ajuste rápido: los conteos, la caducidad y el país (admin o personal del Catálogo).
+    function contarExistencia(existenciaId, d, antes, yo) {
       return puedeCatalogo(fichaDe(yo), emailActual())
         && d.keys().hasOnly(camposExistencia())
         && d.keys().hasAll(['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'])
-        && existenciaId == d.tienda + '__' + d.producto
-        && d.tienda.matches('^[a-z0-9-]{2,40}$')
-        && esTextoNoVacio(d.producto, 100)
-        && exists(/databases/$(database)/documents/products/$(d.producto))
+        && (resource == null ? existenciaNueva(existenciaId, d) : d.tienda == antes.tienda && d.producto == antes.producto && d.porPeso is bool)
         && esTextoNoVacio(d.nombre, 120)
         && esTextoONulo(d.upc, 20)
         && esTextoONulo(d.plu, 10)
-        && d.porPeso is bool
-        && lugarValido(d, antes, 'enTienda', yo)
-        && lugarValido(d, antes, 'enBodega', yo)
+        && d.get('ultimoMovimiento', null) == antes.get('ultimoMovimiento', null)
+        && lugarContado(d, antes, 'enTienda', 'vendidoTienda', yo)
+        && lugarContado(d, antes, 'enBodega', 'recibidoBodega', yo)
         && (!('caducidad' in d) || d.caducidad == null || esFechaISO(d.caducidad))
         && (!('origen' in d) || esTextoONulo(d.origen, 60))
         && d.actualizadoEn == request.time
         && d.actualizadoPor == yo
         && esTextoNoVacio(d.actualizadoPorNombre, 80);
     }
+    function camposMovimientoExistencia() {
+      return ['tipo', 'ref', 'linea', 'cantidad', 'por', 'registradoEn'];
+    }
+    // Un movimiento: de la caja (venta o devolución) o del inventario (entrega o
+    // su anulación). Suma su cantidad al contador de su lugar, a nombre de quien
+    // lo hace y con la hora del servidor.
+    function moverExistencia(existenciaId, d, antes, yo, m) {
+      let deVenta = m.tipo in ['venta', 'devolucion'];
+      let contador = deVenta ? 'vendidoTienda' : 'recibidoBodega';
+      return m.keys().hasOnly(camposMovimientoExistencia())
+        && m.ref is string
+        && m.linea is int
+        && m.cantidad is int && m.cantidad != 0 && m.cantidad >= -99999999 && m.cantidad <= 99999999
+        && m.por == yo
+        && d.get(contador, 0) == antes.get(contador, 0) + m.cantidad
+        && (deVenta ? salidaDeVenta(d, antes, yo, m) : entradaDeEntrega(existenciaId, d, antes, yo, m));
+    }
+    // La caja: una venta o devolución de quien cobra, en esa tienda y con ese
+    // producto. Solo donde ya hay existencias; solo cambia lo vendido y el
+    // último movimiento. La caja la manda solo si la venta es posterior al
+    // último conteo de la tienda (lo anterior ya está en el conteo); aquí no se
+    // rechaza por eso: un rechazo en la cola de la caja (sin señal) haría que
+    // se reenviara lo que va detrás.
+    function salidaDeVenta(d, antes, yo, m) {
+      let venta = get(/databases/$(database)/documents/ventas/$(m.ref)).data;
+      return resource != null
+        && d.diff(antes).affectedKeys().hasOnly(['vendidoTienda', 'ultimoMovimiento'])
+        && vigente(fichaDe(yo), emailActual())
+        && venta.cajero == yo
+        && venta.tienda == d.tienda
+        && venta.tipo == m.tipo
+        && venta.lineas[m.linea].productoId == d.producto
+        && (m.tipo == 'venta' ? m.cantidad > 0 : m.cantidad < 0);
+    }
+    // El inventario: una entrega (quien la registró) o su anulación (el admin que
+    // la anuló), renglón por renglón con la cantidad exacta del renglón, si llegó
+    // después del último conteo de la bodega. La entrega crea el documento si no
+    // existía; la anulación solo resta donde ya hay.
+    function entradaDeEntrega(existenciaId, d, antes, yo, m) {
+      let r = get(/databases/$(database)/documents/recepciones/$(m.ref)).data;
+      let l = r.lineas[m.linea];
+      let q = l.cantidad != null ? l.cantidad : l.pesoGramos;
+      let conteo = antes.get('enBodega', null);
+      return puedeCatalogo(fichaDe(yo), emailActual())
+        && r.tienda == d.tienda
+        && l.producto == d.producto
+        && (m.tipo == 'entrega'
+              ? r.recibidoPor == yo && r.anulada == false && m.cantidad == q
+              : m.tipo == 'anulacion' && r.anulada == true && r.anuladaPor == yo && m.cantidad == -q)
+        && (conteo == null || r.fecha > conteo.contadoEn)
+        && esTextoNoVacio(d.nombre, 120)
+        && esTextoONulo(d.upc, 20)
+        && esTextoONulo(d.plu, 10)
+        && d.actualizadoEn == request.time
+        && d.actualizadoPor == yo
+        && esTextoNoVacio(d.actualizadoPorNombre, 80)
+        && (resource == null
+              ? m.tipo == 'entrega'
+                && d.keys().hasOnly(['tienda', 'producto', 'nombre', 'upc', 'plu', 'porPeso', 'recibidoBodega', 'ultimoMovimiento',
+                                     'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre'])
+                && existenciaNueva(existenciaId, d)
+              : d.diff(antes).affectedKeys().hasOnly(['nombre', 'upc', 'plu', 'recibidoBodega', 'ultimoMovimiento',
+                                                     'actualizadoEn', 'actualizadoPor', 'actualizadoPorNombre']));
+    }
+    // Un movimiento trae el suyo con la hora de esta petición; un conteo deja el anterior como estaba.
+    function escribirExistencia(existenciaId) {
+      let d = request.resource.data;
+      let antes = resource == null ? {} : resource.data;
+      let yo = usuarioActual();
+      let m = d.get('ultimoMovimiento', null);
+      return m != null && m.get('registradoEn', null) == request.time
+        ? moverExistencia(existenciaId, d, antes, yo, m)
+        : contarExistencia(existenciaId, d, antes, yo);
+    }
 
+    // Las lee todo el personal activo: la caja necesita saber qué productos
+    // tienen existencias en su tienda y cuándo se contaron.
     match /existencias/{existenciaId} {
-      allow read: if puedeCatalogo(fichaDe(usuarioActual()), emailActual());
+      allow read: if vigente(fichaDe(usuarioActual()), emailActual());
       allow create, update: if escribirExistencia(existenciaId);
       allow delete: if false;
     }

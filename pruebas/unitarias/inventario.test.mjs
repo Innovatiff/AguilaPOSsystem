@@ -4,7 +4,8 @@ import {
   lineaSinRegistrar, claveDeLinea, erroresDeLinea, armarRecepcion, textoCantidades, textoLinea, cumpleFiltrosRecepcion,
   lineasVisibles, resumirPorProducto, totalesRecepciones, filasCSVRecepciones,
   conteoDesdeTexto, textoTotal, textoDesglose, caducidadDesdeTexto, origenDesdeTexto, paisEnPantalla, paisesSugeridos, estadoCaducidad, armarAjuste,
-  totalExistencia, filasExistencias, filasCSVExistencias,
+  totalExistencia, filasExistencias, filasCSVExistencias, cantidadActual, movidoDesdeConteo, textoMovido,
+  movimientosDeVenta, movimientosDeRecepcion, cuentaDesdeConteo,
 } from '../../js/inventario.js';
 import { cargarIngles, fijarIdioma } from '../../js/idioma.js';
 
@@ -205,8 +206,10 @@ describe('existencias: ajuste rápido de la tienda y la bodega', () => {
       tienda: 'talbot', producto: 'p-tortillas', nombre: 'Mission Tortillas de maíz 30 pzas', upc: '012345678905', plu: null, porPeso: false,
       caducidad: '2027-01-15', origen: 'México', actualizadoPor: '100123', actualizadoPorNombre: 'Ana Ramírez',
       enTienda: { cajas: 3, porCaja: 12, sueltas: 4, total: 40, contadoPor: '100123', contadoPorNombre: 'Ana Ramírez' },
+      vendidoTienda: 0,
     });
-    assert.ok(!('enBodega' in datos), 'la bodega no se contó: no se escribe (queda como estaba)');
+    assert.ok(!('enBodega' in datos) && !('recibidoBodega' in datos), 'la bodega no se contó: no se escribe (queda como estaba, con lo recibido)');
+    assert.equal(armarAjuste({ producto: TORTILLAS, tienda: 'talbot', enBodega: tienda }, PERSONAL).datos.recibidoBodega, 0, 'contar la bodega pone en cero lo recibido');
     const soloPeso = armarAjuste({ producto: CHILES, tienda: 'talbot' }, PERSONAL).datos;
     assert.equal(soloPeso.porPeso, true);
     assert.ok(!('caducidad' in soloPeso) && !('origen' in soloPeso), 'caducidad y país sin tocar: no se escriben (no pisan lo de otra persona)');
@@ -228,9 +231,81 @@ describe('existencias: ajuste rápido de la tienda y la bodega', () => {
     assert.deepEqual(filasExistencias(lista, { buscar: 'guatemala' }).map((e) => e.nombre), ['Chiles poblanos']);
     assert.deepEqual(filasExistencias(lista, { porCaducar: true, hoy: '2026-11-12' }).map((e) => e.nombre), ['Tortillas']);
     const csv = filasCSVExistencias(filasExistencias(lista), { fechaTexto: (m) => `t${m.toMillis()}`, nombreTienda: () => 'Talbot' });
-    assert.deepEqual(csv[0], ['tienda', 'producto', 'upc', 'plu', 'unidad', 'en_tienda', 'en_bodega', 'total', 'caducidad', 'origen', 'contado_tienda', 'contado_bodega']);
-    assert.deepEqual(csv[2], ['Talbot', 'Chiles poblanos', '', '4705', 'kg', '', '21.5', '21.5', '', 'Guatemala', '', 't3']);
-    assert.deepEqual(csv[3], ['Talbot', 'Tortillas', '012345678905', '', 'piezas', 40, 120, 160, '2026-11-14', 'México', 't1', 't2']);
+    assert.deepEqual(csv[0], ['tienda', 'producto', 'upc', 'plu', 'unidad', 'en_tienda', 'vendido_desde_conteo', 'en_bodega', 'recibido_desde_conteo', 'total',
+      'caducidad', 'origen', 'contado_tienda', 'contado_bodega']);
+    assert.deepEqual(csv[2], ['Talbot', 'Chiles poblanos', '', '4705', 'kg', '', '', '21.5', '', '21.5', '', 'Guatemala', '', 't3']);
+    assert.deepEqual(csv[3], ['Talbot', 'Tortillas', '012345678905', '', 'piezas', 40, '', 120, '', 160, '2026-11-14', 'México', 't1', 't2']);
+  });
+  it('lo que hay ahora: lo contado menos lo vendido (tienda) y más lo recibido (bodega)', () => {
+    const e = { porPeso: false, enTienda: { total: 40 }, enBodega: { total: 120 }, vendidoTienda: 12, recibidoBodega: 48 };
+    assert.equal(movidoDesdeConteo(e, 'enTienda'), 12);
+    assert.equal(cantidadActual(e, 'enTienda'), 28);
+    assert.equal(cantidadActual(e, 'enBodega'), 168);
+    assert.equal(totalExistencia(e), 196);
+    assert.equal(textoMovido(e, 'enTienda'), 'Vendido desde el conteo: 12 piezas');
+    assert.equal(textoMovido(e, 'enBodega'), 'Recibido desde el conteo: 48 piezas');
+    assert.equal(textoMovido({ ...e, vendidoTienda: -2 }, 'enTienda'), 'Devuelto desde el conteo: 2 piezas', 'más devoluciones que ventas');
+    assert.equal(textoMovido({ ...e, vendidoTienda: 0 }, 'enTienda'), '');
+    // Sin conteo: lo movido se dice, pero no hay cuánto hay.
+    const sinConteo = { porPeso: true, vendidoTienda: 1750, recibidoBodega: 12500 };
+    assert.equal(cantidadActual(sinConteo, 'enTienda'), null);
+    assert.equal(totalExistencia(sinConteo), null);
+    assert.equal(textoMovido(sinConteo, 'enTienda'), 'Vendido: 1.750 kg');
+    assert.equal(textoMovido(sinConteo, 'enBodega'), 'Recibido: 12.500 kg');
+    assert.equal(cantidadActual({ ...e, vendidoTienda: 45 }, 'enTienda'), -5, 'puede quedar en negativo (se surtió sin contar): se ve para contar de nuevo');
+    const csv = filasCSVExistencias([{ ...e, tienda: 't', nombre: 'Tortillas' }, { ...sinConteo, tienda: 't', nombre: 'Chiles', enBodega: { total: 500 }, recibidoBodega: -1000 }], { fechaTexto: String, nombreTienda: () => 'T' });
+    assert.deepEqual(csv[1].slice(5, 10), [28, 12, 168, 48, 196]);
+    assert.deepEqual(csv[2].slice(5, 10), ['', '1.75', '-0.5', '-1', '-0.5']);
+  });
+  it('lo que mueve una venta de la caja: por producto, en piezas o en gramos; la devolución al revés', () => {
+    const catalogo = new Map([
+      ['p-tortillas', TORTILLAS],
+      ['p-poblano', { ...CHILES, precioPorKgCentavos: 2198 }],
+    ]);
+    const producto = (id) => catalogo.get(id) ?? null;
+    const linea = (extra) => ({ productoId: null, unidad: 'pieza', cantidad: 1, pesoGramos: null, precioUnitarioCentavos: 100, ...extra });
+    const venta = {
+      tipo: 'venta',
+      lineas: [
+        linea({ productoId: 'p-tortillas', cantidad: 2 }),
+        linea({ departamento: 'abarrotes' }), // venta libre: no cuenta
+        linea({ productoId: 'p-tortillas', cantidad: 3 }),
+        linea({ productoId: 'p-poblano', unidad: 'peso', cantidad: null, pesoGramos: 1250 }),
+        linea({ productoId: 'p-poblano', cantidad: 1, precioUnitarioCentavos: 1099 }), // etiqueta de balanza: $10.99 a $21.98/kg = 500 g
+        linea({ productoId: 'p-borrado', cantidad: 4 }), // ya no está en el catálogo
+      ],
+    };
+    assert.deepEqual(movimientosDeVenta(venta, producto), [
+      { producto: 'p-tortillas', linea: 0, cantidad: 5 },
+      { producto: 'p-poblano', linea: 3, cantidad: 1750 },
+    ]);
+    const devolucion = { tipo: 'devolucion', lineas: [linea({ productoId: 'p-tortillas', cantidad: -1 }), linea({ productoId: 'p-poblano', unidad: 'peso', cantidad: null, pesoGramos: -500 })] };
+    assert.deepEqual(movimientosDeVenta(devolucion, producto), [{ producto: 'p-tortillas', linea: 0, cantidad: -1 }, { producto: 'p-poblano', linea: 1, cantidad: -500 }]);
+    assert.deepEqual(movimientosDeVenta({ lineas: [linea({ productoId: 'p-poblano', cantidad: 1 })] }, (id) => (id === 'p-poblano' ? CHILES : null)), [], 'por peso sin precio por kilo: no se sabe cuánto');
+  });
+  it('un movimiento cuenta solo donde hay existencias y si pasó después del último conteo de ese lugar', () => {
+    const e = { enTienda: { total: 40, contadoEn: marca(1000) } };
+    assert.equal(cuentaDesdeConteo(e, 'enTienda', 2000), true, 'vendido después del conteo');
+    assert.equal(cuentaDesdeConteo(e, 'enTienda', 500), false, 'vendido antes: ya está en el conteo');
+    assert.equal(cuentaDesdeConteo(e, 'enTienda', 1000), false);
+    assert.equal(cuentaDesdeConteo(e, 'enBodega', 500), true, 'la bodega no se ha contado: cuenta');
+    assert.equal(cuentaDesdeConteo(null, 'enTienda', 2000), false, 'sin existencias en esa tienda: no se manda nada');
+    assert.equal(cuentaDesdeConteo(e, 'enTienda', Number.NaN), false);
+  });
+  it('lo que mueve una entrega: renglón por renglón, solo lo del catálogo y con tienda', () => {
+    const recepcion = {
+      tienda: 'talbot',
+      lineas: [
+        lineaDeRecepcion(TORTILLAS, { cantidad: 24 }),
+        lineaSinRegistrar({ upc: '036000291452', nombre: 'Galletas', cantidad: 6 }),
+        lineaDeRecepcion(CHILES, { pesoGramos: 12500 }),
+      ],
+    };
+    assert.deepEqual(movimientosDeRecepcion(recepcion), [
+      { producto: 'p-tortillas', linea: 0, cantidad: 24, nombre: 'Mission Tortillas de maíz 30 pzas', upc: '012345678905', plu: null, porPeso: false },
+      { producto: 'p-poblano', linea: 2, cantidad: 12500, nombre: 'Chiles poblanos', upc: null, plu: '4705', porPeso: true },
+    ]);
+    assert.deepEqual(movimientosDeRecepcion({ ...recepcion, tienda: null }), [], 'sin tienda no suma a ninguna bodega');
   });
   it('en inglés: los textos y el CSV', async () => {
     await cargarIngles();
@@ -248,7 +323,9 @@ describe('existencias: ajuste rápido de la tienda y la bodega', () => {
       assert.equal(paisEnPantalla('Oaxaca'), 'Oaxaca');
       const enIngles = [{ tienda: 't', nombre: 'Frijol', porPeso: false, origen: 'Estados Unidos' }];
       assert.equal(filasExistencias(enIngles, { buscar: 'united' }).length, 1, 'se busca por el nombre que se ve');
-      assert.equal(filasCSVExistencias(enIngles, { fechaTexto: String, nombreTienda: String })[1][9], 'United States');
+      assert.equal(filasCSVExistencias(enIngles, { fechaTexto: String, nombreTienda: String })[1][11], 'United States');
+      assert.equal(textoMovido({ porPeso: false, enTienda: { total: 40 }, vendidoTienda: 12 }, 'enTienda'), 'Sold since the count: 12 pieces');
+      assert.equal(textoMovido({ porPeso: true, recibidoBodega: 12500 }, 'enBodega'), 'Received: 12.500 kg');
     } finally {
       fijarIdioma(null);
     }

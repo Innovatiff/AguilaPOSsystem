@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch, Timestamp, serverTimestamp, setLogLevel } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, writeBatch, Timestamp, serverTimestamp, increment, setLogLevel } from 'firebase/firestore';
 import { armarFichaPersonal, correoDeAcceso, usuarioDe } from '../../js/identidad.js';
 import { armarProducto } from '../../js/esquema.js';
 import { lineaDeProducto, calcularTicket, registrarPago, armarVenta } from '../../js/ticket.js';
@@ -230,6 +230,68 @@ const ESCENARIOS = [
       enTienda: { cajas: 3, porCaja: 12, sueltas: 4, total: 40, contadoEn: serverTimestamp(), contadoPor: '100123', contadoPorNombre: 'María' },
       enBodega: { cajas: 10, porCaja: 12, sueltas: 6, total: 126, contadoEn: serverTimestamp(), contadoPor: '100123', contadoPorNombre: 'María' },
     }, { merge: true }),
+  },
+  {
+    nombre: 'la caja descuenta una venta de la tienda (existencias)',
+    ancla: ANCLA.existencia,
+    datos: {
+      'products/p1': { nombre: 'Clasico', marca: 'Tajin' },
+      'ventas/v1': { tipo: 'venta', tienda: 'talbot', cajero: '100123', fecha: Timestamp.now(), lineas: [{ productoId: 'p1', unidad: 'pieza', cantidad: 2, pesoGramos: null }] },
+      'existencias/talbot__p1': {
+        tienda: 'talbot', producto: 'p1', nombre: 'TAJIN', upc: '633148100013', plu: null, porPeso: false, caducidad: null, origen: null,
+        actualizadoEn: AHORA, actualizadoPor: '100123', actualizadoPorNombre: 'María', vendidoTienda: 3,
+        enTienda: { cajas: 1, porCaja: 12, sueltas: 0, total: 12, contadoEn: AHORA, contadoPor: '100123', contadoPorNombre: 'María' },
+        ultimoMovimiento: { tipo: 'venta', ref: 'v0', linea: 0, cantidad: 3, por: '100123', registradoEn: AHORA },
+      },
+    },
+    quien: MARIA,
+    accion: (db) => updateDoc(doc(db, 'existencias/talbot__p1'), {
+      vendidoTienda: increment(2),
+      ultimoMovimiento: { tipo: 'venta', ref: 'v1', linea: 0, cantidad: 2, por: '100123', registradoEn: serverTimestamp() },
+    }),
+  },
+  {
+    nombre: 'una entrega suma a la bodega y crea las existencias',
+    ancla: ANCLA.existencia,
+    datos: {
+      'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true },
+      'products/p1': { nombre: 'Clasico', marca: 'Tajin' },
+      'recepciones/r1': {
+        tienda: 'talbot', proveedor: null, referencia: null, nota: null, productos: 1, piezas: 24, gramos: 0,
+        lineas: [{ producto: 'p1', nombre: 'TAJIN', upc: '633148100013', plu: null, cantidad: 24, pesoGramos: null }],
+        recibidoPor: '100123', recibidoPorNombre: 'María', fecha: AHORA, anulada: false, anuladaPor: null, anuladaEn: null,
+      },
+    },
+    quien: MARIA,
+    accion: (db) => setDoc(doc(db, 'existencias/talbot__p1'), {
+      tienda: 'talbot', producto: 'p1', nombre: 'TAJIN CLASICO 142g', upc: '633148100013', plu: null, porPeso: false,
+      recibidoBodega: increment(24),
+      ultimoMovimiento: { tipo: 'entrega', ref: 'r1', linea: 0, cantidad: 24, por: '100123', registradoEn: serverTimestamp() },
+      actualizadoEn: serverTimestamp(), actualizadoPor: '100123', actualizadoPorNombre: 'María',
+    }, { merge: true }),
+  },
+  {
+    nombre: 'el admin anula una entrega y la resta de la bodega',
+    ancla: ANCLA.existencia,
+    datos: {
+      'products/p1': { nombre: 'Clasico', marca: 'Tajin' },
+      'recepciones/r1': {
+        tienda: 'talbot', proveedor: null, referencia: null, nota: null, productos: 1, piezas: 24, gramos: 0,
+        lineas: [{ producto: 'p1', nombre: 'TAJIN', upc: '633148100013', plu: null, cantidad: 24, pesoGramos: null }],
+        recibidoPor: '100123', recibidoPorNombre: 'María', fecha: AHORA, anulada: true, anuladaPor: '100150', anuladaEn: AHORA,
+      },
+      'existencias/talbot__p1': {
+        tienda: 'talbot', producto: 'p1', nombre: 'TAJIN CLASICO 142g', upc: '633148100013', plu: null, porPeso: false, recibidoBodega: 24,
+        ultimoMovimiento: { tipo: 'entrega', ref: 'r1', linea: 0, cantidad: 24, por: '100123', registradoEn: AHORA },
+        actualizadoEn: AHORA, actualizadoPor: '100123', actualizadoPorNombre: 'María',
+      },
+    },
+    quien: JEFA,
+    accion: (db) => updateDoc(doc(db, 'existencias/talbot__p1'), {
+      recibidoBodega: increment(-24),
+      ultimoMovimiento: { tipo: 'anulacion', ref: 'r1', linea: 0, cantidad: -24, por: '100150', registradoEn: serverTimestamp() },
+      actualizadoEn: serverTimestamp(), actualizadoPor: '100150', actualizadoPorNombre: 'Jefa',
+    }),
   },
   {
     nombre: 'registrar el NIP de un colaborador (huella y correo)',

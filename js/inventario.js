@@ -12,7 +12,7 @@
  *   - producto: id del catálogo, o null si llegó algo que aún no está dado de alta.
  */
 import { normalizarTexto } from './esquema.js';
-import { formatearPeso } from './ticket.js';
+import { formatearPeso, dividirRedondeado } from './ticket.js';
 import { t, tc, numero } from './idioma.js';
 
 export const LIMITES_RECEPCION = Object.freeze({
@@ -315,8 +315,15 @@ export function filasCSVRecepciones(recepciones, { fechaTexto, nombreTienda, bus
 // la caducidad y el país de procedencia. Un conteo es «cuántas hay ahora»:
 // cajas × lo que trae cada caja + sueltas = total (piezas, o gramos en los
 // productos por peso). Todo es opcional: lo que se deja vacío no cambia.
+//
+// Desde el conteo, las ventas de la caja sacan de la tienda (vendidoTienda:
+// ventas menos devoluciones) y las entregas suman a la bodega (recibidoBodega:
+// entregas menos las anuladas). Lo que hay ahora = lo contado ∓ lo movido;
+// contar de nuevo un lugar pone su contador en cero.
 
 export const LUGARES = Object.freeze(['enTienda', 'enBodega']);
+/** El contador de lo movido desde el conteo de cada lugar. */
+export const CONTADORES = Object.freeze({ enTienda: 'vendidoTienda', enBodega: 'recibidoBodega' });
 export const LIMITES_CONTEO = Object.freeze({ cajas: 99999, piezas: 99999999, gramos: 99999999, total: 999999999, origen: 60 });
 /** Una caducidad a estos días o menos sale marcada. */
 export const DIAS_CADUCA_PRONTO = 7;
@@ -458,15 +465,112 @@ export function armarAjuste({ producto, tienda, enTienda = null, enBodega = null
   };
   if (caducidad !== undefined) datos.caducidad = caducidad;
   if (origen !== undefined) datos.origen = origen;
-  if (enTienda) datos.enTienda = { cajas: enTienda.cajas, porCaja: enTienda.porCaja, sueltas: enTienda.sueltas, total: enTienda.total, ...quien };
-  if (enBodega) datos.enBodega = { cajas: enBodega.cajas, porCaja: enBodega.porCaja, sueltas: enBodega.sueltas, total: enBodega.total, ...quien };
+  // Un lugar contado vuelve a empezar: lo vendido o recibido antes ya está en el conteo.
+  if (enTienda) {
+    datos.enTienda = { cajas: enTienda.cajas, porCaja: enTienda.porCaja, sueltas: enTienda.sueltas, total: enTienda.total, ...quien };
+    datos.vendidoTienda = 0;
+  }
+  if (enBodega) {
+    datos.enBodega = { cajas: enBodega.cajas, porCaja: enBodega.porCaja, sueltas: enBodega.sueltas, total: enBodega.total, ...quien };
+    datos.recibidoBodega = 0;
+  }
   return { id: `${tienda}__${producto.id}`, datos };
 }
 
-/** Total de un producto: tienda + bodega (null si no se ha contado en ningún lado). */
+/** Lo vendido (tienda) o recibido (bodega) desde el último conteo de ese lugar; 0 si nada. */
+export function movidoDesdeConteo(e, lugar) {
+  const n = e?.[CONTADORES[lugar]];
+  return Number.isSafeInteger(n) ? n : 0;
+}
+
+/** Lo que hay ahora en un lugar: lo contado menos lo vendido (tienda) o más lo recibido (bodega); null si nunca se contó. */
+export function cantidadActual(e, lugar) {
+  const contado = e?.[lugar]?.total;
+  if (!Number.isInteger(contado)) return null;
+  const movido = movidoDesdeConteo(e, lugar);
+  return lugar === 'enTienda' ? contado - movido : contado + movido;
+}
+
+/** Total de un producto: lo que hay ahora en la tienda + en la bodega (null si no se ha contado en ningún lado). */
 export function totalExistencia(e) {
-  const contados = LUGARES.map((lugar) => e?.[lugar]?.total).filter(Number.isInteger);
+  const contados = LUGARES.map((lugar) => cantidadActual(e, lugar)).filter(Number.isInteger);
   return contados.length ? contados.reduce((suma, n) => suma + n, 0) : null;
+}
+
+/**
+ * Lo movido desde el conteo, en palabras: «Vendido desde el conteo: 12 piezas»,
+ * «Devuelto…» (si hubo más devoluciones que ventas) o «Recibido…»; sin
+ * conteo, solo «Vendido: 12 piezas». "" si no se movió nada.
+ */
+export function textoMovido(e, lugar) {
+  const n = movidoDesdeConteo(e, lugar);
+  if (n === 0) return '';
+  const contado = Number.isInteger(e?.[lugar]?.total);
+  if (lugar === 'enBodega') {
+    const cantidad = textoTotal(n, e.porPeso);
+    return contado ? t('Recibido desde el conteo: {cantidad}', { cantidad }) : t('Recibido: {cantidad}', { cantidad });
+  }
+  const cantidad = textoTotal(Math.abs(n), e.porPeso);
+  if (n > 0) return contado ? t('Vendido desde el conteo: {cantidad}', { cantidad }) : t('Vendido: {cantidad}', { cantidad });
+  return contado ? t('Devuelto desde el conteo: {cantidad}', { cantidad }) : t('Devuelto: {cantidad}', { cantidad });
+}
+
+/**
+ * ¿Un movimiento de ese instante (milisegundos) cuenta para ese lugar? Solo
+ * donde ya hay existencias, y si pasó después del último conteo del lugar: lo
+ * anterior ya está en el conteo. Así se decide antes de mandarlo, para que el
+ * servidor nunca tenga que rechazarlo.
+ */
+export function cuentaDesdeConteo(e, lugar, milis) {
+  if (!e || !Number.isFinite(milis)) return false;
+  const contadoEn = e[lugar]?.contadoEn;
+  if (!contadoEn) return true;
+  return typeof contadoEn.toMillis === 'function' && milis > contadoEn.toMillis();
+}
+
+/**
+ * Lo que una venta o devolución (ventas/{id}) mueve en la tienda, por producto
+ * del catálogo: piezas, o gramos en los productos por peso. Una etiqueta de
+ * balanza (producto por peso vendido por pieza con el importe impreso) se pasa
+ * a gramos con el precio por kilo del catálogo. Positivo en una venta,
+ * negativo en una devolución; las ventas por departamento no cuentan.
+ * `producto(id)`: el producto del catálogo, o null. `linea`: el renglón del
+ * primer artículo de ese producto (las reglas lo cotejan con la venta).
+ */
+export function movimientosDeVenta(venta, producto) {
+  const porProducto = new Map();
+  (venta?.lineas ?? []).forEach((l, linea) => {
+    if (!l?.productoId) return;
+    const p = producto(l.productoId);
+    if (!p) return;
+    let cantidad = null;
+    if (l.unidad === 'peso') cantidad = esDePeso(p) ? l.pesoGramos : null;
+    else if (!esDePeso(p)) cantidad = l.cantidad;
+    else if (Number.isSafeInteger(p.precioPorKgCentavos) && p.precioPorKgCentavos > 0 && Number.isSafeInteger(l.cantidad) && Number.isSafeInteger(l.precioUnitarioCentavos)) {
+      cantidad = dividirRedondeado(l.cantidad * l.precioUnitarioCentavos * 1000, p.precioPorKgCentavos);
+    }
+    if (!Number.isSafeInteger(cantidad) || cantidad === 0) return;
+    const previo = porProducto.get(l.productoId);
+    if (previo) previo.cantidad += cantidad;
+    else porProducto.set(l.productoId, { producto: l.productoId, linea, cantidad });
+  });
+  return [...porProducto.values()].filter((m) => m.cantidad !== 0 && Math.abs(m.cantidad) <= LIMITES_CONTEO.piezas);
+}
+
+/**
+ * Lo que una entrega (recepciones/{id}) suma a la bodega de su tienda, renglón
+ * por renglón: solo lo que está en el catálogo, en piezas o en gramos. Sin
+ * tienda no suma a ninguna bodega.
+ */
+export function movimientosDeRecepcion(recepcion) {
+  if (!recepcion?.tienda) return [];
+  return (recepcion.lineas ?? []).flatMap((l, linea) => {
+    if (!l?.producto) return [];
+    const porPeso = Number.isSafeInteger(l.pesoGramos);
+    const cantidad = porPeso ? l.pesoGramos : l.cantidad;
+    if (!Number.isSafeInteger(cantidad) || cantidad <= 0) return [];
+    return [{ producto: l.producto, linea, cantidad, nombre: l.nombre, upc: l.upc ?? null, plu: l.plu ?? null, porPeso }];
+  });
 }
 
 /** Filas de la tabla de existencias: búsqueda (nombre, código, país) y, si se pide, solo lo que caduca pronto o ya caducó. */
@@ -484,18 +588,27 @@ export function filasExistencias(lista, { buscar = '', porCaducar = false, hoy }
 
 /**
  * Filas del CSV de existencias (reporte para personas: encabezados en el
- * idioma elegido; cantidades en piezas o en kilos con tres decimales).
+ * idioma elegido; cantidades en piezas o en kilos con tres decimales). En la
+ * tienda y en la bodega, lo que hay ahora; al lado, lo vendido o recibido
+ * desde el conteo.
  */
 export function filasCSVExistencias(lista, { fechaTexto, nombreTienda }) {
-  const cantidad = (e, total) => (Number.isInteger(total) ? (e.porPeso ? textoKilos(total) || '0' : total) : '');
+  const kilos = (g) => `${g < 0 ? '-' : ''}${textoKilos(Math.abs(g)) || '0'}`;
+  const cantidad = (e, n) => (Number.isInteger(n) ? (e.porPeso ? kilos(n) : n) : '');
+  const movido = (e, lugar) => {
+    const n = movidoDesdeConteo(e, lugar);
+    return n === 0 ? '' : cantidad(e, n);
+  };
   const filas = [[
-    tc('csv', 'tienda'), tc('csv', 'producto'), 'upc', 'plu', tc('csv', 'unidad'), tc('csv', 'en_tienda'), tc('csv', 'en_bodega'), tc('csv', 'total'),
+    tc('csv', 'tienda'), tc('csv', 'producto'), 'upc', 'plu', tc('csv', 'unidad'),
+    tc('csv', 'en_tienda'), tc('csv', 'vendido_desde_conteo'), tc('csv', 'en_bodega'), tc('csv', 'recibido_desde_conteo'), tc('csv', 'total'),
     tc('csv', 'caducidad'), tc('csv', 'origen'), tc('csv', 'contado_tienda'), tc('csv', 'contado_bodega'),
   ]];
   for (const e of lista) {
     filas.push([
       nombreTienda(e.tienda), e.nombre, e.upc ?? '', e.plu ?? '', e.porPeso ? 'kg' : tc('csv', 'piezas'),
-      cantidad(e, e.enTienda?.total), cantidad(e, e.enBodega?.total), cantidad(e, totalExistencia(e)),
+      cantidad(e, cantidadActual(e, 'enTienda')), movido(e, 'enTienda'), cantidad(e, cantidadActual(e, 'enBodega')), movido(e, 'enBodega'),
+      cantidad(e, totalExistencia(e)),
       e.caducidad ?? '', paisEnPantalla(e.origen) ?? '',
       e.enTienda?.contadoEn ? fechaTexto(e.enTienda.contadoEn) : '', e.enBodega?.contadoEn ? fechaTexto(e.enBodega.contadoEn) : '',
     ]);

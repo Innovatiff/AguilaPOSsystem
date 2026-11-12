@@ -46,6 +46,17 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await c.sembrarEmpleadaCodigo({ ...JEFA, rol: 'admin' });
   await c.sembrarCatalogoDemo();
   await c.sembrarProducto('p-aguacate', { plu: '4225', nombre: 'AGUACATE HASS', unidadVenta: 'peso', precioCentavos: 100, precioPorKgCentavos: 549, claseFiscal: 'tasaCero', tiendas: ['talbot'], tokensBusqueda: c.tokens('AGUACATE HASS') });
+  // Existencias contadas: lo que se venda sale de la tienda. La maseca se contó «después» de las ventas
+  // (ya las incluye) y la Coca-Cola no tiene existencias en esta tienda.
+  const ayer = new Date(Date.now() - 86_400_000);
+  const contada = (producto, nombre, { porPeso = false, total, contadoEn = ayer }) => c.rest('PATCH', `existencias/talbot__${producto}`, c.campos({
+    tienda: 'talbot', producto, nombre, upc: null, plu: null, porPeso,
+    enTienda: { cajas: null, porCaja: null, sueltas: total, total, contadoEn, contadoPor: c.EMPLEADA.codigo, contadoPorNombre: c.EMPLEADA.nombre },
+    actualizadoEn: contadoEn, actualizadoPor: c.EMPLEADA.codigo, actualizadoPorNombre: c.EMPLEADA.nombre,
+  }));
+  await contada('p-tajin', 'TAJIN CLASICO 142g', { total: 40 });
+  await contada('p-aguacate', 'AGUACATE HASS', { porPeso: true, total: 5000 });
+  await contada('p-maseca', 'MASECA HARINA DE MAIZ 1.8kg', { total: 30, contadoEn: new Date(Date.now() + 3_600_000) });
   await c.rest('PATCH', 'cajas/c1', c.campos(caja()));
   await c.rest('PATCH', 'cajas/c2', c.campos(caja({ nombre: 'Caja 2', numero: 2 })));
 
@@ -332,6 +343,21 @@ const totalTicket = (page) => page.textContent('#tot-total');
   await page.waitForTimeout(1500);
   const devolucion = [...(await c.leerColeccion('ventas')).values()].find((x) => x.tipo === 'devolucion');
   v.ok('la devolución queda guardada con el ticket original y el reembolso en efectivo', devolucion?.totalCentavos === -564 && devolucion.porMetodo.efectivo === -565 && devolucion.ventaOriginal === venta1.folio);
+
+  // ---- existencias: lo vendido sale de la tienda y la devolución lo regresa
+  let tajin = null;
+  for (let i = 0; i < 30 && !(tajin?.vendidoTienda === 2 && tajin.ultimoMovimiento?.tipo === 'devolucion'); i += 1) {
+    tajin = await c.leerDoc('existencias/talbot__p-tajin');
+    if (!(tajin?.vendidoTienda === 2 && tajin.ultimoMovimiento?.tipo === 'devolucion')) await page.waitForTimeout(300);
+  }
+  const aguacate = await c.leerDoc('existencias/talbot__p-aguacate');
+  v.ok('cada venta saca de la tienda lo vendido y la devolución lo regresa (las reglas lo aceptan, a nombre de quien cobra)',
+    tajin?.vendidoTienda === 2 && tajin.enTienda.total === 40 && tajin.ultimoMovimiento.por === c.EMPLEADA.codigo && aguacate?.vendidoTienda === 1250,
+    JSON.stringify({ tajin: tajin?.vendidoTienda, aguacate: aguacate?.vendidoTienda, ultimo: tajin?.ultimoMovimiento }));
+  const maseca = await c.leerDoc('existencias/talbot__p-maseca');
+  const coca = await c.leerDoc('existencias/talbot__p-coca');
+  v.ok('lo vendido antes del último conteo no se descuenta dos veces, y lo que no tiene existencias no las crea (sin errores en la caja)',
+    maseca !== null && !('vendidoTienda' in maseca) && coca === null, JSON.stringify({ maseca: maseca?.vendidoTienda, coca }));
 
   // ---- 7) retiro de efectivo y corte X
   await page.keyboard.press('F9');

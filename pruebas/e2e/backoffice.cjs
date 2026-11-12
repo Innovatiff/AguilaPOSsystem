@@ -506,6 +506,38 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
   await page.click('#ajuste-cerrar');
   await page.screenshot({ path: `${c.SALIDA}/bo-existencias.png`, fullPage: true });
 
+  // ---- 8d) una entrega con tienda suma a la bodega; anularla la resta
+  await page.selectOption('#r-tienda', '');
+  v.ok('sin tienda, avisa que lo que llegue no se suma a la bodega', await page.isVisible('#r-sin-tienda'));
+  await page.selectOption('#r-tienda', 'talbot');
+  v.ok('con tienda, el aviso se quita', await page.isHidden('#r-sin-tienda'));
+  await page.fill('#r-codigo', '24*633148100013');
+  await page.press('#r-codigo', 'Enter');
+  await page.waitForFunction(() => document.querySelectorAll('#tabla-lineas tbody tr').length === 1, null, { timeout: 10000 });
+  await page.click('#btn-registrar');
+  await page.waitForFunction(() => /Entrada registrada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const recibidoEs = async (n) => {
+    for (let i = 0; i < 30; i += 1) {
+      const e = await c.leerDoc('existencias/talbot__p-tajin');
+      if (e?.recibidoBodega === n) return e;
+      await page.waitForTimeout(300);
+    }
+    return c.leerDoc('existencias/talbot__p-tajin');
+  };
+  const conEntrega = await recibidoEs(24);
+  v.ok('la entrega suma a la bodega lo que llegó (las reglas lo aceptan), sin tocar el conteo', conEntrega?.recibidoBodega === 24 && conEntrega.enBodega.total === 96
+    && conEntrega.ultimoMovimiento?.tipo === 'entrega' && conEntrega.ultimoMovimiento.por === c.ADMIN.correo, JSON.stringify({ r: conEntrega?.recibidoBodega, m: conEntrega?.ultimoMovimiento }));
+  await page.waitForFunction(() => /Recibido desde el conteo: 24 piezas/.test(document.querySelector('#tabla-existencias tbody tr[data-producto="p-tajin"]')?.innerText ?? ''), null, { timeout: 15000 });
+  const filaTajin = (await page.innerText('#tabla-existencias tbody tr[data-producto="p-tajin"]')).replace(/\s+/g, ' ');
+  v.ok('la tabla dice lo que hay ahora en la bodega: el conteo más lo recibido', /40 piezas.*120 piezas.*Contado: 96 piezas \(8 cajas × 12\).*Recibido desde el conteo: 24 piezas.*160 piezas/.test(filaTajin), filaTajin);
+  await page.screenshot({ path: `${c.SALIDA}/bo-existencias-entrega.png`, fullPage: true });
+  await page.click('#tabla-entregas tbody tr:not(.fila--anulada)');
+  await page.waitForSelector('dialog.editor--entrega[open]');
+  await page.click('#btn-anular-entrega');
+  await page.waitForFunction(() => /Entrada anulada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const sinEntrega = await recibidoEs(0);
+  v.ok('anular la entrega la resta de la bodega', sinEntrega?.recibidoBodega === 0 && sinEntrega.ultimoMovimiento?.tipo === 'anulacion', JSON.stringify({ r: sinEntrega?.recibidoBodega, m: sinEntrega?.ultimoMovimiento }));
+
   // ---- 9) pantalla ancha: el contenido llena todo el ancho junto a la barra lateral
   await page.setViewportSize({ width: 2048, height: 1100 });
   const paginasAnchas = [

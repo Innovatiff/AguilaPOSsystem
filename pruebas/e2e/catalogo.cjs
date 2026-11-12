@@ -197,6 +197,13 @@ const CAPTURA = '078949000115';
   await page.waitForFunction(() => /Entrada registrada/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
   const recibida = [...(await c.leerColeccion('recepciones')).entries()][0];
   v.ok('registra la entrega firmada con su número (las reglas la aceptan)', recibida?.[1].recibidoPor === c.EMPLEADA.codigo && recibida[1].piezas === 6 && recibida[1].lineas[0].producto === 'p-tajin' && recibida[1].proveedor === 'Distribuidora del Sur', JSON.stringify(recibida ?? []).slice(0, 240));
+  let enBodega = null;
+  for (let i = 0; i < 30 && enBodega?.recibidoBodega !== 6; i += 1) {
+    enBodega = await c.leerDoc('existencias/talbot__p-tajin');
+    if (enBodega?.recibidoBodega !== 6) await page.waitForTimeout(300);
+  }
+  v.ok('la entrega va a la tienda de quien la recibe y suma a su bodega (crea las existencias del producto)',
+    recibida?.[1].tienda === 'talbot' && enBodega?.recibidoBodega === 6 && !('enBodega' in enBodega) && enBodega.actualizadoPor === c.EMPLEADA.codigo, JSON.stringify(enBodega ?? {}).slice(0, 240));
   await page.waitForFunction(() => document.querySelectorAll('#tabla-entregas tbody tr').length === 1, null, { timeout: 15000 });
   v.ok('ve lo que llegó por producto', /TAJIN CLASICO[\s\S]*6 piezas/.test(await page.textContent('#tabla-productos tbody')));
   await page.click('#tabla-entregas tbody tr');

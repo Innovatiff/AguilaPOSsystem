@@ -23,13 +23,13 @@ import { pintarNavegacion } from './nav.js';
 import { h } from './dom.js';
 import { observarCatalogo, observarTiendas, esperarConfirmacion } from './productos.js';
 import { registrarRecepcion, observarRecepciones, anularRecepcion } from './recepciones.js';
-import { guardarAjuste, observarExistencias } from './existencias.js';
+import { guardarAjuste, observarExistencias, registrarEntradaDeEntrega, registrarAnulacionDeEntrega } from './existencias.js';
 import {
   LIMITES_RECEPCION, piezasDesdeTexto, kilosDesdeTexto, textoKilos, separarMultiplicador, esDePeso, lineaDeRecepcion,
   lineaSinRegistrar, claveDeLinea, erroresDeLinea, armarRecepcion, textoCantidades, textoLinea, cumpleFiltrosRecepcion,
   lineasVisibles, resumirPorProducto, totalesRecepciones, filasCSVRecepciones, nombreCompleto,
   LUGARES, conteoDesdeTexto, textoTotal, textoDesglose, caducidadDesdeTexto, origenDesdeTexto, paisEnPantalla, paisesSugeridos, estadoCaducidad, armarAjuste,
-  totalExistencia, filasExistencias, filasCSVExistencias,
+  totalExistencia, filasExistencias, filasCSVExistencias, cantidadActual, textoMovido,
 } from './inventario.js';
 import { coincideBusqueda } from './esquema.js';
 import { formatearPeso } from './ticket.js';
@@ -389,7 +389,14 @@ $('tabla-lineas').addEventListener('click', (e) => {
 
 for (const id of ['r-proveedor', 'r-referencia', 'r-nota']) $(id).addEventListener('input', guardarBorrador);
 $('form-datos').addEventListener('submit', (e) => e.preventDefault());
-$('r-tienda').addEventListener('change', () => guardar(TIENDA, $('r-tienda').value || null));
+/** Lo que llega se suma a la bodega de la tienda elegida: sin tienda, se avisa. */
+function avisarSinTienda() {
+  $('r-sin-tienda').hidden = Boolean($('r-tienda').value) || !tiendas.some((tienda) => tienda.activo !== false);
+}
+$('r-tienda').addEventListener('change', () => {
+  guardar(TIENDA, $('r-tienda').value || null);
+  avisarSinTienda();
+});
 
 function limpiarEntrada() {
   lineas = [];
@@ -425,8 +432,10 @@ $('btn-registrar').addEventListener('click', async () => {
     return;
   }
   $('btn-registrar').disabled = true;
-  const { promesa } = registrarRecepcion(datos);
+  const { id, promesa } = registrarRecepcion(datos);
   promesa.catch((error) => avisar('error', t('La entrada no se guardó: {error}', { error: mensajeError(error) })));
+  // Cuando el servidor confirma la entrega (sin señal, al volver), lo que llegó entra a la bodega de su tienda.
+  promesa.then(() => registrarEntradaDeEntrega({ recepcionId: id, recepcion: datos, personal })).catch(() => {});
   try {
     const estado = await esperarConfirmacion(promesa);
     limpiarEntrada();
@@ -664,6 +673,7 @@ function abrirEntrega(r) {
     anular.disabled = true;
     try {
       await anularRecepcion(r.id, personal.usuario);
+      registrarAnulacionDeEntrega({ recepcionId: r.id, recepcion: r, personal });
       dialogo.close();
       avisar('ok', r.proveedor ? t('Entrada anulada ({proveedor}).', { proveedor: r.proveedor }) : t('Entrada anulada.'));
     } catch (error) {
@@ -715,12 +725,23 @@ const fechaCaducidad = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString(l
 const mensajeAjuste = (tipo, texto) => mostrarMensaje($('ajuste-mensaje'), tipo, texto);
 const existenciaDe = (productoId) => existencias.find((e) => e.producto === productoId) ?? null;
 
-function celdaLugar(e, conteo) {
-  if (!conteo) return h('td', { class: 'num secundario', text: '—' });
+/** Lo contado de un lugar: «40 piezas (3 cajas × 12 + 4)». */
+function textoConteo(e, conteo) {
   const desglose = textoDesglose(conteo, e.porPeso);
+  return desglose ? `${textoTotal(conteo.total, e.porPeso)} (${desglose})` : textoTotal(conteo.total, e.porPeso);
+}
+
+/** Lo que hay ahora en un lugar; debajo, cómo se contó y lo vendido o recibido desde entonces. */
+function celdaLugar(e, lugar) {
+  const actual = cantidadActual(e, lugar);
+  const movido = textoMovido(e, lugar);
+  const nota = (texto) => (texto ? h('span', { class: 'existencias__desglose', text: texto }) : null);
+  if (actual === null) return h('td', { class: 'num secundario' }, h('span', { class: 'existencias__cantidad', text: '—' }), nota(movido));
+  const conteo = e[lugar];
   return h('td', { class: 'num' },
-    h('span', { class: 'existencias__cantidad', text: textoTotal(conteo.total, e.porPeso) }),
-    desglose ? h('span', { class: 'existencias__desglose', text: desglose }) : null);
+    h('span', { class: 'existencias__cantidad' }, textoTotal(actual, e.porPeso), actual < 0 ? [' ', chip(t('Contar de nuevo'), 'aviso')] : null),
+    nota(movido ? t('Contado: {cantidad}', { cantidad: textoConteo(e, conteo) }) : textoDesglose(conteo, e.porPeso)),
+    nota(movido));
 }
 
 function celdaCaducidad(caducidad, hoy) {
@@ -748,8 +769,8 @@ function pintarExistencias() {
   $('tabla-existencias').tBodies[0].replaceChildren(...filas.map((e) => h('tr', { tabindex: 0, dataset: { producto: e.producto } },
     h('td', null, e.nombre, e.pendiente ? [' ', chip(t('Por enviar'), 'aviso')] : null),
     h('td', { class: 'monoespaciada', text: e.upc ?? (e.plu ? `PLU ${e.plu}` : '—') }),
-    celdaLugar(e, e.enTienda),
-    celdaLugar(e, e.enBodega),
+    celdaLugar(e, 'enTienda'),
+    celdaLugar(e, 'enBodega'),
     h('td', { class: 'num' }, h('strong', { text: textoTotal(totalExistencia(e), e.porPeso) })),
     celdaCaducidad(e.caducidad, hoy),
     h('td', { text: paisEnPantalla(e.origen) ?? '—' }),
@@ -845,10 +866,13 @@ function pasoBuscar() {
 
 function textoAhora(e, lugar) {
   const conteo = e?.[lugar];
-  if (!conteo) return t('Sin contar todavía.');
-  const desglose = textoDesglose(conteo, e.porPeso);
-  const cantidad = desglose ? `${textoTotal(conteo.total, e.porPeso)} (${desglose})` : textoTotal(conteo.total, e.porPeso);
-  return t('Ahora: {cantidad} · contado {cuando} por {quien}', { cantidad, cuando: cuando(conteo.contadoEn), quien: conteo.contadoPorNombre });
+  const movido = e ? textoMovido(e, lugar) : '';
+  if (!conteo) return movido ? `${t('Sin contar todavía.')} ${movido}.` : t('Sin contar todavía.');
+  const valores = { cuando: cuando(conteo.contadoEn), quien: conteo.contadoPorNombre };
+  if (!movido) return t('Ahora: {cantidad} · contado {cuando} por {quien}', { ...valores, cantidad: textoConteo(e, conteo) });
+  return t('Ahora: {cantidad} · conteo {cuando} por {quien}: {contado} · {movido}', {
+    ...valores, cantidad: textoTotal(cantidadActual(e, lugar), e.porPeso), contado: textoConteo(e, conteo), movido,
+  });
 }
 
 function pintarAhora() {
@@ -1130,10 +1154,11 @@ pintarLineas();
 
 observarTiendas((lista) => {
   tiendas = lista;
-  const actual = $('r-tienda').value || leer(TIENDA) || '';
+  const actual = $('r-tienda').value || leer(TIENDA) || personal.tienda || '';
   const activas = lista.filter((tienda) => tienda.activo !== false);
   $('r-tienda').replaceChildren(h('option', { value: '', text: t('Sin especificar') }), ...activas.map((tienda) => h('option', { value: tienda.id, text: tienda.nombre })));
   $('r-tienda').value = activas.some((tienda) => tienda.id === actual) ? actual : (activas.length === 1 ? activas[0].id : '');
+  avisarSinTienda();
   llenarTiendasExistencias();
   pintarHistorial();
 }, () => {});

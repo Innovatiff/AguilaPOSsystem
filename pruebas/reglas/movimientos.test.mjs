@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, deleteDoc, Timestamp, serverTimestamp, setLogLevel,
+  doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, deleteDoc, Timestamp, serverTimestamp, setLogLevel, increment,
 } from 'firebase/firestore';
 import { armarFichaPersonal, correoDeAcceso, usuarioDe } from '../../js/identidad.js';
 
@@ -168,13 +168,128 @@ describe('reglas · movimientos en vivo e inventario', () => {
       await assertFails(setDoc(doc(db, 'existencias/Talbot__p1'), existencia(MARIA, { tienda: 'Talbot' }), { merge: true }), 'tienda no válida');
       await assertFails(setDoc(doc(anonimo(), ruta), existencia(MARIA), { merge: true }));
     });
-    it('las leen el admin y el personal del Catálogo; nadie las borra', async () => {
+    it('las lee el personal activo (la caja necesita saber qué descontar); nadie las borra', async () => {
       await sembrar({ 'existencias/talbot__p1': { ...existencia(MARIA), actualizadoEn: AHORA, enTienda: { ...conteo(MARIA), contadoEn: AHORA } } });
       await assertSucceeds(getDocs(query(collection(contexto(MARIA), 'existencias'), where('tienda', '==', 'talbot'))));
       await assertSucceeds(getDoc(doc(contexto(ADMIN), 'existencias/talbot__p1')));
-      await assertFails(getDocs(query(collection(contexto(LUIS), 'existencias'), where('tienda', '==', 'talbot'))));
+      await assertSucceeds(getDocs(query(collection(contexto(LUIS), 'existencias'), where('tienda', '==', 'talbot'))), 'un cajero sin permiso del Catálogo');
+      await assertFails(getDocs(query(collection(contexto(correoDeAcceso('100199')), 'existencias'), where('tienda', '==', 'talbot'))), 'personal inactivo');
       await assertFails(getDoc(doc(anonimo(), 'existencias/talbot__p1')));
       await assertFails(deleteDoc(doc(contexto(ADMIN), 'existencias/talbot__p1')));
+    });
+  });
+
+  describe('existencias/: lo que mueven las ventas y las entregas', () => {
+    const HACE_UN_DIA = Timestamp.fromMillis(Date.now() - 86_400_000);
+    const EN_UNA_HORA = Timestamp.fromMillis(Date.now() + 3_600_000);
+    /** Lo que guarda la caja (solo lo que las reglas miran de la venta). */
+    const venta = (cajero, extra = {}) => ({
+      tipo: 'venta', tienda: 'talbot', cajero, fecha: Timestamp.now(),
+      lineas: [{ productoId: 'p1', unidad: 'pieza', cantidad: 2, pesoGramos: null }, { productoId: 'p2', unidad: 'pieza', cantidad: 1, pesoGramos: null }],
+      ...extra,
+    });
+    const contada = (extra = {}) => ({ ...existencia(MARIA), actualizadoEn: AHORA, enTienda: { ...conteo(MARIA), contadoEn: AHORA }, ...extra });
+    /** Lo que manda la caja por cada producto vendido (updateDoc). */
+    const salida = (quien, { ref = 'v1', linea = 0, cantidad = 2, tipo = 'venta', sumar = cantidad } = {}) => ({
+      vendidoTienda: increment(sumar),
+      ultimoMovimiento: { tipo, ref, linea, cantidad, por: usuarioDe(quien), registradoEn: serverTimestamp() },
+    });
+    /** Lo que manda el inventario por cada renglón de una entrega (setDoc con merge) o de su anulación. */
+    const entrada = (quien, { ref = 'r1', linea = 0, cantidad = 24, tipo = 'entrega', sumar = cantidad, producto = 'p1', nombre = 'María' } = {}) => ({
+      tienda: 'talbot', producto, nombre: 'TAJIN CLASICO 142g', upc: '633148100013', plu: null, porPeso: false,
+      recibidoBodega: increment(sumar),
+      ultimoMovimiento: { tipo, ref, linea, cantidad, por: usuarioDe(quien), registradoEn: serverTimestamp() },
+      actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), actualizadoPorNombre: nombre,
+    });
+    const leer = async (ruta) => (await getDoc(doc(contexto(ADMIN), ruta))).data();
+
+    beforeEach(async () => {
+      await sembrar({
+        'products/p1': { nombre: 'CLASICO', marca: 'TAJIN' },
+        'products/p2': { nombre: 'COCA COLA' },
+        'ventas/v1': venta('100124'),
+        'ventas/v2': venta('100124', { tipo: 'devolucion', lineas: [{ productoId: 'p1', unidad: 'pieza', cantidad: -1, pesoGramos: null }] }),
+        'ventas/de-maria': venta('100123'),
+        'ventas/baja': venta('100199'),
+        'recepciones/r1': { ...recepcion(MARIA), fecha: AHORA },
+      });
+    });
+
+    it('la caja descuenta lo vendido de la tienda (y la devolución lo regresa), a nombre de quien cobra', async () => {
+      await sembrar({ 'existencias/talbot__p1': contada() });
+      const db = contexto(LUIS);
+      await assertSucceeds(updateDoc(doc(db, 'existencias/talbot__p1'), salida(LUIS)));
+      await assertSucceeds(updateDoc(doc(db, 'existencias/talbot__p1'), salida(LUIS, { ref: 'v2', tipo: 'devolucion', cantidad: -1 })));
+      const leida = await leer('existencias/talbot__p1');
+      if (leida.vendidoTienda !== 1 || leida.enTienda.total !== 40 || leida.ultimoMovimiento.tipo !== 'devolucion') throw new Error(JSON.stringify(leida));
+      // Sin conteo de la tienda (solo la bodega), también cuenta.
+      await sembrar({ 'existencias/talbot__p2': { ...contada({ producto: 'p2', nombre: 'COCA COLA', upc: null }), enTienda: null, enBodega: { ...conteo(MARIA), contadoEn: AHORA } } });
+      await assertSucceeds(updateDoc(doc(db, 'existencias/talbot__p2'), salida(LUIS, { linea: 1, cantidad: 1 })));
+    });
+
+    it('una venta no cuenta si es de otra persona, tienda o producto, al revés, o donde no hay existencias', async () => {
+      await sembrar({ 'existencias/talbot__p1': contada(), 'existencias/erie__p1': contada({ tienda: 'erie' }) });
+      const db = contexto(LUIS);
+      const ruta = doc(db, 'existencias/talbot__p1');
+      await assertFails(updateDoc(ruta, salida(LUIS, { ref: 'de-maria' })), 'la venta es de otra persona');
+      await assertFails(updateDoc(ruta, salida(MARIA)), 'a nombre de otro');
+      await assertFails(updateDoc(doc(db, 'existencias/erie__p1'), salida(LUIS)), 'otra tienda');
+      await assertFails(updateDoc(ruta, salida(LUIS, { linea: 1 })), 'ese renglón es de otro producto');
+      await assertFails(updateDoc(ruta, salida(LUIS, { cantidad: -2 })), 'una venta no regresa');
+      await assertFails(updateDoc(ruta, salida(LUIS, { ref: 'v2', tipo: 'venta', cantidad: 1 })), 'el tipo no es el de la venta');
+      await assertFails(updateDoc(ruta, salida(LUIS, { sumar: 5 })), 'el contador no sube lo que dice el movimiento');
+      await assertFails(updateDoc(ruta, { ...salida(LUIS), nombre: 'OTRO' }), 'la caja solo mueve lo vendido');
+      await assertFails(updateDoc(ruta, { ...salida(LUIS), ultimoMovimiento: { ...salida(LUIS).ultimoMovimiento, extra: 1 } }), 'movimiento con campos de más');
+      await assertFails(setDoc(doc(db, 'existencias/talbot__p2'), { ...existencia(LUIS, { producto: 'p2' }), ...salida(LUIS, { linea: 1, cantidad: 1 }) }, { merge: true }), 'la caja no crea existencias');
+      await assertFails(updateDoc(doc(contexto(correoDeAcceso('100199')), 'existencias/talbot__p1'), salida(correoDeAcceso('100199'), { ref: 'baja' })), 'personal inactivo');
+      const leida = await leer('existencias/talbot__p1');
+      if ('vendidoTienda' in leida) throw new Error(JSON.stringify(leida));
+    });
+
+    it('una entrega suma a la bodega (y crea las existencias si no había); su anulación la resta', async () => {
+      await assertSucceeds(setDoc(doc(contexto(MARIA), 'existencias/talbot__p1'), entrada(MARIA), { merge: true }));
+      let leida = await leer('existencias/talbot__p1');
+      if (leida.recibidoBodega !== 24 || 'enBodega' in leida || leida.ultimoMovimiento.ref !== 'r1') throw new Error(JSON.stringify(leida));
+      // Contada la bodega antes de que llegara otra entrega: la entrega se suma al conteo.
+      await sembrar({ 'recepciones/r2': { ...recepcion(MARIA), fecha: Timestamp.now(), lineas: [{ producto: 'p1', nombre: 'TAJIN', upc: null, plu: null, cantidad: 12, pesoGramos: null }] } });
+      await sembrar({ 'existencias/talbot__p1': { ...leida, recibidoBodega: 0, enBodega: { ...conteo(MARIA), contadoEn: HACE_UN_DIA } } });
+      await assertSucceeds(setDoc(doc(contexto(MARIA), 'existencias/talbot__p1'), entrada(MARIA, { ref: 'r2', cantidad: 12 }), { merge: true }));
+      // El admin la anula y resta lo que había sumado.
+      await sembrar({ 'recepciones/r2': { ...recepcion(MARIA), fecha: Timestamp.now(), lineas: [{ producto: 'p1', nombre: 'TAJIN', upc: null, plu: null, cantidad: 12, pesoGramos: null }], anulada: true, anuladaPor: ADMIN, anuladaEn: Timestamp.now() } });
+      await assertSucceeds(updateDoc(doc(contexto(ADMIN), 'existencias/talbot__p1'), (({ recibidoBodega, ultimoMovimiento, actualizadoEn, actualizadoPor, actualizadoPorNombre }) => ({ recibidoBodega, ultimoMovimiento, actualizadoEn, actualizadoPor, actualizadoPorNombre }))(entrada(ADMIN, { ref: 'r2', tipo: 'anulacion', cantidad: -12, nombre: 'Admin' }))));
+      leida = await leer('existencias/talbot__p1');
+      if (leida.recibidoBodega !== 0 || leida.ultimoMovimiento.tipo !== 'anulacion') throw new Error(JSON.stringify(leida));
+    });
+
+    it('una entrega no cuenta: sin permiso, otra cantidad, producto o tienda, anulada, ya contada, o anulada por otro', async () => {
+      const ruta = 'existencias/talbot__p1';
+      await assertFails(setDoc(doc(contexto(LUIS), ruta), entrada(LUIS, { nombre: 'Luis' }), { merge: true }), 'sin permiso del Catálogo');
+      await assertFails(setDoc(doc(contexto(ADMIN), ruta), entrada(ADMIN, { nombre: 'Admin' }), { merge: true }), 'la registró otra persona');
+      const db = contexto(MARIA);
+      await assertFails(setDoc(doc(db, ruta), entrada(MARIA, { cantidad: 25 }), { merge: true }), 'otra cantidad que la del renglón');
+      await assertFails(setDoc(doc(db, 'existencias/talbot__p2'), entrada(MARIA, { producto: 'p2' }), { merge: true }), 'ese renglón es de otro producto');
+      await assertFails(setDoc(doc(db, ruta), { ...entrada(MARIA), enTienda: conteo(MARIA) }, { merge: true }), 'una entrega no cuenta la tienda');
+      await assertFails(setDoc(doc(db, ruta), entrada(MARIA, { tipo: 'anulacion', cantidad: -24 }), { merge: true }), 'una anulación no crea existencias');
+      await sembrar({ [ruta]: contada({ enBodega: { ...conteo(MARIA), contadoEn: Timestamp.now() } }) });
+      await assertFails(setDoc(doc(db, ruta), entrada(MARIA), { merge: true }), 'llegó antes del último conteo de la bodega: ya está contada');
+      await sembrar({ [ruta]: contada(), 'recepciones/r1': { ...recepcion(MARIA), fecha: AHORA, anulada: true, anuladaPor: ADMIN, anuladaEn: AHORA } });
+      await assertFails(setDoc(doc(db, ruta), entrada(MARIA), { merge: true }), 'la entrega ya está anulada');
+      await assertFails(updateDoc(doc(db, ruta), entrada(MARIA, { tipo: 'anulacion', cantidad: -24 })), 'la anuló otra persona');
+      const leida = await leer(ruta);
+      if ('recibidoBodega' in leida) throw new Error(JSON.stringify(leida));
+    });
+
+    it('contar un lugar pone su contador en cero; sin contarlo, el contador y el último movimiento no se tocan', async () => {
+      const movimiento = { tipo: 'venta', ref: 'v1', linea: 0, cantidad: 5, por: '100124', registradoEn: AHORA };
+      await sembrar({ 'existencias/talbot__p1': contada({ vendidoTienda: 5, recibidoBodega: 24, ultimoMovimiento: movimiento }) });
+      const db = contexto(MARIA);
+      const ruta = doc(db, 'existencias/talbot__p1');
+      await assertFails(setDoc(ruta, { ...existencia(MARIA), enTienda: conteo(MARIA, { total: 35, sueltas: null, cajas: 35, porCaja: 1 }) }, { merge: true }), 'contar la tienda sin poner en cero lo vendido');
+      await assertFails(setDoc(ruta, { ...existencia(MARIA), vendidoTienda: 0 }, { merge: true }), 'poner en cero lo vendido sin contar');
+      await assertFails(setDoc(ruta, { ...existencia(MARIA), ultimoMovimiento: { ...movimiento, cantidad: 6 } }, { merge: true }), 'cambiar el último movimiento');
+      await assertSucceeds(setDoc(ruta, { ...existencia(MARIA), enTienda: conteo(MARIA), vendidoTienda: 0 }, { merge: true }));
+      const leida = await leer('existencias/talbot__p1');
+      if (leida.vendidoTienda !== 0 || leida.recibidoBodega !== 24 || leida.ultimoMovimiento.cantidad !== 5) throw new Error(JSON.stringify(leida));
     });
   });
 });

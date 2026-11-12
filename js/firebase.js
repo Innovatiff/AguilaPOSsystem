@@ -49,6 +49,7 @@ import {
   writeBatch,
   runTransaction,
   Timestamp,
+  increment,
 } from '../vendor/firebase/12.19.0/firebase-firestore.js';
 
 export const VERSION_SDK = '12.19.0';
@@ -130,6 +131,7 @@ export {
   runTransaction,
   Timestamp,
   serverTimestamp,
+  increment,
   waitForPendingWrites,
   getDocFromServer,
 };
