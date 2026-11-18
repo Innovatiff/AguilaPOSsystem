@@ -138,6 +138,29 @@ equal `staff/{codigo}.cuentaVersion` after the same batch. Never deleted.
 | actualizadoEn | timestamp | client `Timestamp.fromMillis(Date.now())` |
 | actualizadoPor | string | must equal the writer's usuario (employee code or email) |
 
+### `empacados/{productId}`
+A product **packed in the store** (Catálogo → Empacados en tienda): what does
+not fit in the product schema, for its bag label. The product itself is a
+normal `products/{productId}` (sold by its code like any other), created in
+the **same batch**: the rules only allow this document to be created together
+with its product, so a product that was not born packed can never become one.
+Written by an admin or staff with the Catálogo permission; read by all staff;
+nobody deletes it.
+
+| field | type | notes |
+|---|---|---|
+| picante | bool | printed as **SPICY** / NOT SPICY |
+| procedencia | `{ frase: 'hecho' \| 'producto', pais }` | "Made in …" / "Product of …"; `pais` ≤ 40, a country from the suggested list stored with its Spanish name (`México`) and printed in English (`Mexico`) |
+| creadoEn, creadoPor | server time, usuario | when it is created; never change |
+| actualizadoEn, actualizadoPor | server time, usuario | the signed-in user |
+
+Its product: `upc` a new UPC-A starting with 4 (GS1 in-store range), `marca`
+null, `unidadVenta` `pieza`, `activo` true. Staff with the Catálogo permission
+may create such a product with its price and tax class (only with its
+`empacados/` document in the same batch) and later change its
+`precioCentavos` (with its `priceHistory` entry) and `claseFiscal`; on any
+other product they still cannot.
+
 ### `priceHistory/{entradaId}`
 Immutable. `entradaId` = `${productId}_${fecha.toMillis()}`.
 
@@ -158,8 +181,12 @@ or `activo` require the writer's `staff` record to have `rol = admin`. Staff wit
 `marca`, `descriptor`, `presentacion`, `tiendas`, `proveedor`, `tokensBusqueda`,
 and mark its tag printed (`ultimoPrecioImpresoCentavos` only to the current
 price, `fechaUltimaImpresion`), signed as themselves; new products and removals
-go through `solicitudes`. Every active staff member can read products (the
-register and the price check need them).
+go through `solicitudes`. The exception is products packed in the store (see
+`empacados/`): staff with `catalogo = true` create them (code starting with 4,
+by piece, no brand, active, with their `empacados/` document in the same
+batch) and may change their price, with its `priceHistory` entry, and their tax
+class. Every active staff member can read products (the register and the price
+check need them).
 
 **Every price change carries its history entry, atomically.** A product update
 that changes `precioCentavos` is accepted only if a `priceHistory` document with

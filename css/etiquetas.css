@@ -41,6 +41,11 @@
   --barcode-alto: 12mm;       /* alto de las barras (las guardas bajan 5 módulos más) */
   --barcode-digitos: 2.3mm;   /* tamaño de los dígitos bajo las barras */
 
+  /* --- Etiqueta de lo empacado en la tienda (en la bolsa) ---------- */
+  --empaque-datos-tamano: 2.7mm;   /* «Product of Mexico  SPICY» */
+  --empaque-fecha-tamano: 2.4mm;   /* «Packed on Nov 18, 2026» */
+  --empaque-barcode-alto: 8.5mm;   /* barras más bajas que en el anaquel: lleva dos líneas más */
+
   /* --- Tipografías ------------------------------------------------ */
   --fuente-texto: Arial, Helvetica, "Liberation Sans", sans-serif;
   --fuente-precio: "Oswald", "Arial Narrow", "Bahnschrift SemiCondensed", Impact, sans-serif;
@@ -191,6 +196,44 @@
   margin-top: var(--espacio);
   font-size: var(--precio-tamano-sin-codigo);
   text-align: center;
+}
+
+/* =====================================================================
+   Empacado en la tienda (etiqueta de la bolsa): nombre en la barra negra,
+   procedencia y picante, fecha de empaque, código y precio.
+   ===================================================================== */
+.etiqueta--empaque .etiqueta__barra {
+  margin-top: 0;
+}
+
+.empaque__datos {
+  margin-top: var(--espacio);
+  font-size: var(--empaque-datos-tamano);
+  white-space: nowrap;
+}
+
+/* «SPICY» en negativo (se ve desde lejos); «NOT SPICY» solo con borde. */
+.empaque__picante {
+  display: inline-block;
+  margin-left: 0.5em;
+  padding: 0 0.35em;
+  border: 0.25mm solid #000;
+  border-radius: 0.6mm;
+  text-transform: uppercase;
+}
+
+.empaque__picante--si {
+  background: #000;
+  color: #fff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.empaque__fecha {
+  margin-top: calc(var(--espacio) * 0.6);
+  font-size: var(--empaque-fecha-tamano);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 /* =====================================================================

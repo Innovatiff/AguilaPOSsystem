@@ -545,7 +545,7 @@ async function sembrarTurno(m, { id, persona, cajaId, numeroCaja, cajaNombre, ab
     [`reportes.html?desde=${m.ticket.claveDia(en(1, 0))}&hasta=${m.ticket.claveDia(hoy)}`, 'reportes'],
     ['productos.html', 'productos'], ['captura.html', 'captura'], ['imprimir.html', 'imprimir'],
     ['gestion/empleados.html', 'empleados'], ['gestion/cajas.html', 'cajas'], ['gestion/configuracion.html', 'configuracion'],
-    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'], ['solicitudes.html', 'solicitudes'], ['inventario.html', 'inventario'],
+    ['gestion/tiendas.html', 'tiendas'], ['gestion/datos.html', 'datos'], ['solicitudes.html', 'solicitudes'], ['inventario.html', 'inventario'], ['empacados.html', 'empacados'],
     ['cuenta.html', 'cuenta', { angosta: true }], // formulario corto: columna de lectura a propósito
   ];
   const fueraDeAncho = [];

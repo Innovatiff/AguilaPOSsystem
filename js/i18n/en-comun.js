@@ -28,6 +28,7 @@ export const COMUN = Object.freeze({
   Tiendas: 'Stores',
   Configuración: 'Settings',
   'Recibir mercancía': 'Receive Stock',
+  'Empacados en tienda': 'Packed in Store',
   'Mis solicitudes': 'My Requests',
   'Back office': 'Back Office',
   'Abrir la caja': 'Open the register',

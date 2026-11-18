@@ -3939,6 +3939,89 @@ dialog.editor--ajuste {
   }
 }
 
+/* ---------------------------------------------------------------- empacados en tienda */
+/* Lo que solo existe para imprimir (las etiquetas del lote): en pantalla no se ve. */
+@media screen {
+  .solo-impresion {
+    display: none !important;
+  }
+}
+
+.panel__acciones {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empacados__imprimir {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 28px;
+}
+
+.empacados__form {
+  display: grid;
+  gap: 12px;
+}
+
+.empacados__producto {
+  margin: 0;
+  font-size: 17px;
+}
+
+.empacados__form input[type="number"],
+.empacados__form input[type="date"] {
+  font-size: 18px;
+}
+
+.empacados__rapidas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.empacados__rapidas .boton {
+  min-width: 60px;
+  font-size: 18px;
+}
+
+.boton--grande {
+  padding: 12px 18px;
+  font-size: 18px;
+}
+
+.empacados__vista .vista-etiqueta {
+  justify-content: flex-start;
+}
+
+dialog.editor--empacado {
+  width: min(640px, 96vw);
+}
+
+.editor--empacado .editor__cuerpo {
+  display: grid;
+  gap: 12px;
+}
+
+.empacados__procedencia .empacados__pais {
+  display: inline-flex;
+}
+
+.empacados__pais input {
+  min-width: 180px;
+  padding: 6px 8px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  font: inherit;
+}
+
+@media screen and (max-width: 640px) {
+  .empacados__imprimir {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* En pantallas angostas todos los diálogos de edición ocupan la pantalla completa
    (ver «Diálogos a pantalla completa»); las variantes de arriba solo fijan su ancho
    en pantallas grandes y no deben dejar una franja vacía a la derecha. */
@@ -3946,7 +4029,8 @@ dialog.editor--ajuste {
   dialog.editor--ticket,
   dialog.editor--turno,
   dialog.editor--entrega,
-  dialog.editor--ajuste {
+  dialog.editor--ajuste,
+  dialog.editor--empacado {
     width: 100vw;
   }
 }

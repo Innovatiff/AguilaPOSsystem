@@ -12,6 +12,7 @@ export const PAGINAS = Object.freeze([
   { fuente: 'captura.html', destino: 'catalogo/captura.html', titulo: 'Captura rápida' },
   { fuente: 'imprimir.html', destino: 'catalogo/etiquetas.html', titulo: 'Etiquetas' },
   { fuente: 'inventario.html', destino: 'catalogo/inventario.html', titulo: 'Recibir mercancía' },
+  { fuente: 'empacados.html', destino: 'catalogo/empacados.html', titulo: 'Empacados en tienda' },
 ]);
 
 const AVISO = '<!-- Generada por herramientas/paginas-catalogo.mjs a partir de la página del back office. No editar a mano. -->';

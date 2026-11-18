@@ -30,6 +30,7 @@ Four apps share the site, the data and the service worker:
 | `catalogo/`, `js/catalogo-solicitudes.js`, `herramientas/paginas-catalogo.mjs` | the staff Catálogo app: `entrar.html` (email + PIN), products, receive deliveries, quick capture, tags, my requests. Its products, inventory, capture and tags pages are generated from the back office ones (`node herramientas/paginas-catalogo.mjs`; a unit test checks they are up to date); the shared screens switch to staff mode by app and role |
 | `js/nip.js`, `js/clave-caja.js` | PIN-only sign-in at the register: HMAC of the PIN with the register key (`secretos/caja`) |
 | `productos.html`, `captura.html`, `imprimir.html`, `prueba-etiquetas.html` | catalog: products, scan-and-add, shelf tags, tag test page |
+| `empacados.html`, `js/pantalla-empacados.js`, `js/empaque.js`, `js/empacados.js` | **Empacados en tienda**: products packed in the store with their own new barcode (`4…`), and their bag labels printed many at once. Also in the Catálogo app |
 | `caja/index.html`, `js/caja*.js`, `css/caja.css` | the register: screens, ticket, payment, shift dialogs, local storage |
 | `caja/consulta.html`, `js/consulta.js` | staff price check and PIN change |
 | `caja/cliente.html`, `js/cliente.js`, `js/pantalla-cliente.js`, `css/cliente.css` | customer display facing the customer (items as they are scanned, prices, total, payment, change): on a second screen of the register computer (fed inside the browser) or on a tablet |
@@ -133,7 +134,13 @@ written together with their `priceHistory` entry. Staff with the Catálogo
 permission may edit everything else (names, codes, size, stores, supplier) and
 mark tags as printed; a new product or a removal is a **request**
 (`solicitudes/`) that an admin resolves in the same batch that writes the
-product. The rules enforce all of it, not just the screens.
+product. The one exception is **products packed in the store** (Empacados en
+tienda): staff with the Catálogo permission create them with their price and
+tax class, and may later change their price (with its `priceHistory` entry) or
+tax class, because they are the ones packing them. A product only counts as
+packed in store if it was created that way (with its `empacados/` record in
+the same batch), so no other product can become one. The rules enforce all of
+it, not just the screens.
 
 ## First-time setup
 
@@ -211,7 +218,8 @@ A sidebar (folding into a menu button on narrow screens) groups the pages:
   approvals, drawer openings, cash drops, payouts). Print or CSV. Shifts still
   open are listed and join the report when they close.
 - **Catálogo**: Productos, Solicitudes, Captura rápida, Etiquetas, Prueba de
-  etiquetas, Importar / exportar (see below), and **Inventario**:
+  etiquetas, Importar / exportar (see below), **Empacados en tienda** (see the
+  Catálogo app below: the same page), and **Inventario**:
   - *Ajuste rápido* (button at the top): scan the product with the USB scanner
     (or the phone camera) or type its code, PLU or name; then, all optional,
     how many there are **in the store** and **in the warehouse (bodega)** as
@@ -419,6 +427,25 @@ back office catalog, in staff mode:
   **Ajuste rápido** to count the store and the warehouse from the phone.
   Voiding a delivery is for admins only.
 - **Etiquetas**: print pending shelf tags (the printed price is recorded).
+- **Empacados en tienda**: what the store packs itself (wheat chicharrón,
+  dried chiles…). **Nuevo producto empacado** asks for the name (in Spanish,
+  no brand), the price, whether it is taxed (basic groceries such as dried
+  chiles: no; snacks, candy: +HST; nothing is assumed), whether it is spicy,
+  the origin ("Hecho en" / "Producto de" + country) and the stores. Saving
+  creates the product with a **new barcode**: a UPC-A starting with 4, which
+  GS1 reserves for in-store use, so it never matches a manufacturer's code and
+  the register does not take it for a scale label (those start with 2). The
+  register sells it by scanning it like any other product. Then **Imprimir
+  etiquetas**: packing date (today by default) and how many labels (type a
+  number or tap 5, 10, 20 or 30, up to 200); they all go out in **one print
+  job**, one label each, on the same Brother and tape as the shelf tags. On
+  the label only the name is in Spanish; the rest is in English: "Made in
+  Canada" / "Product of Mexico", **SPICY** (white on black) or NOT SPICY,
+  "Packed on Nov 18, 2026", the barcode and the price. Confirming that they
+  came out records the printed price, as in Etiquetas. Tap a product in the
+  list to print it again or **Editar producto** (name, price, tax, spicy,
+  origin, stores; the barcode never changes). Spicy and origin are stored in
+  `empacados/`, next to the product: the product schema does not change.
 - **Mis solicitudes**: each request with its status and the admin's note.
 
 In the back office, **Solicitudes** (with a badge in the sidebar) lists the
@@ -512,6 +539,11 @@ symbols with the same 95-module width; the encoder lives in `js/upca.js` and
 its output is verified against an independent decoder in the phone scenario.
 UPC-E (8 digits starting with 0 or 1) is expanded to its UPC-A; EAN-8 is not
 supported yet and is refused with a clear message.
+
+Products packed in the store get their own UPC-A starting with **4** (GS1's
+range for in-store use): 4 + ten random digits + the check digit, checked
+against every code in the catalog (`js/empaque.js`). Codes starting with 2
+stay reserved for scale labels with the price inside.
 
 ## CSV import and export (step 6)
 
@@ -704,6 +736,9 @@ deleted once nothing references it.
 **Shelf tags**: Brother QL-820NWB on 62 mm continuous tape, driver length
 32 mm. The tag is designed for the printable area (59 × 29 mm). In Chrome:
 paper `62mm`, layout Landscape (set by the page), margins None, scale 100 %.
+The labels of products packed in the store use the same size and printer (one
+per label, all in one job); their sizes are the `--empaque-*` variables at the
+top of `css/etiquetas.css`.
 
 **Receipts**: thermal roll printer, 80 mm by default (72 mm printable) or
 58 mm (Configuración → Recibo). Physical sizes are CSS variables at the top of

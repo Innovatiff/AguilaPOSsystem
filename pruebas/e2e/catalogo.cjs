@@ -55,8 +55,8 @@ const CAPTURA = '078949000115';
   await page.waitForFunction(() => /sincronizado/.test(document.getElementById('estado-catalogo').textContent), null, { timeout: 20000 });
   v.ok('con el permiso entra con su correo y su NIP al Catálogo («Productos · Águila Catálogo»)', (await page.title()) === 'Productos · Águila Catálogo');
   const enlaces = await page.$$eval('#navegacion a', (l) => l.map((a) => a.pathname));
-  v.ok('el menú solo tiene el Catálogo: Productos, Recibir mercancía, Captura rápida, Etiquetas y Mis solicitudes; nada del back office',
-    JSON.stringify(enlaces) === JSON.stringify(['/catalogo/index.html', '/catalogo/index.html', '/catalogo/inventario.html', '/catalogo/captura.html', '/catalogo/etiquetas.html', '/catalogo/solicitudes.html']), enlaces.join(' '));
+  v.ok('el menú solo tiene el Catálogo: Productos, Recibir mercancía, Captura rápida, Etiquetas, Empacados en tienda y Mis solicitudes; nada del back office',
+    JSON.stringify(enlaces) === JSON.stringify(['/catalogo/index.html', '/catalogo/index.html', '/catalogo/inventario.html', '/catalogo/captura.html', '/catalogo/etiquetas.html', '/catalogo/empacados.html', '/catalogo/solicitudes.html']), enlaces.join(' '));
   v.ok('arriba dice Catálogo y abajo su nombre y correo, con Cerrar sesión', /Catálogo/.test(await page.textContent('.marca__sub')) && /María López/.test(await page.textContent('.usuario__nombre')) && /maria@aguila\.test/.test(await page.textContent('.usuario__nombre')));
   v.ok('el botón de alta dice «Pedir alta de producto»', /Pedir alta de producto/.test(await page.textContent('#btn-nuevo')));
   await page.screenshot({ path: `${c.SALIDA}/catalogo-productos.png` });
@@ -248,6 +248,81 @@ const CAPTURA = '078949000115';
   await page.click('#btn-descartar');
   await page.setViewportSize({ width: 1280, height: 820 });
 
+  // ---- empacados en tienda: el personal crea el producto (con su código nuevo y su precio) e imprime 20 etiquetas de una vez
+  await page.click('#navegacion a[href$="catalogo/empacados.html"]');
+  await page.waitForURL(/\/catalogo\/empacados\.html$/);
+  await page.waitForSelector('#contenido:not([hidden])');
+  v.ok('«Empacados en tienda» abre en el Catálogo, todavía vacío', (await page.title()) === 'Empacados en tienda · Águila Catálogo' && await page.isVisible('#vacio'));
+  await page.click('#btn-nuevo');
+  await page.waitForSelector('#dlg-empacado[open]');
+  await page.fill('#e-nombre', 'Chicharrón de harina');
+  await page.fill('#e-precio', '3.99');
+  await page.click('#empacado-guardar');
+  await page.waitForFunction(() => /impuesto/.test(document.getElementById('empacado-mensaje').textContent), null, { timeout: 5000 });
+  v.ok('no supone nada: pide si lleva impuesto (y si es picante) antes de guardar', (await c.leerColeccion('empacados')).size === 0);
+  await page.check('input[name="e-impuesto"][value="gravado"]');
+  await page.check('input[name="e-picante"][value="no"]');
+  await page.fill('#e-pais', 'Canadá');
+  v.ok('propone su propia tienda', (await page.$$eval('#e-tiendas input:checked', (l) => l.map((x) => x.value))).join() === 'talbot');
+  await page.click('#empacado-guardar');
+  await page.waitForFunction(() => /Listo: «Chicharrón de harina» con su código 4\d{11}/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const [[idEmpacado, empacado]] = [...(await c.leerColeccion('empacados')).entries()];
+  const productoEmpacado = await c.leerDoc(`products/${idEmpacado}`);
+  v.ok('crea el producto con su código nuevo (4…), su precio y su impuesto, firmado por ella (las reglas lo aceptan)',
+    /^4\d{11}$/.test(productoEmpacado?.upc) && productoEmpacado.precioCentavos === 399 && productoEmpacado.claseFiscal === 'gravado' && productoEmpacado.marca === null
+    && productoEmpacado.actualizadoPor === c.EMPLEADA.codigo && productoEmpacado.tiendas.join() === 'talbot', JSON.stringify(productoEmpacado ?? {}).slice(0, 200));
+  v.ok('y aparte, si es picante y de dónde viene (el esquema del producto no cambia)',
+    empacado.picante === false && empacado.procedencia.frase === 'hecho' && empacado.procedencia.pais === 'Canadá' && empacado.creadoPor === c.EMPLEADA.codigo, JSON.stringify(empacado));
+  await page.waitForSelector('#panel-imprimir:not([hidden]) #vista-etiqueta .etiqueta');
+  const muestra = (await page.innerText('#vista-etiqueta .etiqueta')).replace(/\s+/g, ' ');
+  v.ok('la etiqueta: el nombre en español; procedencia, picante y fecha de empaque en inglés; código y precio',
+    /CHICHARRÓN DE HARINA/.test(muestra) && /Made in Canada/.test(muestra) && /NOT SPICY/.test(muestra) && /Packed on [A-Z][a-z]{2} \d{1,2}, \d{4}/.test(muestra)
+    && /\$3\.99/.test(muestra) && /\+Tx/.test(muestra) && (await page.$$('#vista-etiqueta .etiqueta svg')).length === 1, muestra);
+  await page.click('#cantidades-rapidas button[data-cantidad="20"]');
+  v.ok('con un toque, 20 etiquetas', (await page.inputValue('#i-cantidad')) === '20' && (await page.textContent('#btn-imprimir')) === 'Imprimir 20 etiquetas');
+  await page.fill('#i-fecha', '2026-11-18');
+  await page.screenshot({ path: `${c.SALIDA}/catalogo-empacados.png`, fullPage: true });
+  await page.locator('#vista-etiqueta .etiqueta').screenshot({ path: `${c.SALIDA}/catalogo-empacado-etiqueta.png` });
+  await page.evaluate(() => {
+    window.print = () => {
+      window.__impresion = { paginas: document.querySelectorAll('#hoja .hoja-etiquetas__pagina').length, texto: document.querySelector('#hoja .etiqueta')?.textContent ?? '' };
+      setTimeout(() => window.dispatchEvent(new Event('afterprint')), 50);
+    };
+  });
+  await page.click('#btn-imprimir');
+  await page.waitForSelector('#confirmacion:not([hidden])');
+  const impresion = await page.evaluate(() => window.__impresion);
+  v.ok('una sola impresión con las 20 etiquetas, cada una en su hoja y con la fecha elegida',
+    impresion?.paginas === 20 && /Packed on Nov 18, 2026/.test(impresion.texto) && await page.isHidden('#hoja'), JSON.stringify(impresion));
+  await page.click('#btn-confirmar');
+  await page.waitForFunction(() => /Listo: 20 etiquetas de Chicharrón de harina/.test(document.getElementById('mensaje').textContent), null, { timeout: 10000 });
+  let marcado = null;
+  for (let i = 0; i < 20 && marcado?.ultimoPrecioImpresoCentavos !== 399; i += 1) {
+    marcado = await c.leerDoc(`products/${idEmpacado}`);
+    if (marcado?.ultimoPrecioImpresoCentavos !== 399) await page.waitForTimeout(300);
+  }
+  v.ok('al confirmar queda anotado el precio impreso (ya no sale pendiente en Etiquetas)', marcado?.ultimoPrecioImpresoCentavos === 399);
+  await page.click('#btn-editar');
+  await page.waitForSelector('#dlg-empacado[open]');
+  v.ok('editar trae lo guardado y dice que el código no cambia', (await page.inputValue('#e-precio')) === '3.99' && (await page.inputValue('#e-pais')) === 'Canadá'
+    && (await page.isChecked('input[name="e-impuesto"][value="gravado"]')) && /no cambia/.test(await page.textContent('#e-codigo-nota')));
+  await page.fill('#e-precio', '4.49');
+  await page.check('input[name="e-picante"][value="si"]');
+  await page.check('input[name="e-frase"][value="producto"]');
+  await page.fill('#e-pais', 'México');
+  await page.click('#empacado-guardar');
+  await page.waitForFunction(() => /Guardado: Chicharrón de harina/.test(document.getElementById('mensaje').textContent), null, { timeout: 15000 });
+  const conPrecioNuevo = await c.leerDoc(`products/${idEmpacado}`);
+  const historial = [...(await c.leerColeccion('priceHistory')).values()].filter((x) => x.productId === idEmpacado);
+  v.ok('en lo empacado ella misma cambia el precio, con su historial (las reglas lo aceptan)', conPrecioNuevo?.precioCentavos === 449 && conPrecioNuevo.upc === productoEmpacado.upc
+    && historial.length === 1 && historial[0].precioAnteriorCentavos === 399 && historial[0].usuario === c.EMPLEADA.codigo, JSON.stringify(historial));
+  await page.waitForFunction(() => /Product of Mexico/.test(document.querySelector('#vista-etiqueta .etiqueta')?.innerText ?? ''), null, { timeout: 10000 });
+  const nuevaMuestra = (await page.innerText('#vista-etiqueta .etiqueta')).replace(/\s+/g, ' ');
+  v.ok('la etiqueta se actualiza: picante, «Product of Mexico» y el precio nuevo', /\$4\.49/.test(nuevaMuestra) && /SPICY/.test(nuevaMuestra) && !/NOT SPICY/.test(nuevaMuestra), nuevaMuestra);
+  await page.locator('#vista-etiqueta .etiqueta').screenshot({ path: `${c.SALIDA}/catalogo-empacado-etiqueta-picante.png` });
+  await page.waitForFunction(() => /Chicharrón de harina[\s\S]*\$4\.49[\s\S]*Picante[\s\S]*Producto de México/.test(document.querySelector('#tabla-empacados tbody')?.innerText ?? ''), null, { timeout: 10000 });
+  v.ok('la lista de empacados: nombre, precio, picante, procedencia y código', /4\d{11}/.test(await page.innerText('#tabla-empacados tbody')));
+
   // ---- mis solicitudes
   await page.click('#navegacion a[href$="catalogo/solicitudes.html"]');
   await page.waitForURL(/\/catalogo\/solicitudes\.html$/);
@@ -301,7 +376,15 @@ const CAPTURA = '078949000115';
   admin.page.respuestaPrompt = 'Ya lo tenemos con otro código';
   await admin.page.locator('.solicitud', { hasText: 'CAFE' }).locator('button', { hasText: 'Rechazar' }).click();
   await admin.page.waitForSelector('#sin-pendientes:not([hidden])', { timeout: 15000 });
-  v.ok('rechazada con una nota: no entra nada al catálogo', ![...(await c.leerColeccion('products')).values()].some((p) => p.upc === CAPTURA));
+  // La pantalla del admin se actualiza con su copia local al instante: antes de cerrar su sesión
+  // hay que esperar a que el rechazo llegue al servidor (si no, se pierde con el navegador).
+  let rechazada = null;
+  for (let i = 0; i < 40 && rechazada?.estado !== 'rechazada'; i += 1) {
+    rechazada = [...(await c.leerColeccion('solicitudes')).values()].find((s) => s.producto?.upc === CAPTURA);
+    if (rechazada?.estado !== 'rechazada') await new Promise((r) => setTimeout(r, 300));
+  }
+  v.ok('rechazada con una nota: queda en el servidor y no entra nada al catálogo', rechazada?.estado === 'rechazada' && rechazada.nota === 'Ya lo tenemos con otro código'
+    && ![...(await c.leerColeccion('products')).values()].some((p) => p.upc === CAPTURA), JSON.stringify({ estado: rechazada?.estado, nota: rechazada?.nota }));
   await admin.page.waitForFunction(() => document.querySelectorAll('#tabla-resueltas tbody tr').length === 3, null, { timeout: 15000 });
   v.ok('las resueltas quedan en el historial con quién las resolvió', /Agregado/.test(await admin.page.textContent('#tabla-resueltas')) && /Quitado/.test(await admin.page.textContent('#tabla-resueltas')) && /Rechazada/.test(await admin.page.textContent('#tabla-resueltas')));
   erroresTotales.push(...admin.errores);

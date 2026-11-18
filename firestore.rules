@@ -176,6 +176,15 @@ service cloud.firestore {
               'tokensBusqueda', 'ultimoPrecioImpresoCentavos', 'fechaUltimaImpresion',
               'actualizadoEn', 'actualizadoPor'];
     }
+    // Salvo en lo empacado en la tienda (lo crea el propio personal, con su
+    // precio): ahí también el precio, con su historial, y si lleva impuesto.
+    function camposEditablesEmpacado() {
+      return ['nombre', 'tiendas', 'tokensBusqueda', 'precioCentavos', 'claseFiscal',
+              'ultimoPrecioImpresoCentavos', 'fechaUltimaImpresion', 'actualizadoEn', 'actualizadoPor'];
+    }
+    function rutaEmpacado(productId) {
+      return /databases/$(database)/documents/empacados/$(productId);
+    }
     // Una sola función con let (ver la nota de costo del POS, más abajo).
     function actualizarProducto(productId) {
       let email = emailActual();
@@ -193,10 +202,34 @@ service cloud.firestore {
                  || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, d))))
               : (ficha.get('catalogo', false) == true
                  && antes.activo == true
-                 && d.diff(antes).affectedKeys().hasOnly(camposEditablesCatalogo())
+                 && (d.diff(antes).affectedKeys().hasOnly(camposEditablesCatalogo())
+                     || (d.diff(antes).affectedKeys().hasOnly(camposEditablesEmpacado())
+                         && exists(rutaEmpacado(productId))
+                         && (d.precioCentavos == antes.precioCentavos
+                             || existsAfter(/databases/$(database)/documents/priceHistory/$(idHistorial(productId, d))))))
                  // al imprimir etiquetas solo se anota el precio vigente
                  && (d.ultimoPrecioImpresoCentavos == antes.ultimoPrecioImpresoCentavos
                      || d.ultimoPrecioImpresoCentavos == antes.precioCentavos)));
+    }
+    // El personal del Catálogo crea productos solo empacados en la tienda: con
+    // un código propio que empieza por 4 (uso interno, GS1), por pieza, sin
+    // marca, activo, y con su empacados/{id} en el mismo lote.
+    function crearEmpacadoDelCatalogo(productId) {
+      let d = request.resource.data;
+      return puedeCatalogo(fichaDe(usuarioActual()), emailActual())
+        && productoValido(d)
+        && d.creadoEn == d.actualizadoEn
+        && d.existencias == null
+        && d.costoCentavos == null
+        && d.upc is string
+        && d.upc.matches('^4[0-9]{11}$')
+        && d.plu == null
+        && d.marca == null
+        && d.unidadVenta == 'pieza'
+        && d.activo == true
+        && d.ultimoPrecioImpresoCentavos == null
+        && d.fechaUltimaImpresion == null
+        && existsAfter(rutaEmpacado(productId));
     }
 
     match /products/{productId} {
@@ -204,12 +237,14 @@ service cloud.firestore {
 
       // Los productos nuevos los crea un admin: en el back office, o al aprobar
       // la solicitud de alta de alguien del Catálogo (con el precio que él pone).
-      allow create: if esAdmin()
+      // El personal del Catálogo solo crea los empacados en la tienda.
+      allow create: if (esAdmin()
         && productoValido(request.resource.data)
         && request.resource.data.creadoEn == request.resource.data.actualizadoEn
         // existencias y costo los administra el POS: el catálogo los deja en null
         && request.resource.data.existencias == null
-        && request.resource.data.costoCentavos == null;
+        && request.resource.data.costoCentavos == null)
+        || crearEmpacadoDelCatalogo(productId);
 
       allow update: if actualizarProducto(productId);
 
@@ -243,9 +278,48 @@ service cloud.firestore {
 
     match /priceHistory/{entradaId} {
       allow read: if esPersonal();
-      // Solo el admin cambia precios, así que solo él escribe historial.
-      allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);
+      // El admin cambia precios; el personal del Catálogo, solo los de lo
+      // empacado en la tienda. Cada cambio deja su entrada de historial.
+      allow create: if (esAdmin() || (puedeCatalogo(fichaDe(usuarioActual()), emailActual())
+                                      && exists(rutaEmpacado(request.resource.data.productId))))
+        && entradaHistorialValida(request.resource.data, entradaId);
       allow update, delete: if false;
+    }
+
+    // ----- empacados: lo que se empaca en la tienda ------------------------
+    // empacados/{productId}: lo que no cabe en el esquema del producto: si es
+    // picante y de dónde viene ({ frase: 'hecho' | 'producto', pais }), para
+    // su etiqueta. Nace solo junto con su producto (en el mismo lote), así que
+    // un producto que no nació empacado nunca se vuelve uno. Lo escriben el
+    // admin y el personal del Catálogo; lo lee todo el personal; nadie lo borra.
+    function camposEmpacado() {
+      return ['picante', 'procedencia', 'creadoEn', 'creadoPor', 'actualizadoEn', 'actualizadoPor'];
+    }
+    function empacadoValido(d, yo) {
+      return exactamente(d, camposEmpacado())
+        && d.picante is bool
+        && d.procedencia is map
+        && d.procedencia.keys().hasOnly(['frase', 'pais'])
+        && d.procedencia.frase in ['hecho', 'producto']
+        && esTextoNoVacio(d.procedencia.pais, 40)
+        && d.actualizadoEn == request.time
+        && d.actualizadoPor == yo;
+    }
+    function escribirEmpacado(productId) {
+      let d = request.resource.data;
+      let yo = usuarioActual();
+      let producto = /databases/$(database)/documents/products/$(productId);
+      return puedeCatalogo(fichaDe(yo), emailActual())
+        && empacadoValido(d, yo)
+        && (resource == null
+              ? d.creadoEn == request.time && d.creadoPor == yo && !exists(producto) && existsAfter(producto)
+              : d.creadoEn == resource.data.creadoEn && d.creadoPor == resource.data.creadoPor);
+    }
+
+    match /empacados/{productId} {
+      allow read: if esPersonal();
+      allow create, update: if escribirEmpacado(productId);
+      allow delete: if false;
     }
 
     // ----- staff ---------------------------------------------------------

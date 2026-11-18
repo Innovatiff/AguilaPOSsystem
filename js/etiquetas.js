@@ -5,6 +5,7 @@
 import { svgCodigoBarras } from './upca.js';
 import { formatearPrecio, indicadorFiscal } from './precios.js';
 import { t } from './idioma.js';
+import { textosEtiquetaEmpaque } from './empaque.js';
 
 export const PLANTILLA = Object.freeze({
   CON_CODIGO: 'conCodigo',
@@ -107,6 +108,37 @@ export function renderEtiqueta(producto) {
 
   // 5. regla negra bajo el precio
   etiqueta.append(crear('div', 'etiqueta__regla'));
+  return etiqueta;
+}
+
+/**
+ * Etiqueta de un producto empacado en la tienda (va pegada en la bolsa):
+ * el nombre en español en la barra negra; debajo, en inglés, la procedencia,
+ * si es picante y la fecha de empaque; abajo, su código de barras y el
+ * precio. Mismo tamaño que la de anaquel: sale en la misma impresora y cinta.
+ * Después de insertarla en el documento hay que llamar a ajustarEtiqueta().
+ * @param {object} producto documento de products/{id} (con su código 4…)
+ * @param {{ picante: boolean, procedencia: { frase: string, pais: string } }} empacado empacados/{id}
+ * @param {string} fechaEmpaque 'AAAA-MM-DD'
+ */
+export function renderEtiquetaEmpaque(producto, empacado, fechaEmpaque) {
+  const textos = textosEtiquetaEmpaque(producto, empacado, fechaEmpaque);
+  const etiqueta = crear('article', 'etiqueta etiqueta--empaque');
+  etiqueta.lang = 'en';
+  const barra = crear('div', 'etiqueta__barra');
+  const nombre = crear('span', 'etiqueta__nombre ajustable', textos.nombre);
+  nombre.lang = 'es';
+  barra.append(nombre);
+  const datos = crear('div', 'empaque__datos ajustable', `${textos.procedencia} `);
+  datos.append(crear('span', `empaque__picante${empacado.picante ? ' empaque__picante--si' : ''}`, textos.picante));
+  const fecha = crear('div', 'empaque__fecha ajustable', textos.fecha);
+  const cuerpo = crear('div', 'etiqueta__cuerpo');
+  const codigo = crear('div', 'etiqueta__codigo');
+  codigo.append(svgCodigoBarras(producto.upc, { ...medidasCodigoBarras(), altoBarras: leerMedidaMM('--empaque-barcode-alto') }));
+  const derecha = crear('div', 'etiqueta__derecha');
+  derecha.append(nodoPrecio(producto));
+  cuerpo.append(codigo, derecha);
+  etiqueta.append(barra, datos, fecha, cuerpo, crear('div', 'etiqueta__regla'));
   return etiqueta;
 }
 

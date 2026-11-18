@@ -11,7 +11,7 @@ const SOLO_ADMIN = 'El back office es solo para administradores. Para vender, us
 const SIN_REGISTRO = 'Esta cuenta no está registrada. Pide a un administrador que te dé de alta en el back office (Empleados).';
 const SECCIONES = [
   'index.html', 'movimientos.html', 'transacciones.html', 'turnos.html', 'reportes.html',
-  'productos.html', 'solicitudes.html', 'inventario.html', 'captura.html', 'imprimir.html', 'prueba-etiquetas.html', 'gestion/datos.html',
+  'productos.html', 'solicitudes.html', 'inventario.html', 'captura.html', 'imprimir.html', 'empacados.html', 'prueba-etiquetas.html', 'gestion/datos.html',
   'gestion/empleados.html', 'gestion/cajas.html', 'gestion/tiendas.html', 'gestion/configuracion.html',
 ];
 

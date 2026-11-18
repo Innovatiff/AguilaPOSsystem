@@ -105,7 +105,9 @@ const ANCLA = {
   existencia: 'allow create, update: if escribirExistencia(existenciaId);',
   emparejarPantalla: "allow create: if pantallaId.matches('^[0-9a-f]{64}$') && escribirPantalla(request.resource.data, true);",
   pantalla: 'allow update: if escribirPantalla(request.resource.data, false);',
-  historial: 'allow create: if esAdmin() && entradaHistorialValida(request.resource.data, entradaId);',
+  historial: '&& entradaHistorialValida(request.resource.data, entradaId);',
+  crearProducto: '|| crearEmpacadoDelCatalogo(productId);',
+  empacado: 'allow create, update: if escribirEmpacado(productId);',
 };
 
 const ESCENARIOS = [
@@ -293,6 +295,45 @@ const ESCENARIOS = [
       actualizadoEn: serverTimestamp(), actualizadoPor: '100150', actualizadoPorNombre: 'Jefa',
     }),
   },
+  ...['crearProducto', 'empacado'].map((ancla) => ({
+    nombre: `el personal del Catálogo crea un producto empacado en la tienda (${ancla === 'empacado' ? 'su empacados' : 'el producto'})`,
+    ancla: ANCLA[ancla],
+    datos: { 'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true } },
+    quien: MARIA,
+    accion: (db) => {
+      const marca = Timestamp.fromMillis(Date.now());
+      const lote = writeBatch(db);
+      lote.set(doc(db, 'products/e1'), {
+        ...armarProducto({ upc: '477777777777', nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, '100123'),
+        creadoEn: marca, actualizadoEn: marca,
+      });
+      lote.set(doc(db, 'empacados/e1'), {
+        picante: true, procedencia: { frase: 'hecho', pais: 'México' },
+        creadoEn: serverTimestamp(), creadoPor: '100123', actualizadoEn: serverTimestamp(), actualizadoPor: '100123',
+      });
+      return lote.commit();
+    },
+  })),
+  ...['producto', 'historial'].map((ancla) => ({
+    nombre: `el personal del Catálogo cambia el precio de un empacado (${ancla === 'historial' ? 'su historial' : 'el producto'})`,
+    ancla: ANCLA[ancla],
+    datos: {
+      'staff/100123': { ...ficha('100123', 'María', 'empleado'), catalogo: true },
+      'products/e1': {
+        ...armarProducto({ upc: '477777777777', nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, '100123'),
+        creadoEn: AHORA, actualizadoEn: AHORA,
+      },
+      'empacados/e1': { picante: true, procedencia: { frase: 'hecho', pais: 'México' }, creadoEn: AHORA, creadoPor: '100123', actualizadoEn: AHORA, actualizadoPor: '100123' },
+    },
+    quien: MARIA,
+    accion: (db) => {
+      const marca = Timestamp.fromMillis(Date.now());
+      const lote = writeBatch(db);
+      lote.update(doc(db, 'products/e1'), { precioCentavos: 449, actualizadoEn: marca, actualizadoPor: '100123' });
+      lote.set(doc(db, `priceHistory/e1_${marca.toMillis()}`), { productId: 'e1', precioAnteriorCentavos: 399, precioNuevoCentavos: 449, fecha: marca, usuario: '100123' });
+      return lote.commit();
+    },
+  })),
   {
     nombre: 'registrar el NIP de un colaborador (huella y correo)',
     ancla: ANCLA.nip,

@@ -13,6 +13,7 @@ import {
   doc, setDoc, getDoc, getDocs, collection, updateDoc, deleteDoc, writeBatch, Timestamp, serverTimestamp, setLogLevel,
 } from 'firebase/firestore';
 import { armarProducto } from '../../js/esquema.js';
+import { nuevoCodigoEmpacado } from '../../js/empaque.js';
 import { armarFichaPersonal, correoDeAcceso, usuarioDe } from '../../js/identidad.js';
 
 const ADMIN = 'admin@aguila.test';
@@ -198,6 +199,76 @@ describe('reglas · app Catálogo y acceso con correo + NIP', () => {
     });
     it('el admin sigue cambiando precio (con historial) y activo', async () => {
       await assertSucceeds(updateDoc(doc(contexto(ADMIN), 'products/p1'), { activo: false, ...firma(ADMIN) }));
+    });
+  });
+
+  describe('empacados · lo que se empaca en la tienda', () => {
+    const CODIGO = nuevoCodigoEmpacado(new Set(), () => 7); // 477777777777 + verificador
+    const empacadoNuevo = (quien, extra = {}) => ({
+      picante: true, procedencia: { frase: 'hecho', pais: 'México' },
+      creadoEn: serverTimestamp(), creadoPor: usuarioDe(quien), actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), ...extra,
+    });
+    const productoEmpacado = (quien, extra = {}) => {
+      const marca = Timestamp.fromMillis(Date.now());
+      return {
+        ...armarProducto({ upc: CODIGO, nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, usuarioDe(quien)),
+        creadoEn: marca, actualizadoEn: marca, ...extra,
+      };
+    };
+    const crearJuntos = (quien, { producto: p = {}, empacado: e = {}, id = 'e1' } = {}) => {
+      const db = contexto(quien);
+      const lote = writeBatch(db);
+      lote.set(doc(db, `products/${id}`), productoEmpacado(quien, p));
+      lote.set(doc(db, `empacados/${id}`), empacadoNuevo(quien, e));
+      return lote.commit();
+    };
+    const sembrarEmpacado = () => sembrar({
+      'products/e1': { ...productoEmpacado(MARIA), creadoEn: AHORA, actualizadoEn: AHORA },
+      'empacados/e1': { ...empacadoNuevo(MARIA), creadoEn: AHORA, actualizadoEn: AHORA },
+    });
+
+    it('el personal del Catálogo crea un producto empacado con su precio y su código propio (4…), con su empacados, en un lote', async () => {
+      assert.match(CODIGO, /^4\d{11}$/);
+      await assertSucceeds(crearJuntos(MARIA));
+      await assertSucceeds(crearJuntos(ADMIN, { id: 'e2', producto: { upc: '400000000017' } }), 'el admin también');
+      const leido = (await getDoc(doc(contexto(LUIS), 'empacados/e1'))).data();
+      assert.equal(leido.procedencia.pais, 'México', 'lo lee todo el personal');
+    });
+    it('no: sin su empacados, con código de fabricante, con marca, por peso, inactivo o sin permiso; ni un empacados suelto', async () => {
+      const db = contexto(MARIA);
+      await assertFails(setDoc(doc(db, 'products/e1'), productoEmpacado(MARIA)), 'sin su empacados en el mismo lote');
+      await assertFails(crearJuntos(MARIA, { producto: { upc: '633148100013' } }), 'un código de fabricante');
+      await assertFails(crearJuntos(MARIA, { producto: { marca: 'TAJIN' } }), 'con marca');
+      await assertFails(crearJuntos(MARIA, { producto: { unidadVenta: 'peso', precioPorKgCentavos: 1099 } }), 'por peso');
+      await assertFails(crearJuntos(MARIA, { producto: { activo: false } }), 'inactivo');
+      await assertFails(crearJuntos(LUIS), 'sin permiso del Catálogo');
+      await assertFails(crearJuntos(MARIA, { empacado: { procedencia: { frase: 'otra', pais: 'México' } } }), 'frase inventada');
+      await assertFails(crearJuntos(MARIA, { empacado: { procedencia: { frase: 'hecho', pais: '' } } }), 'sin país');
+      await assertFails(crearJuntos(MARIA, { empacado: { picante: 'sí' } }), 'picante que no es sí o no');
+      await assertFails(setDoc(doc(db, 'empacados/p1'), empacadoNuevo(MARIA)), 'un producto que ya existía no se vuelve empacado');
+    });
+    it('en lo empacado el personal cambia el precio (con historial) y el impuesto; en lo demás sigue sin poder', async () => {
+      await sembrarEmpacado();
+      const db = contexto(MARIA);
+      const marca = Timestamp.fromMillis(Date.now());
+      const lote = writeBatch(db);
+      lote.update(doc(db, 'products/e1'), { precioCentavos: 449, actualizadoEn: marca, actualizadoPor: '100123' });
+      lote.set(doc(db, `priceHistory/e1_${marca.toMillis()}`), { productId: 'e1', precioAnteriorCentavos: 399, precioNuevoCentavos: 449, fecha: marca, usuario: '100123' });
+      await assertSucceeds(lote.commit());
+      await assertSucceeds(updateDoc(doc(db, 'products/e1'), { claseFiscal: 'tasaCero', ...firma(MARIA) }));
+      await assertFails(updateDoc(doc(db, 'products/e1'), { precioCentavos: 1, ...firma(MARIA) }), 'sin su historial');
+      await assertFails(updateDoc(doc(db, 'products/e1'), { unidadVenta: 'peso', precioPorKgCentavos: 549, ...firma(MARIA) }), 'la unidad no');
+      await assertFails(updateDoc(doc(db, 'products/e1'), { activo: false, ...firma(MARIA) }), 'quitarlo tampoco');
+      await assertFails(updateDoc(doc(contexto(LUIS), 'products/e1'), { claseFiscal: 'gravado', ...firma(LUIS) }), 'sin permiso del Catálogo');
+    });
+    it('su empacados lo cambia el personal del Catálogo; nadie cambia quién lo creó ni lo borra', async () => {
+      await sembrarEmpacado();
+      const cambio = (quien, extra = {}) => ({ picante: false, procedencia: { frase: 'producto', pais: 'Canadá' }, actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), ...extra });
+      await assertSucceeds(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA)));
+      await assertFails(updateDoc(doc(contexto(LUIS), 'empacados/e1'), cambio(LUIS)), 'sin permiso del Catálogo');
+      await assertFails(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA, { creadoPor: '100124' })), 'quién lo creó no cambia');
+      await assertFails(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA, { extra: 1 })), 'campos de más');
+      await assertFails(deleteDoc(doc(contexto(ADMIN), 'empacados/e1')));
     });
   });
 

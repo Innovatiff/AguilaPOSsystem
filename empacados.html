@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Empacados en tienda · Águila POS</title>
+  <script src="js/idioma-temprano.js"></script>
+  <script type="module" src="js/traducir-pagina.js"></script>
+  <link rel="icon" href="icons/aguila.svg" type="image/svg+xml">
+  <link rel="icon" href="icons/icono-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icono-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1c1f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Águila POS">
+  <script type="module" src="js/pwa.js"></script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/etiquetas.css">
+  <script type="module" src="js/pantalla-empacados.js"></script>
+</head>
+<body>
+  <header id="navegacion" class="encabezado no-imprimir"></header>
+  <main id="contenido" hidden>
+    <div class="cabecera-pagina no-imprimir">
+      <div>
+        <h1>Empacados en tienda</h1>
+        <p class="nota">Lo que se empaca aquí (chicharrón de harina, chiles secos…), con su propio código de barras. Crea el producto una vez; cada vez que empaques, imprime sus etiquetas.</p>
+      </div>
+      <div class="cabecera-pagina__acciones">
+        <button type="button" class="boton" id="btn-nuevo">Nuevo producto empacado</button>
+      </div>
+    </div>
+    <p id="mensaje" class="mensaje no-imprimir" role="status" aria-live="polite" hidden></p>
+
+    <section class="panel panel--12 empacados no-imprimir" id="panel-imprimir" aria-labelledby="titulo-imprimir" hidden>
+      <header class="panel__cabecera">
+        <h2 id="titulo-imprimir">Imprimir etiquetas</h2>
+        <span class="panel__acciones">
+          <button type="button" class="boton boton--secundario" id="btn-editar">Editar producto</button>
+          <button type="button" class="boton boton--secundario" id="btn-cerrar-impresion">Cerrar</button>
+        </span>
+      </header>
+      <div class="empacados__imprimir">
+        <form id="form-imprimir" class="empacados__form" novalidate>
+          <p class="empacados__producto"><strong id="i-nombre"></strong><span class="secundario" id="i-detalle"></span></p>
+          <div class="campo">
+            <label for="i-fecha">Fecha de empaque</label>
+            <input id="i-fecha" type="date">
+          </div>
+          <div class="campo">
+            <label for="i-cantidad">¿Cuántas etiquetas?</label>
+            <input id="i-cantidad" type="number" min="1" max="200" step="1" inputmode="numeric" value="10">
+          </div>
+          <div class="empacados__rapidas" id="cantidades-rapidas" role="group" aria-label="Cantidades rápidas"></div>
+          <button type="submit" class="boton boton--grande" id="btn-imprimir">Imprimir</button>
+          <p class="nota">Salen todas en una sola impresión. En el diálogo: impresora de etiquetas, papel 62mm, horizontal, márgenes ninguno, escala 100 %.</p>
+        </form>
+        <div class="empacados__vista">
+          <p class="nota">Así sale cada etiqueta:</p>
+          <div id="vista-etiqueta" class="vista-etiqueta"></div>
+        </div>
+      </div>
+      <div id="confirmacion" class="mensaje mensaje--ok confirmacion" hidden>
+        <span id="confirmacion-texto"></span>
+        <button id="btn-confirmar" class="boton" type="button">Sí, salieron bien</button>
+        <button id="btn-rechazar" class="boton boton--enlace" type="button">No, volver a imprimir</button>
+      </div>
+    </section>
+
+    <section class="panel panel--12 no-imprimir" aria-labelledby="titulo-lista">
+      <header class="panel__cabecera">
+        <h2 id="titulo-lista">Productos empacados</h2>
+        <span class="panel__nota" id="contador"></span>
+      </header>
+      <p id="estado-catalogo" class="nota">Cargando catálogo…</p>
+      <div class="filtros">
+        <div class="campo campo--buscar">
+          <label for="buscar">Buscar</label>
+          <input id="buscar" type="search" autocomplete="off" placeholder="Nombre o código">
+        </div>
+      </div>
+      <div class="tabla-desplazable">
+        <table class="tabla tabla--compacta tabla--clic" id="tabla-empacados" hidden>
+          <thead>
+            <tr><th>Producto</th><th class="num">Precio</th><th>Picante</th><th>Procedencia</th><th>Código</th><th>Tiendas</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="nota" id="vacio">Todavía no hay productos empacados en tienda. Toca «Nuevo producto empacado» para crear el primero.</p>
+    </section>
+
+    <!-- Solo al imprimir: las etiquetas, una por hoja en la impresora de etiquetas. -->
+    <div id="hoja" class="hoja-etiquetas solo-impresion"></div>
+  </main>
+
+  <dialog id="dlg-empacado" class="editor editor--empacado no-imprimir" aria-labelledby="empacado-titulo">
+    <form id="form-empacado" class="editor__form" novalidate>
+      <header class="editor__cabecera">
+        <h2 id="empacado-titulo">Nuevo producto empacado</h2>
+        <button type="button" class="boton boton--secundario" id="empacado-cerrar">Cerrar</button>
+      </header>
+      <div class="editor__cuerpo editor__cuerpo--simple">
+        <p id="empacado-mensaje" class="mensaje" role="status" aria-live="polite" hidden></p>
+        <div class="campo campo--grande">
+          <label for="e-nombre">Nombre del producto (en español, sin marca)</label>
+          <input id="e-nombre" maxlength="80" autocomplete="off" placeholder="Chicharrón de harina">
+        </div>
+        <div class="campo">
+          <label for="e-precio">Precio ($)</label>
+          <input id="e-precio" inputmode="decimal" autocomplete="off" placeholder="3.99">
+        </div>
+        <fieldset class="campo">
+          <legend>¿Lleva impuesto?</legend>
+          <label><input type="radio" name="e-impuesto" value="tasaCero"> No: comida básica (chiles secos, frijol, especias…)</label>
+          <label><input type="radio" name="e-impuesto" value="gravado"> Sí, +HST: botanas, dulces…</label>
+        </fieldset>
+        <fieldset class="campo">
+          <legend>¿Es picante?</legend>
+          <label><input type="radio" name="e-picante" value="no"> No es picante</label>
+          <label><input type="radio" name="e-picante" value="si"> Sí, es picante</label>
+        </fieldset>
+        <fieldset class="campo empacados__procedencia">
+          <legend>Procedencia</legend>
+          <label><input type="radio" name="e-frase" value="hecho" checked> Hecho en</label>
+          <label><input type="radio" name="e-frase" value="producto"> Producto de</label>
+          <label class="empacados__pais"><span class="visualmente-oculto">País</span>
+            <input id="e-pais" list="lista-paises" maxlength="40" autocomplete="off" placeholder="País">
+          </label>
+          <datalist id="lista-paises"></datalist>
+        </fieldset>
+        <fieldset class="campo" id="e-tiendas">
+          <legend>¿En qué tiendas se vende?</legend>
+        </fieldset>
+        <p class="nota" id="e-codigo-nota">Al guardar se crea su código de barras.</p>
+        <div class="acciones">
+          <button type="submit" class="boton" id="empacado-guardar">Guardar e imprimir etiquetas</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

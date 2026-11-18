@@ -30,6 +30,7 @@ const ICONOS = {
   movimientos: 'M3 12h4l3-8 4 16 3-8h4',
   transacciones: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
   inventario: 'M2 6h12v10H2zM14 9h4l4 4v3h-8M6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  empacados: 'M5 8h14l-1.2 12H6.2zM9 8V6a3 3 0 0 1 6 0v2M9 13h6',
 };
 
 /** Secciones del back office, en grupos (textos en español: se traducen al pintar). */
@@ -53,6 +54,7 @@ const GRUPOS = [
       { href: 'inventario.html', texto: 'Inventario', icono: 'inventario' },
       { href: 'captura.html', texto: 'Captura rápida', icono: 'captura' },
       { href: 'imprimir.html', texto: 'Etiquetas', icono: 'etiquetas' },
+      { href: 'empacados.html', texto: 'Empacados en tienda', icono: 'empacados' },
       { href: 'prueba-etiquetas.html', texto: 'Prueba de etiquetas', icono: 'prueba' },
       { href: 'gestion/datos.html', texto: 'Importar / exportar', icono: 'datos' },
     ],
@@ -77,6 +79,7 @@ const GRUPOS_CATALOGO = [
       { href: 'catalogo/inventario.html', texto: 'Recibir mercancía', icono: 'inventario' },
       { href: 'catalogo/captura.html', texto: 'Captura rápida', icono: 'captura' },
       { href: 'catalogo/etiquetas.html', texto: 'Etiquetas', icono: 'etiquetas' },
+      { href: 'catalogo/empacados.html', texto: 'Empacados en tienda', icono: 'empacados' },
       { href: 'catalogo/solicitudes.html', texto: 'Mis solicitudes', icono: 'solicitudes' },
     ],
   },
