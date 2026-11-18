@@ -179,7 +179,7 @@ service cloud.firestore {
     // Salvo en lo empacado en la tienda (lo crea el propio personal, con su
     // precio): ahí también el precio, con su historial, y si lleva impuesto.
     function camposEditablesEmpacado() {
-      return ['nombre', 'tiendas', 'tokensBusqueda', 'precioCentavos', 'claseFiscal',
+      return ['nombre', 'presentacion', 'tiendas', 'tokensBusqueda', 'precioCentavos', 'claseFiscal',
               'ultimoPrecioImpresoCentavos', 'fechaUltimaImpresion', 'actualizadoEn', 'actualizadoPor'];
     }
     function rutaEmpacado(productId) {
@@ -288,12 +288,13 @@ service cloud.firestore {
 
     // ----- empacados: lo que se empaca en la tienda ------------------------
     // empacados/{productId}: lo que no cabe en el esquema del producto: si es
-    // picante y de dónde viene ({ frase: 'hecho' | 'producto', pais }), para
-    // su etiqueta. Nace solo junto con su producto (en el mismo lote), así que
+    // picante, de dónde viene ({ frase: 'hecho' | 'producto', pais }) y su peso
+    // neto en gramos, para su etiqueta (el peso va también en la presentación
+    // del producto). Nace solo junto con su producto (en el mismo lote), así que
     // un producto que no nació empacado nunca se vuelve uno. Lo escriben el
     // admin y el personal del Catálogo; lo lee todo el personal; nadie lo borra.
     function camposEmpacado() {
-      return ['picante', 'procedencia', 'creadoEn', 'creadoPor', 'actualizadoEn', 'actualizadoPor'];
+      return ['picante', 'procedencia', 'pesoNetoGramos', 'creadoEn', 'creadoPor', 'actualizadoEn', 'actualizadoPor'];
     }
     function empacadoValido(d, yo) {
       return exactamente(d, camposEmpacado())
@@ -302,6 +303,9 @@ service cloud.firestore {
         && d.procedencia.keys().hasOnly(['frase', 'pais'])
         && d.procedencia.frase in ['hecho', 'producto']
         && esTextoNoVacio(d.procedencia.pais, 40)
+        && d.pesoNetoGramos is int
+        && d.pesoNetoGramos > 0
+        && d.pesoNetoGramos <= 99999
         && d.actualizadoEn == request.time
         && d.actualizadoPor == yo;
     }

@@ -308,7 +308,7 @@ const ESCENARIOS = [
         creadoEn: marca, actualizadoEn: marca,
       });
       lote.set(doc(db, 'empacados/e1'), {
-        picante: true, procedencia: { frase: 'hecho', pais: 'México' },
+        picante: true, procedencia: { frase: 'hecho', pais: 'México' }, pesoNetoGramos: 454,
         creadoEn: serverTimestamp(), creadoPor: '100123', actualizadoEn: serverTimestamp(), actualizadoPor: '100123',
       });
       return lote.commit();
@@ -323,7 +323,7 @@ const ESCENARIOS = [
         ...armarProducto({ upc: '477777777777', nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, '100123'),
         creadoEn: AHORA, actualizadoEn: AHORA,
       },
-      'empacados/e1': { picante: true, procedencia: { frase: 'hecho', pais: 'México' }, creadoEn: AHORA, creadoPor: '100123', actualizadoEn: AHORA, actualizadoPor: '100123' },
+      'empacados/e1': { picante: true, procedencia: { frase: 'hecho', pais: 'México' }, pesoNetoGramos: 454, creadoEn: AHORA, creadoPor: '100123', actualizadoEn: AHORA, actualizadoPor: '100123' },
     },
     quien: MARIA,
     accion: (db) => {

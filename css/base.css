@@ -4008,6 +4008,38 @@ dialog.editor--empacado {
   display: inline-flex;
 }
 
+/* Precio y peso neto, uno al lado del otro: cada campo cabe en su mitad
+   (sin el ancho mínimo de .campo, que aquí los encimaría). */
+.empacados__fila {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.empacados__fila > .campo {
+  min-width: 0;
+}
+
+.empacados__fila > .campo > input {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.empacados__peso {
+  display: flex;
+  gap: 6px;
+}
+
+.empacados__peso input {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.empacados__peso select {
+  flex: 0 0 auto;
+}
+
 .empacados__pais input {
   min-width: 180px;
   padding: 6px 8px;

@@ -446,4 +446,11 @@ export const CATALOGO = Object.freeze({
   'Elige al menos una tienda.': 'Choose at least one store.',
   'Escribe cuántas etiquetas: de 1 a {max}.': 'Enter how many labels: 1 to {max}.',
   'Elige la fecha de empaque.': 'Choose the packing date.',
+  'Escribe el peso neto.': 'Enter the net weight.',
+  'El peso neto no es válido: escribe por ejemplo 454 g o 1.5 kg.': 'The net weight is not valid: enter for example 454 g or 1.5 kg.',
+  // Peso neto en la página de empacados
+  'Peso neto': 'Net weight',
+  'Unidad del peso neto': 'Net weight unit',
+  'Sin peso': 'No weight',
+  'Este producto todavía no tiene peso neto: tócale «Editar producto» y escríbelo para poder imprimir.': 'This product has no net weight yet: tap “Edit product” and enter it so you can print.',
 });

@@ -44,6 +44,7 @@
   /* --- Etiqueta de lo empacado en la tienda (en la bolsa) ---------- */
   --empaque-datos-tamano: 2.7mm;   /* «Product of Mexico  SPICY» */
   --empaque-fecha-tamano: 2.4mm;   /* «Packed on Nov 18, 2026» */
+  --empaque-peso-tamano: 2.8mm;    /* «Net wt 454 g», sobre el precio */
   --empaque-barcode-alto: 8.5mm;   /* barras más bajas que en el anaquel: lleva dos líneas más */
 
   /* --- Tipografías ------------------------------------------------ */
@@ -233,6 +234,11 @@
   margin-top: calc(var(--espacio) * 0.6);
   font-size: var(--empaque-fecha-tamano);
   font-weight: 400;
+  white-space: nowrap;
+}
+
+.empaque__peso {
+  font-size: var(--empaque-peso-tamano);
   white-space: nowrap;
 }
 

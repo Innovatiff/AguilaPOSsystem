@@ -114,11 +114,12 @@ export function renderEtiqueta(producto) {
 /**
  * Etiqueta de un producto empacado en la tienda (va pegada en la bolsa):
  * el nombre en español en la barra negra; debajo, en inglés, la procedencia,
- * si es picante y la fecha de empaque; abajo, su código de barras y el
- * precio. Mismo tamaño que la de anaquel: sale en la misma impresora y cinta.
+ * si es picante y la fecha de empaque; abajo, su código de barras y, junto
+ * al precio, el peso neto. Mismo tamaño que la de anaquel: sale en la misma
+ * impresora y cinta.
  * Después de insertarla en el documento hay que llamar a ajustarEtiqueta().
  * @param {object} producto documento de products/{id} (con su código 4…)
- * @param {{ picante: boolean, procedencia: { frase: string, pais: string } }} empacado empacados/{id}
+ * @param {{ picante: boolean, procedencia: { frase: string, pais: string }, pesoNetoGramos?: number }} empacado empacados/{id}
  * @param {string} fechaEmpaque 'AAAA-MM-DD'
  */
 export function renderEtiquetaEmpaque(producto, empacado, fechaEmpaque) {
@@ -136,6 +137,7 @@ export function renderEtiquetaEmpaque(producto, empacado, fechaEmpaque) {
   const codigo = crear('div', 'etiqueta__codigo');
   codigo.append(svgCodigoBarras(producto.upc, { ...medidasCodigoBarras(), altoBarras: leerMedidaMM('--empaque-barcode-alto') }));
   const derecha = crear('div', 'etiqueta__derecha');
+  if (textos.pesoNeto) derecha.append(crear('div', 'empaque__peso ajustable', textos.pesoNeto));
   derecha.append(nodoPrecio(producto));
   cuerpo.append(codigo, derecha);
   etiqueta.append(barra, datos, fecha, cuerpo, crear('div', 'etiqueta__regla'));

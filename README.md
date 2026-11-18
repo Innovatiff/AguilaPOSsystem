@@ -430,8 +430,9 @@ back office catalog, in staff mode:
 - **Empacados en tienda**: what the store packs itself (wheat chicharrón,
   dried chiles…). **Nuevo producto empacado** asks for the name (in Spanish,
   no brand), the price, whether it is taxed (basic groceries such as dried
-  chiles: no; snacks, candy: +HST; nothing is assumed), whether it is spicy,
-  the origin ("Hecho en" / "Producto de" + country) and the stores. Saving
+  chiles: no; snacks, candy: +HST; nothing is assumed), the **net weight**
+  (in g or kg, stored in whole grams), whether it is spicy, the origin
+  ("Hecho en" / "Producto de" + country) and the stores. Saving
   creates the product with a **new barcode**: a UPC-A starting with 4, which
   GS1 reserves for in-store use, so it never matches a manufacturer's code and
   the register does not take it for a scale label (those start with 2). The
@@ -441,11 +442,15 @@ back office catalog, in staff mode:
   job**, one label each, on the same Brother and tape as the shelf tags. On
   the label only the name is in Spanish; the rest is in English: "Made in
   Canada" / "Product of Mexico", **SPICY** (white on black) or NOT SPICY,
-  "Packed on Nov 18, 2026", the barcode and the price. Confirming that they
+  "Packed on Nov 18, 2026", "Net wt 454 g", the barcode and the price. The
+  product's presentation is set from the weight (`454g`), so the register,
+  receipt and shelf tag show it too. Confirming that they
   came out records the printed price, as in Etiquetas. Tap a product in the
-  list to print it again or **Editar producto** (name, price, tax, spicy,
-  origin, stores; the barcode never changes). Spicy and origin are stored in
-  `empacados/`, next to the product: the product schema does not change.
+  list to print it again or **Editar producto** (name, price, net weight,
+  tax, spicy, origin, stores; the barcode never changes). A product saved
+  before the net weight existed shows **Sin peso** and cannot print until its
+  weight is entered. Spicy, origin and net weight are stored in `empacados/`,
+  next to the product: the product schema does not change.
 - **Mis solicitudes**: each request with its status and the admin's note.
 
 In the back office, **Solicitudes** (with a badge in the sidebar) lists the

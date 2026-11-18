@@ -205,13 +205,13 @@ describe('reglas · app Catálogo y acceso con correo + NIP', () => {
   describe('empacados · lo que se empaca en la tienda', () => {
     const CODIGO = nuevoCodigoEmpacado(new Set(), () => 7); // 477777777777 + verificador
     const empacadoNuevo = (quien, extra = {}) => ({
-      picante: true, procedencia: { frase: 'hecho', pais: 'México' },
+      picante: true, procedencia: { frase: 'hecho', pais: 'México' }, pesoNetoGramos: 454,
       creadoEn: serverTimestamp(), creadoPor: usuarioDe(quien), actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), ...extra,
     });
     const productoEmpacado = (quien, extra = {}) => {
       const marca = Timestamp.fromMillis(Date.now());
       return {
-        ...armarProducto({ upc: CODIGO, nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, usuarioDe(quien)),
+        ...armarProducto({ upc: CODIGO, nombre: 'CHICHARRÓN DE HARINA', marca: null, presentacion: '454g', precioCentavos: 399, unidadVenta: 'pieza', claseFiscal: 'gravado', tiendas: ['talbot'] }, usuarioDe(quien)),
         creadoEn: marca, actualizadoEn: marca, ...extra,
       };
     };
@@ -245,6 +245,9 @@ describe('reglas · app Catálogo y acceso con correo + NIP', () => {
       await assertFails(crearJuntos(MARIA, { empacado: { procedencia: { frase: 'otra', pais: 'México' } } }), 'frase inventada');
       await assertFails(crearJuntos(MARIA, { empacado: { procedencia: { frase: 'hecho', pais: '' } } }), 'sin país');
       await assertFails(crearJuntos(MARIA, { empacado: { picante: 'sí' } }), 'picante que no es sí o no');
+      await assertFails(crearJuntos(MARIA, { empacado: { pesoNetoGramos: null } }), 'sin peso neto');
+      await assertFails(crearJuntos(MARIA, { empacado: { pesoNetoGramos: 45.4 } }), 'peso neto con decimales (son gramos enteros)');
+      await assertFails(crearJuntos(MARIA, { empacado: { pesoNetoGramos: 0 } }), 'peso neto en cero');
       await assertFails(setDoc(doc(db, 'empacados/p1'), empacadoNuevo(MARIA)), 'un producto que ya existía no se vuelve empacado');
     });
     it('en lo empacado el personal cambia el precio (con historial) y el impuesto; en lo demás sigue sin poder', async () => {
@@ -256,6 +259,11 @@ describe('reglas · app Catálogo y acceso con correo + NIP', () => {
       lote.set(doc(db, `priceHistory/e1_${marca.toMillis()}`), { productId: 'e1', precioAnteriorCentavos: 399, precioNuevoCentavos: 449, fecha: marca, usuario: '100123' });
       await assertSucceeds(lote.commit());
       await assertSucceeds(updateDoc(doc(db, 'products/e1'), { claseFiscal: 'tasaCero', ...firma(MARIA) }));
+      const otraMarca = Timestamp.fromMillis(Date.now() + 1000);
+      const conPeso = writeBatch(db);
+      conPeso.update(doc(db, 'products/e1'), { precioCentavos: 699, presentacion: '1kg', actualizadoEn: otraMarca, actualizadoPor: '100123' });
+      conPeso.set(doc(db, `priceHistory/e1_${otraMarca.toMillis()}`), { productId: 'e1', precioAnteriorCentavos: 449, precioNuevoCentavos: 699, fecha: otraMarca, usuario: '100123' });
+      await assertSucceeds(conPeso.commit(), 'el precio y el peso (la presentación) juntos');
       await assertFails(updateDoc(doc(db, 'products/e1'), { precioCentavos: 1, ...firma(MARIA) }), 'sin su historial');
       await assertFails(updateDoc(doc(db, 'products/e1'), { unidadVenta: 'peso', precioPorKgCentavos: 549, ...firma(MARIA) }), 'la unidad no');
       await assertFails(updateDoc(doc(db, 'products/e1'), { activo: false, ...firma(MARIA) }), 'quitarlo tampoco');
@@ -263,12 +271,28 @@ describe('reglas · app Catálogo y acceso con correo + NIP', () => {
     });
     it('su empacados lo cambia el personal del Catálogo; nadie cambia quién lo creó ni lo borra', async () => {
       await sembrarEmpacado();
-      const cambio = (quien, extra = {}) => ({ picante: false, procedencia: { frase: 'producto', pais: 'Canadá' }, actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), ...extra });
+      const cambio = (quien, extra = {}) => ({ picante: false, procedencia: { frase: 'producto', pais: 'Canadá' }, pesoNetoGramos: 1000, actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(quien), ...extra });
       await assertSucceeds(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA)));
       await assertFails(updateDoc(doc(contexto(LUIS), 'empacados/e1'), cambio(LUIS)), 'sin permiso del Catálogo');
       await assertFails(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA, { creadoPor: '100124' })), 'quién lo creó no cambia');
       await assertFails(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA, { extra: 1 })), 'campos de más');
+      await assertFails(updateDoc(doc(contexto(MARIA), 'empacados/e1'), cambio(MARIA, { pesoNetoGramos: 100000 })), 'más de 99 999 g');
       await assertFails(deleteDoc(doc(contexto(ADMIN), 'empacados/e1')));
+    });
+    it('uno guardado antes del peso neto: al editarlo recibe su peso; sin peso no se guarda', async () => {
+      const { pesoNetoGramos, ...sinPeso } = empacadoNuevo(MARIA);
+      assert.equal(pesoNetoGramos, 454);
+      await sembrar({
+        'products/e1': { ...productoEmpacado(MARIA), presentacion: '', creadoEn: AHORA, actualizadoEn: AHORA },
+        'empacados/e1': { ...sinPeso, creadoEn: AHORA, actualizadoEn: AHORA },
+      });
+      const db = contexto(MARIA);
+      const firmaEmpacado = { actualizadoEn: serverTimestamp(), actualizadoPor: usuarioDe(MARIA) };
+      await assertFails(updateDoc(doc(db, 'empacados/e1'), { picante: false, ...firmaEmpacado }), 'cambiarlo sin darle peso, no');
+      const lote = writeBatch(db);
+      lote.update(doc(db, 'products/e1'), { presentacion: '454g', ...firma(MARIA) });
+      lote.update(doc(db, 'empacados/e1'), { pesoNetoGramos: 454, ...firmaEmpacado });
+      await assertSucceeds(lote.commit(), 'con su peso y la presentación que lo dice');
     });
   });
 

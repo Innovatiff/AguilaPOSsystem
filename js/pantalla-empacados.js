@@ -2,10 +2,11 @@
  * Empacados en tienda (back office y app Catálogo): lo que se empaca aquí
  * (chicharrón de harina, chiles secos…) con su propio código de barras.
  *
- * Crear: nombre (en español, sin marca), precio, si lleva impuesto, si es
- * picante, procedencia y tiendas; al guardar se crea el producto con un código
- * nuevo (4…) y su empacados/{id}. El personal del Catálogo los crea y les
- * cambia el precio él mismo (solo a estos).
+ * Crear: nombre (en español, sin marca), precio, peso neto (g o kg), si lleva
+ * impuesto, si es picante, procedencia y tiendas; al guardar se crea el
+ * producto con un código nuevo (4…) y su empacados/{id}. El personal del
+ * Catálogo los crea y les cambia el precio él mismo (solo a estos). Sin peso
+ * neto (los guardados antes de que existiera) no se imprime hasta editarlo.
  *
  * Imprimir: fecha de empaque y cuántas etiquetas (5, 10, 20…); todas salen en
  * una sola impresión, una por etiqueta física. Al confirmar que salieron bien
@@ -19,6 +20,7 @@ import { observarCatalogo, observarTiendas, esperarConfirmacion, marcarImpresos 
 import { observarEmpacados, crearEmpacado, actualizarEmpacado } from './empacados.js';
 import {
   nuevoCodigoEmpacado, armarEmpacado, cambiosEmpacado, cantidadEtiquetas, CANTIDADES_RAPIDAS, LIMITES_EMPACADO,
+  textoPesoNeto, partesPesoNeto,
 } from './empaque.js';
 import { paisesSugeridos, paisEnPantalla } from './inventario.js';
 import { formatearPrecio, indicadorFiscal, textoDesdeCentavos } from './precios.js';
@@ -79,6 +81,7 @@ function pintarLista() {
   h('td', null, producto.nombre,
     producto.activo === false ? [' ', chip(t('inactivo'), 'neutro')] : null,
     producto.pendiente || empacado.pendiente ? [' ', chip(t('Por enviar'), 'aviso')] : null),
+  h('td', { class: 'num' }, textoPesoNeto(empacado.pesoNetoGramos) || chip(t('Sin peso'), 'aviso')),
   h('td', { class: 'num' }, `${formatearPrecio(producto.precioCentavos)} `, h('span', { class: 'secundario', text: indicadorFiscal(producto.claseFiscal) })),
   h('td', null, empacado.picante ? chip(t('Picante'), 'alerta') : t('No')),
   h('td', { text: procedenciaEnPantalla(empacado.procedencia) }),
@@ -120,7 +123,11 @@ function pintarImpresion() {
     return;
   }
   $('i-nombre').textContent = producto.nombre;
-  $('i-detalle').textContent = ` · ${formatearPrecio(producto.precioCentavos)} ${indicadorFiscal(producto.claseFiscal)} · ${producto.upc}`;
+  const peso = textoPesoNeto(empacado.pesoNetoGramos);
+  $('i-detalle').textContent = ` · ${[peso, `${formatearPrecio(producto.precioCentavos)} ${indicadorFiscal(producto.claseFiscal)}`, producto.upc].filter(Boolean).join(' · ')}`;
+  // Sin peso neto no se imprime: la etiqueta lo debe llevar (se agrega en «Editar producto»).
+  $('i-sin-peso').hidden = Boolean(peso);
+  $('btn-imprimir').disabled = !peso;
   let n = null;
   try {
     n = cantidadEtiquetas($('i-cantidad').value);
@@ -160,7 +167,7 @@ $('btn-editar').addEventListener('click', () => abrirEditor(seleccionado));
 $('form-imprimir').addEventListener('submit', (e) => {
   e.preventDefault();
   const producto = catalogo.get(seleccionado);
-  if (!producto) return;
+  if (!producto || $('btn-imprimir').disabled) return;
   let cantidad;
   try {
     cantidad = cantidadEtiquetas($('i-cantidad').value);
@@ -238,6 +245,9 @@ function abrirEditor(id = null) {
   marcar('e-impuesto', producto?.claseFiscal ?? null);
   marcar('e-picante', empacado ? (empacado.picante ? 'si' : 'no') : null);
   marcar('e-frase', empacado?.procedencia?.frase ?? 'hecho');
+  const peso = partesPesoNeto(empacado?.pesoNetoGramos);
+  $('e-peso').value = peso.texto;
+  $('e-peso-unidad').value = peso.unidad;
   $('e-pais').value = empacado ? (paisEnPantalla(empacado.procedencia?.pais) ?? '') : '';
   const activas = tiendasActivas().map((tienda) => tienda.id);
   const propias = activas.includes(personal.tienda) ? [personal.tienda] : activas;
@@ -265,6 +275,8 @@ $('form-empacado').addEventListener('submit', async (e) => {
       picante: { si: true, no: false }[marcado('e-picante')] ?? null,
       frase: marcado('e-frase'),
       pais: $('e-pais').value,
+      peso: $('e-peso').value,
+      unidadPeso: $('e-peso-unidad').value,
       tiendas: [...$('e-tiendas').querySelectorAll('input:checked')].map((casilla) => casilla.value),
     });
   } catch (error) {

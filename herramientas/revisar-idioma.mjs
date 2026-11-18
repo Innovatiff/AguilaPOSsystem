@@ -17,7 +17,7 @@ const RAIZ = fileURLToPath(new URL('..', import.meta.url));
 
 /** Textos que no se traducen: marcas, siglas y símbolos. */
 export const SIN_TRADUCCION = new Set([
-  'Águila POS', 'Águila', 'POS', 'Águila Marketplace', 'Águila Catálogo', 'PLU', 'UPC', 'HST', 'CSV', 'kg', 'NIP', 'OK',
+  'Águila POS', 'Águila', 'POS', 'Águila Marketplace', 'Águila Catálogo', 'PLU', 'UPC', 'HST', 'CSV', 'kg', 'g', 'NIP', 'OK',
   'Moneris', 'Netlify', 'Firebase', 'Chrome', 'Edge', 'BestPOS', 'Code 128', 'EAN-13', 'UPC-A', 'UPC-E', 'Tx', '+Tx', 'T',
   '×', '—', '–', '·', '/', '%', '$', '#', '…', '+', '-', '−', '=', '?', '¿', '¡', ':', 'A', 'B', 'C', 'D', 'E', 'X', 'Z', '←', '→', '↑', '↓', '⌫', 'C',
   'Esc', 'Enter', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Supr', 'Ctrl', 'Alt', 'Tab',

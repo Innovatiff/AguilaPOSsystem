@@ -54,6 +54,7 @@
             <input id="i-cantidad" type="number" min="1" max="200" step="1" inputmode="numeric" value="10">
           </div>
           <div class="empacados__rapidas" id="cantidades-rapidas" role="group" aria-label="Cantidades rápidas"></div>
+          <p class="mensaje mensaje--aviso" id="i-sin-peso" hidden>Este producto todavía no tiene peso neto: tócale «Editar producto» y escríbelo para poder imprimir.</p>
           <button type="submit" class="boton boton--grande" id="btn-imprimir">Imprimir</button>
           <p class="nota">Salen todas en una sola impresión. En el diálogo: impresora de etiquetas, papel 62mm, horizontal, márgenes ninguno, escala 100 %.</p>
         </form>
@@ -84,7 +85,7 @@
       <div class="tabla-desplazable">
         <table class="tabla tabla--compacta tabla--clic" id="tabla-empacados" hidden>
           <thead>
-            <tr><th>Producto</th><th class="num">Precio</th><th>Picante</th><th>Procedencia</th><th>Código</th><th>Tiendas</th></tr>
+            <tr><th>Producto</th><th class="num">Peso neto</th><th class="num">Precio</th><th>Picante</th><th>Procedencia</th><th>Código</th><th>Tiendas</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -108,9 +109,21 @@
           <label for="e-nombre">Nombre del producto (en español, sin marca)</label>
           <input id="e-nombre" maxlength="80" autocomplete="off" placeholder="Chicharrón de harina">
         </div>
-        <div class="campo">
-          <label for="e-precio">Precio ($)</label>
-          <input id="e-precio" inputmode="decimal" autocomplete="off" placeholder="3.99">
+        <div class="empacados__fila">
+          <div class="campo">
+            <label for="e-precio">Precio ($)</label>
+            <input id="e-precio" inputmode="decimal" autocomplete="off" placeholder="3.99">
+          </div>
+          <div class="campo">
+            <label for="e-peso">Peso neto</label>
+            <span class="empacados__peso">
+              <input id="e-peso" inputmode="decimal" autocomplete="off" placeholder="454">
+              <select id="e-peso-unidad" aria-label="Unidad del peso neto">
+                <option value="g">g</option>
+                <option value="kg">kg</option>
+              </select>
+            </span>
+          </div>
         </div>
         <fieldset class="campo">
           <legend>¿Lleva impuesto?</legend>

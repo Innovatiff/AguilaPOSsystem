@@ -151,13 +151,15 @@ nobody deletes it.
 |---|---|---|
 | picante | bool | printed as **SPICY** / NOT SPICY |
 | procedencia | `{ frase: 'hecho' \| 'producto', pais }` | "Made in …" / "Product of …"; `pais` ≤ 40, a country from the suggested list stored with its Spanish name (`México`) and printed in English (`Mexico`) |
+| pesoNetoGramos | integer | net weight in whole grams, 1–99 999 (never a float: 1.5 kg is `1500`); printed as "Net wt 454 g" / "Net wt 1.5 kg". Required; one saved before it existed shows "Sin peso" and cannot print until it is edited |
 | creadoEn, creadoPor | server time, usuario | when it is created; never change |
 | actualizadoEn, actualizadoPor | server time, usuario | the signed-in user |
 
 Its product: `upc` a new UPC-A starting with 4 (GS1 in-store range), `marca`
-null, `unidadVenta` `pieza`, `activo` true. Staff with the Catálogo permission
-may create such a product with its price and tax class (only with its
-`empacados/` document in the same batch) and later change its
+null, `unidadVenta` `pieza`, `activo` true, `presentacion` the net weight
+written short (`454g`, `1.5kg`), as on any product. Staff with the Catálogo
+permission may create such a product with its price and tax class (only with
+its `empacados/` document in the same batch) and later change its
 `precioCentavos` (with its `priceHistory` entry) and `claseFiscal`; on any
 other product they still cannot.
 

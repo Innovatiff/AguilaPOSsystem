@@ -6,8 +6,9 @@
  *
  * Cada producto empacado es un producto normal del catálogo (products/{id}:
  * la caja lo vende por su código) más empacados/{id}, con lo que no cabe en
- * el esquema del producto: si es picante y de dónde viene. El esquema del
- * producto no cambia.
+ * el esquema del producto: si es picante, de dónde viene y su peso neto (en
+ * gramos enteros; también va en la presentación del producto: «454g»). El
+ * esquema del producto no cambia.
  *
  * El código nuevo es un UPC-A que empieza por 4: en GS1 ese prefijo es para
  * uso interno de la tienda, así que nunca choca con el de un fabricante, y la
@@ -18,13 +19,14 @@
  */
 import { digitoVerificadorUPCA } from './upca.js';
 import { centavosDesdeTexto } from './precios.js';
-import { origenDesdeTexto } from './inventario.js';
+import { origenDesdeTexto, kilosDesdeTexto, textoKilos } from './inventario.js';
 import { t } from './idioma.js';
 
 export const PREFIJO_EMPACADO = '4';
 export const REGEX_CODIGO_EMPACADO = /^4\d{11}$/;
 export const FRASES_PROCEDENCIA = Object.freeze(['hecho', 'producto']);
-export const LIMITES_EMPACADO = Object.freeze({ nombre: 80, pais: 40, precioCentavos: 9999999, etiquetas: 200 });
+export const LIMITES_EMPACADO = Object.freeze({ nombre: 80, pais: 40, precioCentavos: 9999999, etiquetas: 200, pesoNetoGramos: 99999 });
+export const UNIDADES_PESO = Object.freeze(['g', 'kg']);
 /** Cantidades que se ofrecen con un toque al imprimir. */
 export const CANTIDADES_RAPIDAS = Object.freeze([5, 10, 20, 30]);
 
@@ -51,6 +53,45 @@ export function nuevoCodigoEmpacado(ocupados = new Set(), azar = digitoAlAzar) {
   throw new Error(t('No se pudo generar un código nuevo. Intenta otra vez.'));
 }
 
+/**
+ * Peso neto tecleado → gramos enteros (sin flotantes): «454» en g, «1.5» o
+ * «1,5» en kg; también «454 g» o «1.5 kg». Lanza un Error para quien captura.
+ */
+export function pesoNetoDesdeTexto(texto, unidad = 'g') {
+  const limpio = String(texto ?? '').trim().toLowerCase().replace(/\s+/g, '');
+  if (limpio === '') throw new Error(t('Escribe el peso neto.'));
+  let gramos = Number.NaN;
+  if (unidad === 'kg' || limpio.endsWith('kg')) {
+    try {
+      gramos = kilosDesdeTexto(limpio);
+    } catch {
+      gramos = Number.NaN;
+    }
+  } else {
+    const enGramos = /^(\d{1,5})g?$/.exec(limpio);
+    if (enGramos) gramos = Number.parseInt(enGramos[1], 10);
+  }
+  if (!(Number.isSafeInteger(gramos) && gramos > 0 && gramos <= LIMITES_EMPACADO.pesoNetoGramos)) {
+    throw new Error(t('El peso neto no es válido: escribe por ejemplo 454 g o 1.5 kg.'));
+  }
+  return gramos;
+}
+
+/** 454 → «454 g»; 1000 → «1 kg»; 1500 → «1.5 kg» (unidades métricas, igual en los dos idiomas). */
+export function textoPesoNeto(gramos) {
+  if (!(Number.isSafeInteger(gramos) && gramos > 0)) return '';
+  return gramos < 1000 ? `${gramos} g` : `${textoKilos(gramos)} kg`;
+}
+
+/** Lo que va en la presentación del producto (como «142g» o «1.8kg»): la caja, el recibo y la etiqueta de anaquel lo muestran. */
+export const presentacionDePeso = (gramos) => textoPesoNeto(gramos).replace(' ', '');
+
+/** Para volver a mostrarlo en el formulario: { texto: '454', unidad: 'g' } o { texto: '1.5', unidad: 'kg' }. */
+export function partesPesoNeto(gramos) {
+  if (!(Number.isSafeInteger(gramos) && gramos > 0)) return { texto: '', unidad: 'g' };
+  return gramos < 1000 ? { texto: String(gramos), unidad: 'g' } : { texto: textoKilos(gramos), unidad: 'kg' };
+}
+
 /** Nombre tal como va al catálogo y a la barra negra de la etiqueta: sin espacios de más. */
 const nombreLimpio = (texto) => String(texto ?? '').trim().replace(/\s+/g, ' ');
 
@@ -58,15 +99,17 @@ const nombreLimpio = (texto) => String(texto ?? '').trim().replace(/\s+/g, ' ');
  * Lo capturado → { producto, empacado }. `producto` son los datos para
  * armarProducto (sin código: lo pone quien llama al crear); `empacado`, lo
  * que va en empacados/{id}. Lanza un Error que se le puede mostrar a quien
- * captura. `picante` y `claseFiscal` son obligatorios: nada se supone.
+ * captura. `picante`, `claseFiscal` y el peso neto son obligatorios: nada se
+ * supone. El peso neto va también en la presentación del producto («454g»).
  */
-export function armarEmpacado({ nombre, precio, claseFiscal, picante, frase = 'hecho', pais, tiendas = [] }) {
+export function armarEmpacado({ nombre, precio, claseFiscal, picante, frase = 'hecho', pais, peso, unidadPeso = 'g', tiendas = [] }) {
   const limpio = nombreLimpio(nombre);
   if (limpio === '') throw new Error(t('Escribe el nombre del producto.'));
   if (limpio.length > LIMITES_EMPACADO.nombre) throw new Error(t('El nombre puede tener hasta {max} letras.', { max: LIMITES_EMPACADO.nombre }));
   if (String(precio ?? '').trim() === '') throw new Error(t('Escribe el precio.'));
   const precioCentavos = centavosDesdeTexto(precio);
   if (precioCentavos <= 0 || precioCentavos > LIMITES_EMPACADO.precioCentavos) throw new Error(t('El precio debe ser mayor que cero.'));
+  const pesoNetoGramos = pesoNetoDesdeTexto(peso, unidadPeso);
   if (!['gravado', 'tasaCero'].includes(claseFiscal)) throw new Error(t('Elige si lleva impuesto.'));
   if (typeof picante !== 'boolean') throw new Error(t('Elige si es picante o no.'));
   if (!FRASES_PROCEDENCIA.includes(frase)) throw new Error(t('Elige «Hecho en» o «Producto de».'));
@@ -77,10 +120,10 @@ export function armarEmpacado({ nombre, precio, claseFiscal, picante, frase = 'h
   if (lista.length === 0) throw new Error(t('Elige al menos una tienda.'));
   return {
     producto: {
-      nombre: limpio, marca: null, descriptor: null, presentacion: '', plu: null,
+      nombre: limpio, marca: null, descriptor: null, presentacion: presentacionDePeso(pesoNetoGramos), plu: null,
       precioCentavos, unidadVenta: 'pieza', claseFiscal, tiendas: lista, proveedor: null, activo: true,
     },
-    empacado: { picante, procedencia: { frase, pais: paisGuardado } },
+    empacado: { picante, procedencia: { frase, pais: paisGuardado }, pesoNetoGramos },
   };
 }
 
@@ -92,7 +135,7 @@ export function armarEmpacado({ nombre, precio, claseFiscal, picante, frase = 'h
  */
 export function cambiosEmpacado(actual, empacadoActual, armado) {
   const cambiosProducto = {};
-  for (const campo of ['nombre', 'precioCentavos', 'claseFiscal']) {
+  for (const campo of ['nombre', 'presentacion', 'precioCentavos', 'claseFiscal']) {
     if (armado.producto[campo] !== actual[campo]) cambiosProducto[campo] = armado.producto[campo];
   }
   const tiendasAntes = [...(actual.tiendas ?? [])].sort().join('|');
@@ -100,7 +143,8 @@ export function cambiosEmpacado(actual, empacadoActual, armado) {
   const mismo = empacadoActual
     && empacadoActual.picante === armado.empacado.picante
     && empacadoActual.procedencia?.frase === armado.empacado.procedencia.frase
-    && empacadoActual.procedencia?.pais === armado.empacado.procedencia.pais;
+    && empacadoActual.procedencia?.pais === armado.empacado.procedencia.pais
+    && empacadoActual.pesoNetoGramos === armado.empacado.pesoNetoGramos;
   return { cambiosProducto, empacado: mismo ? null : armado.empacado };
 }
 
@@ -157,6 +201,12 @@ export function fechaEmpaqueEnIngles(iso) {
 /** «Spicy» / «Not spicy». */
 export const textoPicante = (picante) => (picante ? 'Spicy' : 'Not spicy');
 
+/** «Net wt 454 g»; "" si el producto aún no tiene peso neto. */
+export function pesoNetoEnIngles(gramos) {
+  const texto = textoPesoNeto(gramos);
+  return texto ? `Net wt ${texto}` : '';
+}
+
 /** Todo lo que lleva la etiqueta (el nombre en español; lo demás, en inglés). */
 export function textosEtiquetaEmpaque(producto, empacado, fechaEmpaque) {
   return {
@@ -164,6 +214,7 @@ export function textosEtiquetaEmpaque(producto, empacado, fechaEmpaque) {
     procedencia: procedenciaEnIngles(empacado.procedencia),
     picante: textoPicante(empacado.picante),
     fecha: fechaEmpaqueEnIngles(fechaEmpaque),
+    pesoNeto: pesoNetoEnIngles(empacado.pesoNetoGramos),
     codigo: producto.upc,
   };
 }
