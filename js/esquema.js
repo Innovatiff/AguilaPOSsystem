@@ -139,6 +139,28 @@ export function agruparPorTienda(productos, tiendas) {
   return grupos;
 }
 
+/** ¿El producto está solo en esa tienda (tiendas = [tiendaId])? */
+export function soloEnTienda(producto, tiendaId) {
+  const lista = Array.isArray(producto.tiendas) ? producto.tiendas : [];
+  return lista.length === 1 && lista[0] === tiendaId;
+}
+
+/**
+ * Para «Todos los productos aquí» (Tiendas): de `productos` (activos o no),
+ * cuántos están en la tienda y cuáles faltan por quedar solo en ella: los que
+ * no tienen tienda, los de otra y los que están en esa y en otra más.
+ * @returns {{ total: number, enTienda: number, faltan: object[] }}
+ */
+export function productosDeTienda(productos, tiendaId) {
+  const faltan = [];
+  let enTienda = 0;
+  for (const producto of productos) {
+    if (Array.isArray(producto.tiendas) && producto.tiendas.includes(tiendaId)) enTienda += 1;
+    if (!soloEnTienda(producto, tiendaId)) faltan.push(producto);
+  }
+  return { total: productos.length, enTienda, faltan };
+}
+
 /** ¿El texto parece un código de barras tecleado por el escáner? */
 export function pareceUPC(texto) {
   return /^\d{11,13}$/.test(String(texto ?? '').trim());

@@ -159,7 +159,12 @@ Once per Firebase project:
    `npx firebase login` and `npm run reglas:desplegar`.
 5. Sign in at `login.html` and, in this order:
    - **Tiendas**: each store with its name, address, phone, email and HST number
-     (they print at the top of every receipt).
+     (they print at the top of every receipt). The **Productos** column counts
+     the catalog products in each store; **Todos los productos aquí** puts every
+     product (active or not) in that store only, for when everything is sold in
+     a single store. It asks first, changes only the products' store (prices and
+     the rest stay the same) and goes 400 at a time; a product the rules reject
+     is retried alone and named, so the rest still change.
    - **Empleados**: everyone, with their email and a 6-digit PIN (admins too, if
      they will use the register), and tick **Puede usar la app Catálogo** for
      whoever may edit the catalog.

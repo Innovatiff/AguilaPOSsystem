@@ -118,6 +118,14 @@ export const ADMIN = Object.freeze({
 
   // ----- gestion/tiendas.html, js/gestion-tiendas.js
   'El identificador se usa en los productos (campo': 'The ID is used in the products (field',
+  '«Todos los productos aquí» deja cada producto del catálogo solo en esa tienda, para cuando todo se vende en una sola tienda. Solo cambia su tienda: el precio y lo demás quedan igual.': '“All products here” puts every product in the catalog in that store only, for when everything is sold in a single store. Only its store changes: the price and everything else stay the same.',
+  'Todos los productos aquí': 'All products here',
+  '{n} de {total}': '{n} of {total}',
+  '¿Dejar todos los productos solo en {tienda}? Cambios: {n} de {total} productos. Quedan en esta tienda y en ninguna otra; los precios y lo demás no cambian.': 'Put every product in {tienda} only? Changes: {n} of {total} products. They stay in this store and in no other; prices and everything else stay the same.',
+  'Guardando {hechos} de {n}…': 'Saving {hechos} of {n}…',
+  'Listo: todos los productos están solo en {tienda}. Cambiados: {n}.': 'Done: every product is now in {tienda} only. Changed: {n}.',
+  'Cambiados: {hechos}. No se pudieron cambiar ({n}): {nombres}': 'Changed: {hechos}. Could not be changed ({n}): {nombres}',
+  'No se pudieron cambiar los productos: {error}': 'The products could not be changed: {error}',
   ') y en las cajas, y no cambia después. El nombre, la dirección, el teléfono, el correo y el número de HST salen en el encabezado de los recibos. Las tiendas se desactivan, no se borran.': ') and in the registers, and cannot be changed later. The name, address, phone, email and HST number appear in the receipt header. Stores are deactivated, not deleted.',
   Identificador: 'ID',
   'p. ej. talbot': 'e.g. talbot',

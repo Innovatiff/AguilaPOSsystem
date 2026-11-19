@@ -378,6 +378,11 @@ h2 {
   margin: 0 0 16px;
 }
 
+/* Una nota justo debajo de una tabla (sin pegarse a su borde). */
+.nota--tras-tabla {
+  margin-top: 12px;
+}
+
 .seccion {
   margin-bottom: 40px;
 }

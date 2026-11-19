@@ -4,11 +4,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, writeBatch, Timestamp, setLogLevel } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, writeBatch, Timestamp, setLogLevel } from 'firebase/firestore';
 import { armarProducto } from '../../js/esquema.js';
 import { armarFichaPersonal, correoDeAcceso } from '../../js/identidad.js';
 
 const PRODUCTOS_POR_LOTE_IMPORTACION = 12; // debe coincidir con js/productos.js
+const OPERACIONES_POR_LOTE = 400; // debe coincidir con js/productos.js (marcar impresos, todos en una tienda)
 
 setLogLevel('silent');
 const CODIGO = '100001'; // admin por código (solo el admin cambia precios); actualizadoPor lleva el código
@@ -64,6 +65,38 @@ describe('límites por lote', () => {
     });
     it('y 25 cambios de precio en un lote se rechazan (límite de 20 lecturas)', async () => {
       await assertFails(lotePrecios(25));
+    });
+  });
+
+  describe('todos los productos en una tienda (Tiendas → «Todos los productos aquí»)', () => {
+    const enTienda = (marca) => ({ tiendas: ['marketplace'], actualizadoEn: marca, actualizadoPor: CODIGO });
+    async function sembrarHasta(n, extra = {}) {
+      await entorno.withSecurityRulesDisabled(async (ctx) => {
+        const lote = writeBatch(ctx.firestore());
+        for (let i = 60; i < n; i += 1) lote.set(doc(ctx.firestore(), `products/p${i}`), productoDemo(i));
+        for (const [id, datos] of Object.entries(extra)) lote.set(doc(ctx.firestore(), `products/${id}`), datos);
+        await lote.commit();
+      });
+    }
+    it(`el admin deja ${OPERACIONES_POR_LOTE} productos en la tienda en un solo lote`, async () => {
+      await sembrarHasta(OPERACIONES_POR_LOTE);
+      const db = contexto(EMPLEADA);
+      const lote = writeBatch(db);
+      const marca = Timestamp.fromMillis(Date.now());
+      for (let i = 0; i < OPERACIONES_POR_LOTE; i += 1) lote.update(doc(db, `products/p${i}`), enTienda(marca));
+      await assertSucceeds(lote.commit());
+    });
+    it('un producto viejo que ya no cumple el esquema tumba su lote entero; uno por uno, los demás sí quedan', async () => {
+      const { presentacion, ...sinPresentacion } = productoDemo(999);
+      await sembrarHasta(60, { viejo: sinPresentacion });
+      const db = contexto(EMPLEADA);
+      const marca = Timestamp.fromMillis(Date.now());
+      const lote = writeBatch(db);
+      for (const id of ['p0', 'viejo', 'p1']) lote.update(doc(db, `products/${id}`), enTienda(marca));
+      await assertFails(lote.commit());
+      await assertSucceeds(updateDoc(doc(db, 'products/p0'), enTienda(marca)));
+      await assertFails(updateDoc(doc(db, 'products/viejo'), enTienda(marca)));
+      await assertSucceeds(updateDoc(doc(db, 'products/p1'), enTienda(marca)));
     });
   });
 });

@@ -125,7 +125,7 @@ describe('diferenciasProducto', () => {
   });
 });
 
-import { pendienteImpresion, agruparPorTienda } from '../../js/esquema.js';
+import { pendienteImpresion, agruparPorTienda, soloEnTienda, productosDeTienda } from '../../js/esquema.js';
 
 describe('pendienteImpresion', () => {
   const base = { activo: true, precioCentavos: 549, ultimoPrecioImpresoCentavos: 549 };
@@ -155,5 +155,30 @@ describe('agruparPorTienda', () => {
   });
   it('omite tiendas sin pendientes', () => {
     assert.deepEqual(agruparPorTienda([productos[0]], tiendas).map((g) => g.tienda.id), ['erie']);
+  });
+});
+
+describe('todos los productos en una tienda', () => {
+  const productos = [
+    { id: 'a', nombre: 'A', tiendas: ['marketplace'] },
+    { id: 'b', nombre: 'B', tiendas: [] },
+    { id: 'c', nombre: 'C', tiendas: ['talbot'] },
+    { id: 'd', nombre: 'D', tiendas: ['talbot', 'marketplace'] },
+    { id: 'e', nombre: 'E', tiendas: ['marketplace'], activo: false },
+    { id: 'f', nombre: 'F' },
+  ];
+  it('solo en esa tienda: exactamente [la tienda]', () => {
+    assert.equal(soloEnTienda(productos[0], 'marketplace'), true);
+    assert.equal(soloEnTienda(productos[3], 'marketplace'), false, 'en esa y en otra más');
+    assert.equal(soloEnTienda(productos[1], 'marketplace'), false, 'sin tienda');
+    assert.equal(soloEnTienda(productos[5], 'marketplace'), false, 'sin el campo');
+  });
+  it('cuenta los que están en la tienda y junta los que faltan (los inactivos también)', () => {
+    const { total, enTienda, faltan } = productosDeTienda(productos, 'marketplace');
+    assert.equal(total, 6);
+    assert.equal(enTienda, 3);
+    assert.deepEqual(faltan.map((p) => p.id), ['b', 'c', 'd', 'f']);
+    assert.deepEqual(productosDeTienda([productos[0], productos[4]], 'marketplace').faltan, [], 'ya están todos: nada que cambiar');
+    assert.deepEqual(productosDeTienda([], 'marketplace'), { total: 0, enTienda: 0, faltan: [] });
   });
 });

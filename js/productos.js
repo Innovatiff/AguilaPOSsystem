@@ -12,7 +12,7 @@
  */
 import {
   db, doc, collection, query, where, orderBy, limit,
-  getDoc, getDocs, onSnapshot, writeBatch, setDoc, Timestamp,
+  getDoc, getDocs, onSnapshot, writeBatch, setDoc, updateDoc, Timestamp,
 } from './firebase.js';
 import { armarProducto, tokensBusqueda, idHistorialPrecio, prepararConsulta, fechaISOLocal } from './esquema.js';
 import { normalizarUPC } from './upca.js';
@@ -240,6 +240,52 @@ export function marcarImpresos(items, correo) {
   }
   if (operaciones > 0) confirmaciones.push(lote.commit());
   return { promesa: Promise.all(confirmaciones), cantidad: unicos.size, fecha };
+}
+
+/**
+ * Deja cada producto de `lista` solo en la tienda `tiendaId` (tiendas =
+ * [tiendaId]), por lotes: para cuando todo se vende en una sola tienda. Solo
+ * cambian `tiendas` y la firma (ni el precio ni lo demás), así que las reglas
+ * no leen nada por producto y caben 400 por lote. Si el servidor rechaza un
+ * lote (por ejemplo, por un producto viejo que ya no cumple el esquema), se
+ * reintenta uno por uno: los demás sí quedan y se sabe cuáles no.
+ * Cada lote se espera hasta 15 s; sin señal queda en cola y cuenta como pendiente.
+ * @param {Array<{ id: string }>} lista
+ * @param {(avance: object) => void} [alProgresar]
+ * @returns {Promise<{ total: number, hechos: number, confirmados: number, pendientes: number, fallidos: Array<{ producto: object, mensaje: string }> }>}
+ */
+export async function dejarEnTienda(lista, tiendaId, correo, alProgresar = () => {}) {
+  const usuario = String(correo).toLowerCase();
+  const resumen = { total: lista.length, hechos: 0, confirmados: 0, pendientes: 0, fallidos: [] };
+  const parche = () => ({ tiendas: [tiendaId], actualizadoEn: ahora(), actualizadoPor: usuario });
+  const esperar = (promesa) => {
+    promesa.catch(() => {});
+    return esperarConfirmacion(promesa, 15000);
+  };
+  const anotar = (resultado, cuantos) => {
+    if (resultado === 'confirmado') resumen.confirmados += cuantos;
+    else resumen.pendientes += cuantos;
+  };
+  for (let i = 0; i < lista.length; i += OPERACIONES_POR_LOTE) {
+    const grupo = lista.slice(i, i + OPERACIONES_POR_LOTE);
+    const lote = writeBatch(db);
+    const cambio = parche();
+    for (const producto of grupo) lote.update(doc(productos(), producto.id), cambio);
+    try {
+      anotar(await esperar(lote.commit()), grupo.length);
+    } catch {
+      for (const producto of grupo) {
+        try {
+          anotar(await esperar(updateDoc(doc(productos(), producto.id), parche())), 1);
+        } catch (error) {
+          resumen.fallidos.push({ producto, mensaje: error?.code ?? error?.message ?? 'error' });
+        }
+      }
+    }
+    resumen.hechos += grupo.length;
+    alProgresar({ ...resumen, fallidos: [...resumen.fallidos] });
+  }
+  return resumen;
 }
 
 /**

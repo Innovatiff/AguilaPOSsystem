@@ -204,7 +204,16 @@ async function nuevaPagina(browser, { movil = false, ...opciones } = {}) {
   page.on('pageerror', (e) => errores.push(`[pageerror] ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !BENIGNOS.test(m.text())) errores.push(`[console] ${m.text().slice(0, 200)}`); });
   // Se aceptan todos; un prompt recibe page.respuestaPrompt (si la prueba la fija) o vacío.
-  page.on('dialog', (d) => { console.log(`  [diálogo ${d.type()}] ${d.message()}`); d.accept(d.type() === 'prompt' ? (page.respuestaPrompt ?? '') : undefined); });
+  // Con page.cancelarSiguienteDialogo = true, el siguiente se cancela (una sola vez).
+  page.on('dialog', (d) => {
+    console.log(`  [diálogo ${d.type()}] ${d.message()}`);
+    if (page.cancelarSiguienteDialogo) {
+      page.cancelarSiguienteDialogo = false;
+      d.dismiss();
+      return;
+    }
+    d.accept(d.type() === 'prompt' ? (page.respuestaPrompt ?? '') : undefined);
+  });
   return { ctx, page, errores };
 }
 

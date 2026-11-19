@@ -248,6 +248,51 @@ const c = require('./comun.cjs');
   await admin.page.waitForFunction(() => document.querySelectorAll('#tabla-tiendas tbody tr').length === 3, null, { timeout: 20000 });
   v.ok('la tienda nueva aparece en la tabla', /aguila-kingsville/.test(await admin.page.textContent('#tabla-tiendas')));
 
+  // ---- todos los productos en una tienda: cada producto queda solo en ella (los sin tienda, los de otra y los inactivos también)
+  await c.sembrarProducto('p-sin-tienda', { nombre: 'SIN TIENDA', precioCentavos: 250, tiendas: [], tokensBusqueda: c.tokens('SIN TIENDA') });
+  await c.sembrarProducto('p-solo-erie', { nombre: 'SOLO ERIE', precioCentavos: 350, tiendas: ['erie'], activo: false, tokensBusqueda: c.tokens('SOLO ERIE') });
+  // Uno viejo al que le falta un campo del esquema: las reglas lo rechazan (y con él, su lote entero).
+  const { presentacion: _sinPresentacion, ...viejo } = c.producto({ nombre: 'VIEJO', precioCentavos: 450, tiendas: ['erie'], tokensBusqueda: c.tokens('VIEJO') });
+  await c.rest('PATCH', 'products/p-viejo', c.campos(viejo));
+  const antes = await c.leerColeccion('products');
+  const total = antes.size;
+  const enTalbot = [...antes.values()].filter((p) => p.tiendas.includes('talbot')).length;
+  const faltan = [...antes.values()].filter((p) => !(p.tiendas.length === 1 && p.tiendas[0] === 'talbot')).length;
+  const filaTalbot = admin.page.locator('#tabla-tiendas tbody tr', { hasText: 'Águila Talbot' });
+  await admin.page.waitForFunction((esperado) => document.querySelector('#tabla-tiendas')?.innerText.includes(esperado), `${enTalbot} de ${total}`, { timeout: 20000 });
+  v.ok('la columna Productos dice cuántos están en cada tienda', c.texto(await filaTalbot.innerText()).includes(`${enTalbot} de ${total}`)
+    && c.texto(await admin.page.locator('#tabla-tiendas tbody tr', { hasText: 'aguila-kingsville' }).innerText()).includes(`0 de ${total}`), c.texto(await admin.page.innerText('#tabla-tiendas tbody')));
+  let dialogo = '';
+  admin.page.once('dialog', (d) => { dialogo = d.message(); });
+  admin.page.cancelarSiguienteDialogo = true;
+  await filaTalbot.locator('button', { hasText: 'Todos los productos aquí' }).click();
+  await admin.page.waitForTimeout(800);
+  v.ok('pregunta antes, con cuántos cambian; si se cancela no cambia nada',
+    dialogo.includes('Águila Talbot') && dialogo.includes(`Cambios: ${faltan} de ${total} productos`) && (await c.leerDoc('products/p-sin-tienda')).tiendas.length === 0, dialogo);
+  await filaTalbot.locator('button', { hasText: 'Todos los productos aquí' }).click();
+  await admin.page.waitForFunction(() => /No se pudieron cambiar \(1\): VIEJO/.test(document.getElementById('p-mensaje').textContent), null, { timeout: 30000 });
+  const conViejo = await c.leerColeccion('products');
+  v.ok('si el servidor rechaza el lote, va uno por uno: cambian los demás y dice cuál no',
+    (await admin.page.textContent('#p-mensaje')).includes(`Cambiados: ${faltan - 1}.`) && conViejo.get('p-viejo').tiendas.join() === 'erie'
+    && [...conViejo.entries()].filter(([id]) => id !== 'p-viejo').every(([, p]) => p.tiendas.join() === 'talbot'), await admin.page.textContent('#p-mensaje'));
+  await c.rest('PATCH', 'products/p-viejo?updateMask.fieldPaths=presentacion', c.campos({ presentacion: '' }));
+  await filaTalbot.locator('button', { hasText: 'Todos los productos aquí' }).click();
+  await admin.page.waitForFunction(() => /Listo: todos los productos están solo en Águila Talbot\. Cambiados: 1\./.test(document.getElementById('p-mensaje').textContent), null, { timeout: 20000 });
+  const despues = await c.leerColeccion('products');
+  const todosEnTalbot = [...despues.values()].every((p) => p.tiendas.length === 1 && p.tiendas[0] === 'talbot');
+  const cambiados = [...despues.entries()].filter(([id]) => { const a = antes.get(id); return !(a.tiendas.length === 1 && a.tiendas[0] === 'talbot'); });
+  v.ok('todos quedan solo en Talbot (las reglas lo aceptan), firmados por el admin, con su precio igual',
+    despues.size === total && todosEnTalbot && despues.get('p-solo-erie').activo === false
+    && cambiados.every(([id, p]) => p.actualizadoPor === c.ADMIN.correo && p.precioCentavos === antes.get(id).precioCentavos),
+    JSON.stringify([...despues.values()].map((p) => [p.nombre, p.tiendas.join('|'), p.actualizadoPor])));
+  await filaTalbot.filter({ hasText: `${total} de ${total}` }).waitFor({ timeout: 20000 });
+  v.ok('ya no se ofrece en Talbot: están todos; en las otras tiendas, 0 y el botón sigue ahí',
+    !(await filaTalbot.locator('button', { hasText: 'Todos los productos aquí' }).count())
+    && c.texto(await admin.page.locator('#tabla-tiendas tbody tr', { hasText: 'Águila Erie' }).innerText()).includes(`0 de ${total}`)
+    && (await admin.page.locator('#tabla-tiendas tbody tr', { hasText: 'Águila Erie' }).locator('button', { hasText: 'Todos los productos aquí' }).count()) === 1,
+    c.texto(await admin.page.innerText('#tabla-tiendas tbody')));
+  await admin.page.screenshot({ path: `${c.SALIDA}/gestion-tiendas.png`, fullPage: true });
+
   // ---- importar / exportar (gestion/datos.html, en el grupo Catálogo de la barra lateral)
   await admin.page.click('nav a[href$="gestion/datos.html"]');
   await admin.page.waitForSelector('#contenido:not([hidden])');
